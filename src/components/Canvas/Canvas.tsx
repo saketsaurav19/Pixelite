@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore, hexToRgba } from '../../store/useStore';
 import './Canvas.css';
+import { getToolModule } from '../../tools';
 
 const Canvas: React.FC = () => {
   const store = useStore();
@@ -11,6 +12,7 @@ const Canvas: React.FC = () => {
     updateLayer, addLayer, recordHistory, setActiveLayer, setLayers,
     canvasOffset, setCanvasOffset, setBrushColor,
     lassoPaths, setLassoPaths, selectionRect, setSelectionRect,
+    isInverseSelection, setIsInverseSelection,
     documentSize, setDocumentSize,
     vectorPaths, setVectorPaths, activePathIndex, setActivePathIndex, penMode
   } = store;
@@ -32,12 +34,58 @@ const Canvas: React.FC = () => {
   const [activeCropHandle, setActiveCropHandle] = useState<string | null>(null);
 
   const canvasRefs = useRef<{ [key: string]: HTMLCanvasElement | null }>({});
-  const lastPointRef = useRef<{ x: number, y: number } | null>(null);
-  const startMouseRef = useRef<{ x: number, y: number } | null>(null);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const startMouseRef = useRef<{ x: number; y: number } | null>(null);
   const startOffsetRef = useRef<{ x: number, y: number } | null>(null);
   const draftTextCanvasRef = useRef<HTMLCanvasElement>(null);
   const selectionCanvasRef = useRef<HTMLCanvasElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
+
+  const applySelectionClip = useCallback((
+    ctx: CanvasRenderingContext2D,
+    offsetX: number,
+    offsetY: number,
+    canvasWidth: number,
+    canvasHeight: number
+  ) => {
+    const { selectionShape } = store;
+    if (selectionRect) {
+      ctx.beginPath();
+      if (isInverseSelection) {
+        ctx.rect(0, 0, canvasWidth, canvasHeight);
+      }
+      
+      if (selectionShape === 'ellipse') {
+        const cx = selectionRect.x - offsetX + selectionRect.w / 2;
+        const cy = selectionRect.y - offsetY + selectionRect.h / 2;
+        const rx = Math.abs(selectionRect.w / 2);
+        const ry = Math.abs(selectionRect.h / 2);
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      } else {
+        ctx.rect(selectionRect.x - offsetX, selectionRect.y - offsetY, selectionRect.w, selectionRect.h);
+      }
+      
+      ctx.clip(isInverseSelection ? 'evenodd' : 'nonzero');
+      return true;
+    }
+
+    if (lassoPaths.length > 0) {
+      ctx.beginPath();
+      if (isInverseSelection) {
+        ctx.rect(0, 0, canvasWidth, canvasHeight);
+      }
+      lassoPaths.forEach(path => {
+        if (path.length < 2) return; // Allow 2 points for polygonal lasso segments
+        ctx.moveTo(path[0].x - offsetX, path[0].y - offsetY);
+        path.forEach(p => ctx.lineTo(p.x - offsetX, p.y - offsetY));
+        ctx.closePath();
+      });
+      ctx.clip('evenodd');
+      return true;
+    }
+
+    return false;
+  }, [selectionRect, isInverseSelection, lassoPaths, store]);
 
   const handleEyedropper = useCallback((x: number, y: number) => {
     const id = activeLayerId || layers[0]?.id;
@@ -93,13 +141,14 @@ const Canvas: React.FC = () => {
     );
 
     setSelectionRect(null);
+    setIsInverseSelection(false);
     setLayers(newLayers);
     setLassoPaths(newLassoPaths);
     setDocumentSize({ w: absW, h: absH });
     setCanvasOffset({ x: 0, y: 0 });
     setCropRect(null);
     recordHistory('Crop');
-  }, [cropRect, layers, lassoPaths, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, recordHistory]);
+  }, [cropRect, layers, lassoPaths, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, recordHistory, setIsInverseSelection]);
 
   const applyGradient = useCallback((start: { x: number, y: number }, end: { x: number, y: number }) => {
     const id = activeLayerId || layers[0]?.id;
@@ -149,7 +198,7 @@ const Canvas: React.FC = () => {
     let offset = 0;
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (lassoPaths.length === 0 && vectorPaths.length === 0) {
+      if (lassoPaths.length === 0 && vectorPaths.length === 0 && !selectionRect) {
         animationFrameId = requestAnimationFrame(animate);
         return;
       }
@@ -160,20 +209,74 @@ const Canvas: React.FC = () => {
       // 1. Draw Lasso Selections
       if (lassoPaths.length > 0) {
         ctx.beginPath();
-        lassoPaths.forEach(path => {
-          if (path.length < 3) return;
+        lassoPaths.forEach((path, pIdx) => {
+          if (path.length < 1) return;
           ctx.moveTo(path[0].x, path[0].y);
           path.forEach(p => ctx.lineTo(p.x, p.y));
+          
+          // Preview line for polygonal/magnetic lasso (String effect)
+          if ((activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') && isInteracting && currentMousePos && pIdx === lassoPaths.length - 1) {
+            if (activeTool === 'magnetic_lasso') {
+              const snapped = findBestEdgePoint(currentMousePos.x, currentMousePos.y, 15);
+              ctx.lineTo(snapped.x, snapped.y);
+            } else {
+              ctx.lineTo(currentMousePos.x, currentMousePos.y);
+            }
+          }
+          
           ctx.closePath();
         });
         ctx.fillStyle = 'rgba(0, 120, 215, 0.15)';
-        ctx.fill();
+        ctx.fill(isInverseSelection ? 'nonzero' : 'evenodd');
 
         offset++;
         ctx.setLineDash([4, 4]);
         ctx.lineDashOffset = -offset;
-        ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
+        
+        ctx.beginPath();
+        lassoPaths.forEach((path, pIdx) => {
+          if (path.length < 1) return;
+          ctx.moveTo(path[0].x, path[0].y);
+          path.forEach(p => ctx.lineTo(p.x, p.y));
+          
+          if ((activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') && isInteracting && currentMousePos && pIdx === lassoPaths.length - 1) {
+            if (activeTool === 'magnetic_lasso') {
+              const snapped = findBestEdgePoint(currentMousePos.x, currentMousePos.y, 15);
+              ctx.lineTo(snapped.x, snapped.y);
+            } else {
+              ctx.lineTo(currentMousePos.x, currentMousePos.y);
+            }
+          }
+          
+          ctx.closePath();
+        });
+        
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+        ctx.lineDashOffset = -offset + 4;
+        ctx.strokeStyle = '#000';
+        ctx.stroke();
+      }
+
+      // 1.1 Draw Selection Rect/Ellipse
+      if (selectionRect) {
+        const { selectionShape } = store;
+        ctx.beginPath();
+        if (selectionShape === 'ellipse') {
+          const cx = selectionRect.x + selectionRect.w / 2;
+          const cy = selectionRect.y + selectionRect.h / 2;
+          const rx = Math.abs(selectionRect.w / 2);
+          const ry = Math.abs(selectionRect.h / 2);
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        } else {
+          ctx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+        }
+        
+        ctx.setLineDash([4, 4]);
+        ctx.lineDashOffset = -offset;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff';
         ctx.stroke();
         ctx.lineDashOffset = -offset + 4;
         ctx.strokeStyle = '#000';
@@ -223,7 +326,34 @@ const Canvas: React.FC = () => {
 
     animationFrameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [lassoPaths, vectorPaths, activePathIndex]);
+  }, [lassoPaths, vectorPaths, activePathIndex, isInverseSelection, activeTool, currentMousePos, selectionRect, store]);
+
+  const getSelectionPathData = useCallback(() => {
+    let d = '';
+    if (selectionRect) {
+      const x = (selectionRect.w >= 0 ? selectionRect.x : selectionRect.x + selectionRect.w) / 2;
+      const y = (selectionRect.h >= 0 ? selectionRect.y : selectionRect.y + selectionRect.h) / 2;
+      const w = Math.abs(selectionRect.w) / 2;
+      const h = Math.abs(selectionRect.h) / 2;
+      
+      if (store.selectionShape === 'ellipse') {
+        const rx = w / 2;
+        const ry = h / 2;
+        const cx = x + rx;
+        const cy = y + ry;
+        d += `M ${cx - rx},${cy} a ${rx},${ry} 0 1,0 ${rx * 2},0 a ${rx},${ry} 0 1,0 -${rx * 2},0 Z `;
+      } else {
+        d += `M ${x},${y} L ${x + w},${y} L ${x + w},${y + h} L ${x},${y + h} Z `;
+      }
+    }
+    
+    lassoPaths.forEach(path => {
+      if (path.length < 2) return;
+      d += `M ${path.map(p => `${p.x / 2},${p.y / 2}`).join(' L ')} Z `;
+    });
+    
+    return d;
+  }, [selectionRect, lassoPaths, store.selectionShape]);
 
   // 3. Logic Functions
   const commitText = useCallback(() => {
@@ -258,18 +388,11 @@ const Canvas: React.FC = () => {
       const offsetX = layer?.position.x || 0;
       const offsetY = layer?.position.y || 0;
 
-      if (selectionRect) {
+      if (selectionRect && !isInverseSelection) {
         ctx.clearRect(selectionRect.x - offsetX, selectionRect.y - offsetY, selectionRect.w, selectionRect.h);
-      } else if (lassoPaths.length > 0) {
+      } else if (selectionRect || lassoPaths.length > 0) {
         ctx.save();
-        ctx.beginPath();
-        lassoPaths.forEach(path => {
-          if (path.length < 3) return;
-          ctx.moveTo(path[0].x - offsetX, path[0].y - offsetY);
-          path.forEach(p => ctx.lineTo(p.x - offsetX, p.y - offsetY));
-          ctx.closePath();
-        });
-        ctx.clip();
+        applySelectionClip(ctx, offsetX, offsetY, canvas.width, canvas.height);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
@@ -277,8 +400,9 @@ const Canvas: React.FC = () => {
       recordHistory('Delete Selection');
       setSelectionRect(null);
       setLassoPaths([]);
+      setIsInverseSelection(false);
     }
-  }, [selectionRect, lassoPaths, activeLayerId, updateLayer, recordHistory, layers]);
+  }, [selectionRect, lassoPaths, activeLayerId, updateLayer, recordHistory, layers, isInverseSelection, applySelectionClip, setIsInverseSelection]);
 
   React.useEffect(() => {
     const onDelete = () => clearSelection();
@@ -286,7 +410,58 @@ const Canvas: React.FC = () => {
     return () => window.removeEventListener('delete-selection', onDelete);
   }, [clearSelection]);
 
-  const handleQuickSelect = useCallback((x: number, y: number, shouldAdd: boolean = false) => {
+  const colorDistance = (data: Uint8ClampedArray, idx: number, r: number, g: number, b: number, a: number) => {
+    return Math.abs(data[idx] - r) + Math.abs(data[idx + 1] - g) + Math.abs(data[idx + 2] - b) + Math.abs(data[idx + 3] - a);
+  };
+
+  const findBestEdgePoint = useCallback((x: number, y: number, radius: number) => {
+    const id = activeLayerId || (layers.length > 0 ? layers[0].id : null);
+    if (!id) return { x, y };
+    const canvas = canvasRefs.current[id];
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return { x, y };
+
+    const rx = Math.round(x);
+    const ry = Math.round(y);
+    const size = radius * 2;
+    try {
+      const imageData = ctx.getImageData(rx - radius, ry - radius, size, size);
+      const data = imageData.data;
+      
+      let maxGrad = -1;
+      let bestX = x;
+      let bestY = y;
+
+      const getEdgeScore = (i: number, j: number) => {
+        const idx = (j * size + i) * 4;
+        if (idx < 0 || idx >= data.length) return 0;
+        
+        // Combine RGB and Alpha for edge detection
+        // We look for sharp changes in any channel
+        return (data[idx] + data[idx + 1] + data[idx + 2]) * (data[idx + 3] / 255);
+      };
+
+      for (let j = 1; j < size - 1; j++) {
+        for (let i = 1; i < size - 1; i++) {
+          // Sobel-like operator for each channel or combined
+          const gx = getEdgeScore(i + 1, j) - getEdgeScore(i - 1, j);
+          const gy = getEdgeScore(i, j + 1) - getEdgeScore(i, j - 1);
+          const grad = gx * gx + gy * gy;
+
+          if (grad > maxGrad) {
+            maxGrad = grad;
+            bestX = rx - radius + i;
+            bestY = ry - radius + j;
+          }
+        }
+      }
+      return { x: bestX, y: bestY };
+    } catch (e) {
+      return { x, y };
+    }
+  }, [activeLayerId, layers]);
+
+  const handlePaintBucket = useCallback((x: number, y: number) => {
     const id = activeLayerId || layers[0]?.id;
     const canvas = canvasRefs.current[id];
     const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -306,131 +481,77 @@ const Canvas: React.FC = () => {
     const targetB = data[targetIdx + 2];
     const targetA = data[targetIdx + 3];
 
-    // Tolerance for color matching
-    const tolerance = 30;
-    const visited = new Uint8Array(canvas.width * canvas.height);
-    const queue: [number, number][] = [[lx, ly]];
-    visited[ly * canvas.width + lx] = 1;
+    // Convert brushColor (hex) to RGB
+    const colorMatch = brushColor.match(/[A-Za-z0-9]{2}/g);
+    if (!colorMatch) return;
+    const [fillR, fillG, fillB] = colorMatch.map(h => parseInt(h, 16));
+    const fillA = Math.round(primaryOpacity * 255);
 
-    // Direction offsets for flood fill
-    const dx = [1, -1, 0, 0];
-    const dy = [0, 0, 1, -1];
+    if (targetR === fillR && targetG === fillG && targetB === fillB && targetA === fillA) return;
 
-    // Use a stack for O(1) push/pop (Flood Fill)
-    let processedCount = 0;
-    while (queue.length > 0) {
-      const point = queue.pop();
-      if (!point) continue;
-      const [cx, cy] = point;
-      processedCount++;
+    const tolerance = 40;
+    const w = canvas.width;
+    const h = canvas.height;
+    const stack: [number, number][] = [[lx, ly]];
+    const filled = new Uint8Array(w * h);
 
-      for (let i = 0; i < 4; i++) {
-        const nx = cx + dx[i];
-        const ny = cy + dy[i];
+    while (stack.length > 0) {
+      const [cx, cy] = stack.pop()!;
+      const idx = (cy * w + cx) * 4;
 
-        if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
-          const nIdx = ny * canvas.width + nx;
-          if (!visited[nIdx]) {
-            const pIdx = nIdx * 4;
-            // Faster color difference check
-            if (Math.abs(data[pIdx] - targetR) < tolerance &&
-              Math.abs(data[pIdx + 1] - targetG) < tolerance &&
-              Math.abs(data[pIdx + 2] - targetB) < tolerance &&
-              Math.abs(data[pIdx + 3] - targetA) < tolerance) {
-              visited[nIdx] = 1;
-              queue.push([nx, ny]);
-            }
-          }
-        }
-      }
-      if (processedCount > canvas.width * canvas.height) break;
+      if (filled[cy * w + cx]) continue;
+      if (colorDistance(data, idx, targetR, targetG, targetB, targetA) > tolerance) continue;
+
+      data[idx] = fillR;
+      data[idx + 1] = fillG;
+      data[idx + 2] = fillB;
+      data[idx + 3] = fillA;
+      filled[cy * w + cx] = 1;
+
+      if (cx > 0) stack.push([cx - 1, cy]);
+      if (cx < w - 1) stack.push([cx + 1, cy]);
+      if (cy > 0) stack.push([cx, cy - 1]);
+      if (cy < h - 1) stack.push([cx, cy + 1]);
     }
 
-    if (processedCount > 10) {
-      // Moore Neighborhood Tracing to find the contour
-      const contour: { x: number, y: number }[] = [];
-      let startNode: [number, number] | null = null;
-
-      // Optimised: Scan for start node outward from the click point to find it faster
-      // (The click point lx, ly is guaranteed to be part of the visited set)
-      // We look for the leftmost pixel of this component
-      let sx = lx, sy = ly;
-      while (sx > 0 && visited[sy * canvas.width + (sx - 1)]) sx--;
-      startNode = [sx, sy];
-
-      if (startNode) {
-        let [currX, currY] = startNode;
-        let [prevX, prevY] = [currX - 1, currY];
-        const startX = currX, startY = currY;
-
-        let limit = 10000;
-        do {
-          contour.push({ x: currX + (layer?.position.x || 0), y: currY + (layer?.position.y || 0) });
-
-          // Neighbors in clockwise order
-          const dirs = [
-            [currX - 1, currY - 1], [currX, currY - 1], [currX + 1, currY - 1],
-            [currX + 1, currY], [currX + 1, currY + 1], [currX, currY + 1],
-            [currX - 1, currY + 1], [currX - 1, currY]
-          ];
-
-          // Find the direction of the previous node to start searching clockwise
-          let startDir = 0;
-          for (let i = 0; i < 8; i++) {
-            if (dirs[i][0] === prevX && dirs[i][1] === prevY) {
-              startDir = (i + 1) % 8;
-              break;
-            }
-          }
-
-          let found = false;
-          for (let i = 0; i < 8; i++) {
-            const nextIdx = (startDir + i) % 8;
-            const [nx, ny] = dirs[nextIdx];
-            if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height && visited[ny * canvas.width + nx]) {
-              prevX = currX; prevY = currY;
-              currX = nx; currY = ny;
-              found = true;
-              break;
-            }
-          }
-          if (!found) break;
-          limit--;
-        } while ((currX !== startX || currY !== startY) && limit > 0);
-
-        // Simplify path for performance and smoothness
-        // Keep points that significantly change direction
-        const simplified: { x: number, y: number }[] = [];
-        for (let i = 0; i < contour.length; i++) {
-          if (i === 0 || i === contour.length - 1) {
-            simplified.push(contour[i]);
-            continue;
-          }
-          const prev = contour[i - 1];
-          const curr = contour[i];
-          const next = contour[i + 1];
-          // If moving in the same line, skip
-          const isSameDir = (curr.x - prev.x === next.x - curr.x) && (curr.y - prev.y === next.y - curr.y);
-          if (!isSameDir || i % 4 === 0) { // Keep some points for curves
-            simplified.push(curr);
-          }
-        }
-
-        if (shouldAdd) {
-          setLassoPaths(prev => [...prev, simplified]);
-        } else {
-          setLassoPaths([simplified]);
-        }
-        setSelectionRect(null);
-        recordHistory('Quick Selection');
-      }
-    }
-  }, [activeLayerId, layers, recordHistory, setLassoPaths, setSelectionRect]);
+ctx.putImageData(imgData, 0, 0);
+    updateLayer(id, { dataUrl: canvas.toDataURL() });
+    recordHistory('Paint Bucket');
+  }, [activeLayerId, layers, brushColor, primaryOpacity, updateLayer, recordHistory]);
 
   // 4. Interaction Engine
   const startAction = useCallback((clientX: number, clientY: number, e: React.MouseEvent | React.TouchEvent) => {
     const coords = getCoordinates(clientX, clientY);
     if (!coords) return;
+
+    const id = activeLayerId || (layers.length > 0 ? layers[0].id : null);
+    const canvas = id ? canvasRefs.current[id] : null;
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    
+    const context: any = {
+      canvas, ctx, coords,
+      startCoords: coords,
+      lastPoint: lastPointRef.current,
+      isShift: (e as any).shiftKey,
+      isAlt: (e as any).altKey,
+      brushSize, brushColor, zoom,
+      activeLayerId, layers,
+      selectionMode: useStore.getState().selectionMode,
+      selectionTolerance: useStore.getState().selectionTolerance,
+      selectionContiguous: useStore.getState().selectionContiguous,
+      selectionRect, lassoPaths, isInverseSelection,
+      setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
+      setBrushColor, addLayer
+    };
+
+    const toolModule = getToolModule(activeTool);
+    if (toolModule?.start) {
+      toolModule.start(context);
+      lastPointRef.current = coords;
+      startMouseRef.current = { x: clientX, y: clientY };
+      startOffsetRef.current = { ...canvasOffset };
+      return;
+    }
 
     setIsInteracting(true);
     lastPointRef.current = coords;
@@ -445,11 +566,6 @@ const Canvas: React.FC = () => {
       return;
     }
 
-    if (activeTool === 'eyedropper') {
-      handleEyedropper(coords.x, coords.y);
-      return;
-    }
-
     if (activeTool === 'text') {
       if (textEditor) commitText();
       else setTextEditor({ ...coords, value: '' });
@@ -457,64 +573,20 @@ const Canvas: React.FC = () => {
     }
 
     if (activeTool === 'select') {
-      for (const layer of layers) {
-        if (layer.locked) continue;
-        if (layer.type === 'text') {
-          const ctx = canvasRefs.current[layer.id]?.getContext('2d');
-          if (ctx) {
-            const fs = layer.fontSize || 40;
-            ctx.font = `${fs}px Arial`;
-            const lines = (layer.textContent || '').split('\n');
-            let maxWidth = 10;
-            lines.forEach(line => {
-              const w = ctx.measureText(line).width;
-              if (w > maxWidth) maxWidth = w;
-            });
-            const localX = coords.x - layer.position.x;
-            const localY = coords.y - layer.position.y;
-            if (localX >= -10 && localX <= maxWidth + 10 && localY >= -10 && localY <= lines.length * fs + 10) {
-              setActiveLayer(layer.id);
-              break;
-            }
-          }
-        } else if (layer.type === 'shape' && layer.shapeData) {
-          const localX = coords.x - layer.position.x;
-          const localY = coords.y - layer.position.y;
-          if (localX >= 0 && localX <= (layer.shapeData.w || 0) && localY >= 0 && localY <= (layer.shapeData.h || 0)) {
-            setActiveLayer(layer.id);
-            break;
-          }
-        } else {
-          const ctx = canvasRefs.current[layer.id]?.getContext('2d', { willReadFrequently: true });
-          if (ctx) {
-            const localX = coords.x - layer.position.x;
-            const localY = coords.y - layer.position.y;
-            if (localX >= 0 && localY >= 0 && localX < 2000 && localY < 1400) {
-              if (ctx.getImageData(localX, localY, 1, 1).data[3] > 0) {
-                setActiveLayer(layer.id);
-                break;
-              }
-            }
-          }
-        }
-      }
-    } else if (activeTool === 'marquee') {
-      setSelectionRect({ x: coords.x, y: coords.y, w: 0, h: 0 });
+      // Logic for layer selection could be modularized later
     } else if (activeTool === 'crop') {
-      setCropRect({ x: coords.x, y: coords.y, w: 0, h: 0 });
+      if (cropRect) {
+        setCropRect(null);
+      } else {
+        setCropRect({ x: coords.x, y: coords.y, w: 0, h: 0 });
+      }
     } else if (activeTool === 'gradient') {
       setGradientStart({ x: coords.x, y: coords.y });
     } else if (activeTool === 'clone' && (e as any).altKey) {
       setCloneSource({ x: coords.x, y: coords.y });
       return;
-    } else if (activeTool === 'shape') {
+    } else if (activeTool === 'shape' || activeTool === 'ellipse_shape' || activeTool === 'line_shape') {
       setDraftShape({ x: coords.x, y: coords.y, w: 0, h: 0 });
-    } else if (activeTool === 'lasso') {
-      if (e.shiftKey) {
-        setLassoPaths(prev => [...prev, [coords]]);
-      } else {
-        setLassoPaths([[coords]]);
-      }
     } else if (activeTool === 'pen') {
       if (activePathIndex !== null) {
         const path = vectorPaths[activePathIndex];
@@ -549,7 +621,6 @@ const Canvas: React.FC = () => {
       setActivePathIndex(newIdx);
       return;
     } else if (activeTool === 'path_select') {
-      // Simple path selection by finding the closest path
       let closestIdx = -1;
       let minDist = 100;
       vectorPaths.forEach((path, idx) => {
@@ -559,10 +630,64 @@ const Canvas: React.FC = () => {
         });
       });
       setActivePathIndex(closestIdx === -1 ? null : closestIdx);
-    } else if (activeTool === 'quick_select') {
-      handleQuickSelect(coords.x, coords.y, (e as any).shiftKey);
     }
-  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, handleQuickSelect]);
+  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, lassoPaths, vectorPaths, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity]);
+
+  const handleDoubleClick = useCallback(() => {
+    const context: any = {
+      canvas: null, ctx: null, coords: currentMousePos || { x: 0, y: 0 },
+      startCoords: null, lastPoint: lastPointRef.current,
+      brushSize, brushColor, zoom,
+      activeLayerId, layers,
+      selectionMode: useStore.getState().selectionMode,
+      selectionTolerance: useStore.getState().selectionTolerance,
+      selectionContiguous: useStore.getState().selectionContiguous,
+      selectionRect, lassoPaths, isInverseSelection,
+      setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
+      setBrushColor, addLayer
+    };
+
+    const toolModule = getToolModule(activeTool);
+    if (toolModule?.doubleClick) {
+      toolModule.doubleClick(context);
+    }
+  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') {
+          if (lassoPaths.length > 0) {
+            setLassoPaths(prev => {
+              const next = [...prev];
+              const currentPath = [...next[next.length - 1]];
+              if (currentPath.length > 1) {
+                currentPath.pop();
+                next[next.length - 1] = currentPath;
+              } else {
+                next.pop();
+                setIsInteracting(false);
+              }
+              return next;
+            });
+          }
+        }
+      } else if (e.key === 'Escape') {
+        if (activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') {
+          setLassoPaths([]);
+          setIsInteracting(false);
+        }
+      } else if (e.key === 'Enter') {
+        if (activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') {
+          setIsInteracting(false);
+          recordHistory(activeTool === 'polygonal_lasso' ? 'Polygonal Lasso' : 'Magnetic Lasso');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTool, lassoPaths, recordHistory, setLassoPaths, isInteracting]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -582,10 +707,35 @@ const Canvas: React.FC = () => {
   }, [zoom, canvasOffset, startAction]);
 
   const moveAction = useCallback((clientX: number, clientY: number) => {
-    if (!isInteracting || !lastPointRef.current) return;
+    if (!isInteracting) return;
     const coords = getCoordinates(clientX, clientY);
     if (!coords) return;
     setCurrentMousePos(coords);
+
+    const id = activeLayerId || (layers.length > 0 ? layers[0].id : null);
+    const canvas = id ? canvasRefs.current[id] : null;
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    
+    const context: any = {
+      canvas, ctx, coords,
+      startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
+      lastPoint: lastPointRef.current,
+      brushSize, brushColor, zoom,
+      activeLayerId, layers,
+      selectionMode: useStore.getState().selectionMode,
+      selectionTolerance: useStore.getState().selectionTolerance,
+      selectionContiguous: useStore.getState().selectionContiguous,
+      selectionRect, lassoPaths, isInverseSelection,
+      setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
+      setBrushColor, addLayer
+    };
+
+    const toolModule = getToolModule(activeTool);
+    if (toolModule?.move) {
+      toolModule.move(context);
+      lastPointRef.current = coords;
+      return;
+    }
 
     if (activeTool === 'hand' && startMouseRef.current && startOffsetRef.current) {
       const dx = clientX - startMouseRef.current.x;
@@ -594,17 +744,6 @@ const Canvas: React.FC = () => {
       setCanvasOffset({
         x: startOffsetRef.current.x + (dx * 2) / zoom,
         y: startOffsetRef.current.y + (dy * 2) / zoom
-      });
-      return;
-    }
-
-    if (activeTool === 'lasso') {
-      setLassoPaths(prev => {
-        const newPaths = [...prev];
-        if (newPaths.length > 0) {
-          newPaths[newPaths.length - 1] = [...newPaths[newPaths.length - 1], coords];
-        }
-        return newPaths;
       });
       return;
     }
@@ -625,7 +764,7 @@ const Canvas: React.FC = () => {
         ctx.save();
         ctx.beginPath();
         ctx.arc(lx, ly, brushSize / 2, 0, Math.PI * 2);
-        ctx.clip();
+        ctx.clip('evenodd');
         if (canvas) {
           ctx.drawImage(canvas, sx - brushSize / 2, sy - brushSize / 2, brushSize, brushSize, lx - brushSize / 2, ly - brushSize / 2, brushSize, brushSize);
         }
@@ -645,104 +784,27 @@ const Canvas: React.FC = () => {
       else if (activeCropHandle === 'bm') { newRect.h = coords.y - y; }
       else if (activeCropHandle === 'lm') { newRect.x = coords.x; newRect.w = w + (x - coords.x); }
       else if (activeCropHandle === 'rm') { newRect.w = coords.x - x; }
+      else if (activeCropHandle === 'move' && lastPointRef.current) {
+        const dx = coords.x - lastPointRef.current.x;
+        const dy = coords.y - lastPointRef.current.y;
+        newRect.x += dx;
+        newRect.y += dy;
+      }
 
       setCropRect(newRect);
+      lastPointRef.current = coords;
       return;
     }
 
-    if (activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'blur' || activeTool === 'dodge' || activeTool === 'healing') {
-      const id = activeLayerId || layers[0]?.id;
-      const ctx = canvasRefs.current[id]?.getContext('2d', { willReadFrequently: true });
-      if (ctx) {
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-
-        ctx.save();
-
-        const layer = layers.find(l => l.id === id);
-        const offX = layer?.position.x || 0;
-        const offY = layer?.position.y || 0;
-
-        const lx = coords.x - offX;
-        const ly = coords.y - offY;
-
-        // Spot Healing specific logic
-        if (activeTool === 'healing') {
-          // Sample a slightly larger area to get background average
-          const sampleSize = brushSize * 1.5;
-          const sample = ctx.getImageData(lx - sampleSize / 2, ly - sampleSize / 2, sampleSize, sampleSize);
-          const data = sample.data;
-          let r = 0, g = 0, b = 0, a = 0, count = 0;
-          for (let i = 0; i < data.length; i += 4) {
-            if (data[i + 3] > 0) {
-              r += data[i]; g += data[i + 1]; b += data[i + 2]; a += data[i + 3];
-              count++;
-            }
-          }
-          if (count > 0) {
-            ctx.fillStyle = `rgba(${r / count}, ${g / count}, ${b / count}, ${(a / count) / 255})`;
-            ctx.beginPath();
-            ctx.arc(lx, ly, brushSize / 2, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.restore();
-          lastPointRef.current = coords;
-          return;
-        }
-
-        // Selection Clipping
-        if (selectionRect) {
-          ctx.beginPath();
-          ctx.rect(selectionRect.x - offX, selectionRect.y - offY, selectionRect.w, selectionRect.h);
-          ctx.clip();
-        } else if (lassoPaths.length > 0) {
-          ctx.beginPath();
-          lassoPaths.forEach(path => {
-            if (path.length < 3) return;
-            ctx.moveTo(path[0].x - offX, path[0].y - offY);
-            path.forEach(p => ctx.lineTo(p.x - offX, p.y - offY));
-            ctx.closePath();
-          });
-          ctx.clip('evenodd');
-        }
-
-        if (activeTool === 'blur') {
-          ctx.beginPath();
-          ctx.moveTo(lastPointRef.current.x - offX, lastPointRef.current.y - offY);
-          ctx.lineTo(coords.x - offX, coords.y - offY);
-          ctx.lineWidth = brushSize;
-          ctx.filter = 'blur(4px)';
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.stroke();
-        } else if (activeTool === 'dodge') {
-          ctx.globalCompositeOperation = 'color-dodge';
-          ctx.beginPath();
-          ctx.moveTo(lastPointRef.current.x - offX, lastPointRef.current.y - offY);
-          ctx.lineTo(coords.x - offX, coords.y - offY);
-          ctx.lineWidth = brushSize;
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.stroke();
-        } else {
-          ctx.globalCompositeOperation = activeTool === 'eraser' ? 'destination-out' : 'source-over';
-          ctx.strokeStyle = activeTool === 'eraser' ? 'rgba(0,0,0,1)' : hexToRgba(brushColor, primaryOpacity);
-          ctx.lineWidth = brushSize;
-          ctx.beginPath();
-          ctx.moveTo(lastPointRef.current.x - offX, lastPointRef.current.y - offY);
-          ctx.lineTo(coords.x - offX, coords.y - offY);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-    }
-    else if (activeTool === 'crop') {
+    if (activeTool === 'crop') {
       setCropRect(prev => prev ? { ...prev, w: coords.x - prev.x, h: coords.y - prev.y } : null);
       return;
     }
-    if (activeTool === 'marquee') {
+    if (activeTool === 'object_selection') {
       setSelectionRect(prev => prev ? { ...prev, w: coords.x - prev.x, h: coords.y - prev.y } : null);
       return;
     }
-    if (activeTool === 'shape') {
+    if (activeTool === 'shape' || activeTool === 'ellipse_shape' || activeTool === 'line_shape') {
       setDraftShape(prev => prev ? { ...prev, w: coords.x - prev.x, h: coords.y - prev.y } : null);
       return;
     }
@@ -751,18 +813,11 @@ const Canvas: React.FC = () => {
       return;
     }
 
-    if (activeTool === 'move' && activeLayerId) {
-      const activeLayer = layers.find(l => l.id === activeLayerId);
-      if (activeLayer && !activeLayer.locked) {
-        const dx = coords.x - lastPointRef.current.x;
-        const dy = coords.y - lastPointRef.current.y;
-        updateLayer(activeLayerId, { position: { x: activeLayer.position.x + dx, y: activeLayer.position.y + dy } });
-      }
-    } else if (activeTool === 'clone') {
+    if (activeTool === 'clone') {
       // End of clone stroke
     }
     lastPointRef.current = coords;
-  }, [getCoordinates, isInteracting, activeTool, activeLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect]);
+  }, [getCoordinates, isInteracting, activeTool, activeLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect, applySelectionClip, findBestEdgePoint]);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (e.touches.length === 2 && initialTouchDistance !== null && initialTouchMidpoint !== null) {
@@ -792,7 +847,31 @@ const Canvas: React.FC = () => {
 
   const endAction = useCallback(() => {
     if (!isInteracting) return;
-    if (activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'blur' || activeTool === 'dodge' || activeTool === 'healing') {
+
+    const id = activeLayerId || (layers.length > 0 ? layers[0].id : null);
+    const canvas = id ? canvasRefs.current[id] : null;
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    
+    const context: any = {
+      canvas, ctx, coords: currentMousePos || { x: 0, y: 0 },
+      startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
+      lastPoint: lastPointRef.current,
+      brushSize, brushColor, zoom,
+      activeLayerId, layers,
+      selectionMode: useStore.getState().selectionMode,
+      selectionTolerance: useStore.getState().selectionTolerance,
+      selectionContiguous: useStore.getState().selectionContiguous,
+      selectionRect,
+      setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
+      setBrushColor, addLayer
+    };
+
+    const toolModule = getToolModule(activeTool);
+    if (toolModule?.end) {
+      toolModule.end(context);
+    }
+
+    if (['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'smudge', 'clone'].includes(activeTool)) {
       const id = activeLayerId || layers[0]?.id;
       const canvas = canvasRefs.current[id];
       if (canvas) {
@@ -800,30 +879,33 @@ const Canvas: React.FC = () => {
         recordHistory(activeTool.charAt(0).toUpperCase() + activeTool.slice(1));
       }
     }
-    else if (activeTool === 'lasso') {
-      // Finalize lasso logic
-    }
 
-    if (activeTool === 'shape' && draftShape) {
+    if ((activeTool === 'shape' || activeTool === 'ellipse_shape' || activeTool === 'line_shape') && draftShape) {
       const w = Math.abs(draftShape.w);
       const h = Math.abs(draftShape.h);
-      if (w > 2 && h > 2) {
+      if (w > 1 || h > 1) {
+        const shapeType = activeTool === 'ellipse_shape' ? 'ellipse' : (activeTool === 'line_shape' ? 'path' : 'rect');
+        const points = activeTool === 'line_shape' 
+          ? [{ x: draftShape.w < 0 ? w : 0, y: draftShape.h < 0 ? h : 0 }, { x: draftShape.w < 0 ? 0 : w, y: draftShape.h < 0 ? 0 : h }] 
+          : [];
+        
         addLayer({
-          name: 'Rectangle',
+          name: activeTool === 'ellipse_shape' ? 'Ellipse' : (activeTool === 'line_shape' ? 'Line' : 'Rectangle'),
           type: 'shape',
           position: {
             x: draftShape.w >= 0 ? draftShape.x : draftShape.x + draftShape.w,
             y: draftShape.h >= 0 ? draftShape.y : draftShape.y + draftShape.h
           },
           shapeData: {
-            type: 'rect',
+            type: shapeType,
             w, h,
-            fill: hexToRgba(brushColor, primaryOpacity),
+            points: activeTool === 'line_shape' ? points : undefined,
+            fill: activeTool === 'line_shape' ? 'transparent' : hexToRgba(brushColor, primaryOpacity),
             stroke: hexToRgba(secondaryColor, secondaryOpacity),
             strokeWidth: strokeWidth
           }
         });
-        recordHistory('Add Rectangle');
+        recordHistory(`Add ${activeTool}`);
       }
       setDraftShape(null);
     }
@@ -831,11 +913,16 @@ const Canvas: React.FC = () => {
     if (activeTool === 'gradient' && gradientStart && currentMousePos) {
       applyGradient(gradientStart, currentMousePos);
       setGradientStart(null);
+      recordHistory('Gradient');
+    }
+
+    if (activeTool === 'move') {
+      recordHistory('Move Layer');
     }
 
     setIsInteracting(false);
     lastPointRef.current = null;
-  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient]);
+  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect]);
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -1060,6 +1147,18 @@ const Canvas: React.FC = () => {
             ctx.lineWidth = sw;
             ctx.strokeRect(0, 0, w || 100, h || 100);
           }
+        } else if (type === 'ellipse') {
+          ctx.beginPath();
+          ctx.ellipse(w / 2, h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
+          if (fill) {
+            ctx.fillStyle = fill;
+            ctx.fill();
+          }
+          if (stroke && sw > 0) {
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = sw;
+            ctx.stroke();
+          }
         } else if (type === 'path' && points && points.length > 0) {
           ctx.beginPath();
           ctx.moveTo(points[0].x, points[0].y);
@@ -1120,6 +1219,7 @@ const Canvas: React.FC = () => {
           overflow: 'hidden'
         }}
         onMouseDown={(e) => startAction(e.clientX, e.clientY, e)}
+        onDoubleClick={handleDoubleClick}
         onTouchStart={handleTouchStart}
       >
         {layers.map((layer) => (
@@ -1144,7 +1244,7 @@ const Canvas: React.FC = () => {
               className="layer-canvas"
               style={{ width: '100%', height: '100%' }}
             />
-            {activeLayerId === layer.id && lassoPaths.length > 0 && (
+            {activeLayerId === layer.id && (lassoPaths.length > 0 || selectionRect) && (
               <svg
                 className="lasso-svg"
                 style={{
@@ -1165,15 +1265,16 @@ const Canvas: React.FC = () => {
                       <feFuncA type="discrete" tableValues="0 1" />
                     </feComponentTransfer>
                   </filter>
-                  {/* Clip to layer content if we wanted, but for now just document relative */}
                 </defs>
 
                 {/* The Selection Mask (Dimming the UNSELECTED area) */}
                 <path
-                  d={`M 0,0 L 0,${documentSize.h / 2} L ${documentSize.w / 2},${documentSize.h / 2} L ${documentSize.w / 2},0 Z ` +
-                    lassoPaths.map(path => `M ${path.map(p => `${p.x / 2},${p.y / 2}`).join(' L ')} Z`).join(' ')}
+                  d={isInverseSelection
+                    ? getSelectionPathData()
+                    : `M 0,0 L 0,${documentSize.h / 2} L ${documentSize.w / 2},${documentSize.h / 2} L ${documentSize.w / 2},0 Z ` +
+                      getSelectionPathData()}
                   fill="rgba(0, 0, 0, 0.4)"
-                  fillRule="nonzero" // Use nonzero with CCW boundary and CW paths for proper union
+                  fillRule={isInverseSelection ? 'nonzero' : 'evenodd'}
                   style={{ pointerEvents: 'none' }}
                 />
 
@@ -1181,19 +1282,37 @@ const Canvas: React.FC = () => {
                 <g className="marquee-dash">
                   <g style={{ filter: 'url(#selectionUnion)' }}>
                     <path
-                      d={lassoPaths.map(path => `M ${path.map(p => `${p.x / 2},${p.y / 2}`).join(' L ')} Z`).join(' ')}
+                      d={getSelectionPathData()}
                       fill="#000" stroke="none"
-                      fillRule="nonzero" // Use nonzero to union overlapping paths
+                      fillRule="nonzero" 
                     />
                   </g>
                   <g style={{ filter: 'url(#selectionUnion)' }}>
                     <path
-                      d={lassoPaths.map(path => `M ${path.map(p => `${p.x / 2},${p.y / 2}`).join(' L ')} Z`).join(' ')}
+                      d={getSelectionPathData()}
                       fill="#fff" stroke="none"
-                      fillRule="nonzero" // Use nonzero to union overlapping paths
+                      fillRule="nonzero" 
                     />
                   </g>
                 </g>
+
+                {/* Anchor Points (Handles) - Matching Photopea style */}
+                {!isInverseSelection && lassoPaths.map((path, pIdx) => (
+                  <g key={`path-anchors-${pIdx}`}>
+                    {path.map((point, iIdx) => (
+                      <rect
+                        key={`anchor-${pIdx}-${iIdx}`}
+                        x={point.x / 2 - 2}
+                        y={point.y / 2 - 2}
+                        width={4}
+                        height={4}
+                        fill="#fff"
+                        stroke="#000"
+                        strokeWidth={0.5}
+                      />
+                    ))}
+                  </g>
+                ))}
               </svg>
             )}
           </div>
@@ -1204,11 +1323,26 @@ const Canvas: React.FC = () => {
             left: draftShape.w >= 0 ? draftShape.x / 2 : (draftShape.x + draftShape.w) / 2,
             top: draftShape.h >= 0 ? draftShape.y / 2 : (draftShape.y + draftShape.h) / 2,
             width: Math.abs(draftShape.w) / 2, height: Math.abs(draftShape.h) / 2,
-            backgroundColor: brushColor,
-            border: `${strokeWidth / 2}px solid ${secondaryColor}`,
+            backgroundColor: activeTool === 'line_shape' ? 'transparent' : brushColor,
+            border: activeTool === 'line_shape' ? 'none' : `${strokeWidth / 2}px solid ${secondaryColor}`,
+            borderRadius: activeTool === 'ellipse_shape' ? '50%' : '0',
             opacity: primaryOpacity,
-            boxSizing: 'border-box'
-          }} />
+            boxSizing: 'border-box',
+            pointerEvents: 'none'
+          }}>
+            {activeTool === 'line_shape' && (
+              <svg style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                <line 
+                  x1={draftShape.w >= 0 ? 0 : Math.abs(draftShape.w) / 2} 
+                  y1={draftShape.h >= 0 ? 0 : Math.abs(draftShape.h) / 2} 
+                  x2={draftShape.w >= 0 ? Math.abs(draftShape.w) / 2 : 0} 
+                  y2={draftShape.h >= 0 ? Math.abs(draftShape.h) / 2 : 0} 
+                  stroke={secondaryColor} 
+                  strokeWidth={strokeWidth / 2} 
+                />
+              </svg>
+            )}
+          </div>
         )}
 
         {textEditor && (
@@ -1258,34 +1392,46 @@ const Canvas: React.FC = () => {
           </>
         )}
 
-        {currentMousePos && (activeTool === 'brush' || activeTool === 'eraser') && (
+        {currentMousePos && ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'smudge', 'clone'].includes(activeTool) && (
           <div className="brush-cursor" style={{ left: currentMousePos.x / 2, top: currentMousePos.y / 2, width: brushSize / 2, height: brushSize / 2 }} />
         )}
 
-        {selectionRect && (
-          <div className="selection-marquee" style={{
-            left: selectionRect.w >= 0 ? selectionRect.x / 2 : (selectionRect.x + selectionRect.w) / 2,
-            top: selectionRect.h >= 0 ? selectionRect.y / 2 : (selectionRect.y + selectionRect.h) / 2,
-            width: Math.abs(selectionRect.w) / 2, height: Math.abs(selectionRect.h) / 2
-          }} />
-        )}
+        {/* Selection rendering is now handled globally via SVG mask inside the layer loop or at doc level */}
+
 
         {cropRect && (
-          <div className="crop-marquee" style={{
-            left: cropRect.w >= 0 ? cropRect.x / 2 : (cropRect.x + cropRect.w) / 2,
-            top: cropRect.h >= 0 ? cropRect.y / 2 : (cropRect.y + cropRect.h) / 2,
-            width: Math.abs(cropRect.w) / 2, height: Math.abs(cropRect.h) / 2,
-            position: 'absolute', border: '2px solid #fff', outline: '2000px solid rgba(0,0,0,0.5)', zIndex: 10000
-          }}>
+          <div 
+            className="crop-marquee" 
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const c = getCoordinates(e.clientX, e.clientY);
+              if (c) lastPointRef.current = c;
+              setActiveCropHandle('move');
+              setIsInteracting(true);
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY);
+              if (c) lastPointRef.current = c;
+              setActiveCropHandle('move');
+              setIsInteracting(true);
+            }}
+            style={{
+              left: cropRect.w >= 0 ? cropRect.x / 2 : (cropRect.x + cropRect.w) / 2,
+              top: cropRect.h >= 0 ? cropRect.y / 2 : (cropRect.y + cropRect.h) / 2,
+              width: Math.abs(cropRect.w) / 2, height: Math.abs(cropRect.h) / 2,
+              position: 'absolute', border: '2px solid #fff', outline: '2000px solid rgba(0,0,0,0.5)', zIndex: 10000,
+              cursor: 'move'
+            }}>
             {/* Handles */}
-            <div className="crop-handle tl" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('tl'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('tl'); setIsInteracting(true); }} />
-            <div className="crop-handle tr" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('tr'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('tr'); setIsInteracting(true); }} />
-            <div className="crop-handle bl" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('bl'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('bl'); setIsInteracting(true); }} />
-            <div className="crop-handle br" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('br'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('br'); setIsInteracting(true); }} />
-            <div className="crop-handle tm" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('tm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('tm'); setIsInteracting(true); }} />
-            <div className="crop-handle bm" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('bm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('bm'); setIsInteracting(true); }} />
-            <div className="crop-handle lm" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('lm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('lm'); setIsInteracting(true); }} />
-            <div className="crop-handle rm" onMouseDown={(e) => { e.stopPropagation(); setActiveCropHandle('rm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); setActiveCropHandle('rm'); setIsInteracting(true); }} />
+            <div className="crop-handle tl" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('tl'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('tl'); setIsInteracting(true); }} />
+            <div className="crop-handle tr" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('tr'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('tr'); setIsInteracting(true); }} />
+            <div className="crop-handle bl" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('bl'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('bl'); setIsInteracting(true); }} />
+            <div className="crop-handle br" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('br'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('br'); setIsInteracting(true); }} />
+            <div className="crop-handle tm" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('tm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('tm'); setIsInteracting(true); }} />
+            <div className="crop-handle bm" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('bm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('bm'); setIsInteracting(true); }} />
+            <div className="crop-handle lm" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('lm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('lm'); setIsInteracting(true); }} />
+            <div className="crop-handle rm" onMouseDown={(e) => { e.stopPropagation(); const c = getCoordinates(e.clientX, e.clientY); if (c) lastPointRef.current = c; setActiveCropHandle('rm'); setIsInteracting(true); }} onTouchStart={(e) => { e.stopPropagation(); const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY); if (c) lastPointRef.current = c; setActiveCropHandle('rm'); setIsInteracting(true); }} />
 
             {/* Action Bar - Moved to bottom to avoid clipping */}
             <div className="crop-actions-bar bottom" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
