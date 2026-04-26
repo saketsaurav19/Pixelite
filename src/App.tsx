@@ -374,7 +374,7 @@ const App: React.FC = () => {
           </button>
           <div className="app-logo">
             <LucideIcons.Layers size={18} color="#0078d4" />
-            <span>PhotoClone</span>
+            <span>Pixelite</span>
           </div>
         </div>
 
@@ -500,7 +500,7 @@ const App: React.FC = () => {
             <div className="welcome-icon">
               <LucideIcons.Image size={48} />
             </div>
-            <h2>Welcome to Photoshop Clone</h2>
+            <h2>Welcome to Pixelite</h2>
             <p>Start a new project or open an existing image to begin.</p>
             <div className="welcome-actions">
               <button 
