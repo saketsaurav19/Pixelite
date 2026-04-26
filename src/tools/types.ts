@@ -19,6 +19,7 @@ export interface ToolContext {
   selectionRect: { x: number, y: number, w: number, h: number } | null;
   lassoPaths: { x: number; y: number }[][];
   isInverseSelection: boolean;
+  slices: { id: string; rect: { x: number; y: number; w: number; h: number } }[];
   
   // State Updaters
   setLassoPaths: (paths: any) => void;
@@ -29,6 +30,9 @@ export interface ToolContext {
   setIsInteracting: (val: boolean) => void;
   setBrushColor: (color: string) => void;
   addLayer: (layer: any) => void;
+  setDocumentSize: (size: { w: number, h: number }) => void;
+  setSlices: (slices: any[]) => void;
+  addSlice: (rect: { x: number, y: number, w: number, h: number }) => void;
 }
 
 export interface ToolModule {

@@ -14,7 +14,8 @@ const Canvas: React.FC = () => {
     lassoPaths, setLassoPaths, selectionRect, setSelectionRect,
     isInverseSelection, setIsInverseSelection,
     documentSize, setDocumentSize,
-    vectorPaths, setVectorPaths, activePathIndex, setActivePathIndex, penMode
+    vectorPaths, setVectorPaths, activePathIndex, setActivePathIndex, penMode,
+    slices, setSlices, addSlice
   } = store;
 
   // 1. Unified State for maximum stability
@@ -541,7 +542,8 @@ ctx.putImageData(imgData, 0, 0);
       selectionContiguous: useStore.getState().selectionContiguous,
       selectionRect, lassoPaths, isInverseSelection,
       setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
-      setBrushColor, addLayer
+      setBrushColor, addLayer, setDocumentSize,
+      slices, setSlices, addSlice
     };
 
     const toolModule = getToolModule(activeTool);
@@ -634,8 +636,12 @@ ctx.putImageData(imgData, 0, 0);
   }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, lassoPaths, vectorPaths, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity]);
 
   const handleDoubleClick = useCallback(() => {
+    const id = activeLayerId || layers[0]?.id;
+    const canvas = canvasRefs.current[id];
+    const ctx = canvas?.getContext('2d');
+    
     const context: any = {
-      canvas: null, ctx: null, coords: currentMousePos || { x: 0, y: 0 },
+      canvas, ctx, coords: currentMousePos || { x: 0, y: 0 },
       startCoords: null, lastPoint: lastPointRef.current,
       brushSize, brushColor, zoom,
       activeLayerId, layers,
@@ -644,14 +650,15 @@ ctx.putImageData(imgData, 0, 0);
       selectionContiguous: useStore.getState().selectionContiguous,
       selectionRect, lassoPaths, isInverseSelection,
       setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
-      setBrushColor, addLayer
+      setBrushColor, addLayer, setDocumentSize,
+      slices, setSlices, addSlice
     };
 
     const toolModule = getToolModule(activeTool);
     if (toolModule?.doubleClick) {
       toolModule.doubleClick(context);
     }
-  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer]);
+  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer, setDocumentSize]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -727,7 +734,8 @@ ctx.putImageData(imgData, 0, 0);
       selectionContiguous: useStore.getState().selectionContiguous,
       selectionRect, lassoPaths, isInverseSelection,
       setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
-      setBrushColor, addLayer
+      setBrushColor, addLayer, setDocumentSize,
+      slices, setSlices, addSlice
     };
 
     const toolModule = getToolModule(activeTool);
@@ -863,7 +871,8 @@ ctx.putImageData(imgData, 0, 0);
       selectionContiguous: useStore.getState().selectionContiguous,
       selectionRect,
       setLassoPaths, setSelectionRect, setCropRect, updateLayer, recordHistory, setIsInteracting,
-      setBrushColor, addLayer
+      setBrushColor, addLayer, setDocumentSize,
+      slices, setSlices, addSlice
     };
 
     const toolModule = getToolModule(activeTool);
@@ -1313,6 +1322,75 @@ ctx.putImageData(imgData, 0, 0);
                     ))}
                   </g>
                 ))}
+                
+                {/* Perspective Crop Interaction Layer */}
+                {activeTool === 'perspective_crop' && lassoPaths.length > 0 && lassoPaths[0].length === 4 && (
+                  <g className="perspective-crop-ui">
+                    {/* Fill area for moving */}
+                    <path
+                      d={`M ${lassoPaths[0][0].x/2},${lassoPaths[0][0].y/2} L ${lassoPaths[0][1].x/2},${lassoPaths[0][1].y/2} L ${lassoPaths[0][2].x/2},${lassoPaths[0][2].y/2} L ${lassoPaths[0][3].x/2},${lassoPaths[0][3].y/2} Z`}
+                      fill="rgba(0, 170, 255, 0.1)"
+                      style={{ pointerEvents: 'auto', cursor: 'move' }}
+                    />
+
+                    {/* Perspective Grid */}
+                    <g className="perspective-grid" style={{ pointerEvents: 'none' }}>
+                      {(() => {
+                        const p = lassoPaths[0];
+                        const lerp = (a: any, b: any, t: number) => ({
+                          x: (a.x + (b.x - a.x) * t) / 2,
+                          y: (a.y + (b.y - a.y) * t) / 2
+                        });
+                        
+                        const gridLines = [];
+                        for (let t of [0.33, 0.66]) {
+                          const top = lerp(p[0], p[1], t);
+                          const bot = lerp(p[3], p[2], t);
+                          gridLines.push(<line key={`v-${t}`} x1={top.x} y1={top.y} x2={bot.x} y2={bot.y} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />);
+                          
+                          const lft = lerp(p[0], p[3], t);
+                          const rgt = lerp(p[1], p[2], t);
+                          gridLines.push(<line key={`h-${t}`} x1={lft.x} y1={lft.y} x2={rgt.x} y2={rgt.y} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />);
+                        }
+                        return gridLines;
+                      })()}
+                    </g>
+                    
+                    {/* Corner Handles */}
+                    {lassoPaths[0].map((point, i) => (
+                      <rect
+                        key={`corner-${i}`}
+                        x={point.x / 2 - 4}
+                        y={point.y / 2 - 4}
+                        width={8}
+                        height={8}
+                        fill="#fff"
+                        stroke="#00aaff"
+                        strokeWidth={1}
+                        style={{ cursor: i % 2 === 0 ? 'nwse-resize' : 'nesw-resize', pointerEvents: 'auto' }}
+                      />
+                    ))}
+
+                    {/* Edge Midpoint Handles */}
+                    {[0, 1, 2, 3].map(i => {
+                      const p1 = lassoPaths[0][i];
+                      const p2 = lassoPaths[0][(i + 1) % 4];
+                      return (
+                        <rect
+                          key={`mid-${i}`}
+                          x={(p1.x + p2.x) / 4 - 4}
+                          y={(p1.y + p2.y) / 4 - 4}
+                          width={8}
+                          height={8}
+                          fill="#fff"
+                          stroke="#00aaff"
+                          strokeWidth={1}
+                          style={{ cursor: i % 2 === 0 ? 'ns-resize' : 'ew-resize', pointerEvents: 'auto' }}
+                        />
+                      );
+                    })}
+                  </g>
+                )}
               </svg>
             )}
           </div>
@@ -1466,6 +1544,94 @@ ctx.putImageData(imgData, 0, 0);
               />
             ))}
           </svg>
+        )}
+
+        {/* Perspective Crop Action Bar */}
+        {activeTool === 'perspective_crop' && lassoPaths.length > 0 && lassoPaths[0].length === 4 && (
+          <div
+            className="perspective-actions-bar"
+            style={{
+              position: 'absolute',
+              left: Math.min(...lassoPaths[0].map(p => p.x)) / 2,
+              top: Math.max(...lassoPaths[0].map(p => p.y)) / 2 + 15,
+              zIndex: 20000,
+              display: 'flex',
+              gap: '10px',
+              pointerEvents: 'auto',
+              background: '#222',
+              padding: '8px',
+              borderRadius: '6px',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+              border: '1px solid #444'
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onPointerDown={(e) => { 
+                e.stopPropagation(); 
+                handleDoubleClick(); 
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold', transition: 'transform 0.1s' }}
+              title="Apply (Enter)"
+            >
+              ✓
+            </button>
+            <button
+              onPointerDown={(e) => { 
+                e.stopPropagation(); 
+                delete (window as any)._pcPoints;
+                setLassoPaths([]);
+                setIsInteracting(false);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '18px', fontWeight: 'bold', transition: 'transform 0.1s' }}
+              title="Cancel (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Slices Overlay */}
+        {slices && slices.length > 0 && (
+          <div className="slices-overlay" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1500 }}>
+            {slices.map((slice, i) => {
+              const isSelected = (window as any)._sliceLastClickedIdx === i;
+              return (
+                <div
+                  key={slice.id}
+                  className="slice-rect"
+                  style={{
+                    position: 'absolute',
+                    left: slice.rect.x / 2,
+                    top: slice.rect.y / 2,
+                    width: slice.rect.w / 2,
+                    height: slice.rect.h / 2,
+                    border: isSelected ? '2px solid #0055ff' : '1px solid #00aaff',
+                    backgroundColor: isSelected ? 'rgba(0, 85, 255, 0.25)' : 'rgba(0, 170, 255, 0.1)'
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute',
+                    top: 0, left: 0,
+                    background: isSelected ? '#0055ff' : '#00aaff',
+                    color: 'white',
+                    fontSize: '8px',
+                    padding: '1px 3px',
+                    lineHeight: '1',
+                    pointerEvents: 'none'
+                  }}>
+                    {slice.id}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

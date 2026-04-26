@@ -35,7 +35,8 @@ const App: React.FC = () => {
     setDocumentSize,
     moveLayer,
     reorderLayers,
-    documentSize
+    documentSize,
+    activeTool
   } = useStore();
 
   const handleSave = (asNew: boolean = false) => {
@@ -116,7 +117,7 @@ const App: React.FC = () => {
           'm': { id: 'marquee', tools: ['marquee', 'ellipse_marquee'] },
           'l': { id: 'lasso', tools: ['lasso', 'polygonal_lasso', 'magnetic_lasso'] },
           'w': { id: 'selection', tools: ['quick_selection', 'magic_wand', 'object_selection'] },
-          'c': { id: 'crop', tools: ['crop', 'perspective_crop', 'slice'] },
+          'c': { id: 'crop', tools: ['crop', 'perspective_crop', 'slice', 'slice_select'] },
           'i': { id: 'eyedropper', tools: ['eyedropper', 'color_sampler', 'ruler'] },
           'j': { id: 'healing', tools: ['healing', 'healing_brush', 'patch'] },
           'b': { id: 'brush', tools: ['brush', 'pencil', 'color_replacement'] },
@@ -177,6 +178,13 @@ const App: React.FC = () => {
             removeLayer(activeLayerId);
             recordHistory('Delete Layer');
           }
+        } else if (activeTool === 'slice_select' && (window as any)._sliceLastClickedIdx !== undefined) {
+          const idx = (window as any)._sliceLastClickedIdx;
+          const { slices, setSlices } = useStore.getState();
+          const nextSlices = slices.filter((_, i) => i !== idx);
+          setSlices(nextSlices);
+          delete (window as any)._sliceLastClickedIdx;
+          recordHistory('Delete Slice');
         } else {
           window.dispatchEvent(new CustomEvent('delete-selection'));
         }
@@ -191,7 +199,8 @@ const App: React.FC = () => {
     setZoom,
     duplicateLayer,
     removeLayer,
-    recordHistory
+    recordHistory,
+    activeTool
   ]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

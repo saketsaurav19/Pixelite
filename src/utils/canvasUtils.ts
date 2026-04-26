@@ -146,6 +146,75 @@ export const findAllContours = (
   return allContours;
 };
 
+export const warpPerspective = (
+  ctx: CanvasRenderingContext2D,
+  points: { x: number, y: number }[], // 4 corners: TL, TR, BR, BL
+  targetWidth: number,
+  targetHeight: number
+) => {
+  const canvas = ctx.canvas;
+  const srcData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const dstCanvas = document.createElement('canvas');
+  dstCanvas.width = targetWidth;
+  dstCanvas.height = targetHeight;
+  const dstCtx = dstCanvas.getContext('2d')!;
+  const dstData = dstCtx.createImageData(targetWidth, targetHeight);
+
+  // Solve for Homography Matrix H (3x3) using 4 points
+  const getTransform = (src: { x: number, y: number }[], dst: { x: number, y: number }[]) => {
+    const A: number[][] = [];
+    for (let i = 0; i < 4; i++) {
+      A.push([dst[i].x, dst[i].y, 1, 0, 0, 0, -src[i].x * dst[i].x, -src[i].x * dst[i].y]);
+      A.push([0, 0, 0, dst[i].x, dst[i].y, 1, -src[i].y * dst[i].x, -src[i].y * dst[i].y]);
+    }
+    const B = [src[0].x, src[0].y, src[1].x, src[1].y, src[2].x, src[2].y, src[3].x, src[3].y];
+    
+    // Gaussian elimination solver
+    const n = B.length;
+    for (let i = 0; i < n; i++) {
+      let max = i;
+      for (let j = i + 1; j < n; j++) if (Math.abs(A[j][i]) > Math.abs(A[max][i])) max = j;
+      [A[i], A[max]] = [A[max], A[i]]; [B[i], B[max]] = [B[max], B[i]];
+      for (let j = i + 1; j < n; j++) {
+        const factor = A[j][i] / A[i][i];
+        B[j] -= factor * B[i];
+        for (let k = i; k < n; k++) A[j][k] -= factor * A[i][k];
+      }
+    }
+    const X = new Array(n);
+    for (let i = n - 1; i >= 0; i--) {
+      let sum = 0;
+      for (let j = i + 1; j < n; j++) sum += A[i][j] * X[j];
+      X[i] = (B[i] - sum) / A[i][i];
+    }
+    return [...X, 1];
+  };
+
+  const dstPoints = [{x:0, y:0}, {x:targetWidth, y:0}, {x:targetWidth, y:targetHeight}, {x:0, y:targetHeight}];
+  const h = getTransform(points, dstPoints);
+
+  const src = srcData.data, dst = dstData.data;
+  for (let y = 0; y < targetHeight; y++) {
+    for (let x = 0; x < targetWidth; x++) {
+      const z = h[6] * x + h[7] * y + h[8];
+      const px = (h[0] * x + h[1] * y + h[2]) / z;
+      const py = (h[3] * x + h[4] * y + h[5]) / z;
+      
+      if (px >= 0 && px < canvas.width - 1 && py >= 0 && py < canvas.height - 1) {
+        const ix = Math.floor(px), iy = Math.floor(py);
+        const idx1 = (iy * canvas.width + ix) * 4, idx2 = idx1 + 4, idx3 = idx1 + canvas.width * 4, idx4 = idx3 + 4;
+        const fx = px - ix, fy = py - iy;
+        for (let c = 0; c < 4; c++) {
+          dst[(y * targetWidth + x) * 4 + c] = 
+            src[idx1 + c] * (1-fx) * (1-fy) + src[idx2 + c] * fx * (1-fy) +
+            src[idx3 + c] * (1-fx) * fy + src[idx4 + c] * fx * fy;
+        }
+      }
+    }
+  }
+  return dstData;
+};
+
 export const findBestEdgePoint = (
   ctx: CanvasRenderingContext2D | null,
   x: number,

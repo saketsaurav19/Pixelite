@@ -96,6 +96,7 @@ interface EditorState {
   activePathIndex: number | null;
   penMode: 'path' | 'shape';
   selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
+  slices: { id: string; rect: { x: number; y: number; w: number; h: number } }[];
   
   // Actions
   setActiveTool: (tool: Tool) => void;
@@ -132,6 +133,8 @@ interface EditorState {
   moveLayer: (id: string, direction: 'up' | 'down') => void;
   reorderLayers: (startIndex: number, endIndex: number) => void;
   recordHistory: (actionName: string) => void;
+  setSlices: (slices: { id: string; rect: { x: number; y: number; w: number; h: number } }[]) => void;
+  addSlice: (rect: { x: number; y: number; w: number; h: number }) => void;
 }
 
 // Initial state for the layers - now empty by default
@@ -180,6 +183,7 @@ export const useStore = create<EditorState>((set) => ({
   cropRect: null,
   vectorPaths: [],
   activePathIndex: null,
+  slices: [],
   penMode: 'path',
   
   // Initialize history with the starting state
@@ -196,6 +200,7 @@ export const useStore = create<EditorState>((set) => ({
         documentSize: { w: 2000, h: 1400 },
         selectionTolerance: 32,
         selectionContiguous: true,
+        slices: [],
       },
     },
   ],
@@ -323,10 +328,10 @@ export const useStore = create<EditorState>((set) => ({
     return { layers: newLayers };
   }),
   reorderLayers: (startIndex, endIndex) => set((state) => {
-    const newLayers = [...state.layers];
-    const [removed] = newLayers.splice(startIndex, 1);
-    newLayers.splice(endIndex, 0, removed);
-    return { layers: newLayers };
+    const next = [...state.layers];
+    const [removed] = next.splice(startIndex, 1);
+    next.splice(endIndex, 0, removed);
+    return { layers: next };
   }),
   
   recordHistory: (name) => set((state) => {
@@ -354,4 +359,8 @@ export const useStore = create<EditorState>((set) => ({
   setSelectionTolerance: (selectionTolerance) => set({ selectionTolerance }),
   setSelectionContiguous: (selectionContiguous) => set({ selectionContiguous }),
   setSelectionMode: (selectionMode) => set({ selectionMode }),
+  setSlices: (slices) => set({ slices }),
+  addSlice: (rect) => set((state) => ({ 
+    slices: [...state.slices, { id: (state.slices.length + 1).toString(), rect }] 
+  })),
 }));
