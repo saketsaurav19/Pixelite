@@ -12,13 +12,17 @@ const OptionsBar: React.FC = () => {
     penMode, setPenMode, setVectorPaths, setActivePathIndex, setLassoPaths,
     recordHistory, addLayer,
     undo, redo, activeLayerId, removeLayer, duplicateLayer,
-    setSelectionRect, inverseSelection,
-    selectionRect, lassoPaths
+    setSelectionRect, setIsInverseSelection, inverseSelection,
+    selectionRect, lassoPaths,
+    selectionTolerance, setSelectionTolerance,
+    selectionContiguous, setSelectionContiguous,
+    selectionMode, setSelectionMode
   } = useStore();
 
   const handleDeselect = () => {
     setSelectionRect(null);
     setLassoPaths([]);
+    setIsInverseSelection(false);
     recordHistory('Deselect');
   };
 
@@ -112,6 +116,36 @@ const OptionsBar: React.FC = () => {
         </>
       )}
 
+      {(activeTool === 'marquee' || activeTool === 'ellipse_marquee' || activeTool === 'lasso' || activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso' || activeTool === 'magic_wand' || activeTool === 'quick_selection' || activeTool === 'object_selection') && (
+        <>
+          <div className="option-control">
+            <label>Mode</label>
+            <div className="segmented-control" style={{ display: 'flex', background: '#1a1a1a', borderRadius: '4px', padding: '2px' }}>
+              {[
+                { id: 'new', icon: LucideIcons.Square, label: 'New' },
+                { id: 'add', icon: LucideIcons.PlusSquare, label: 'Add' },
+                { id: 'subtract', icon: LucideIcons.MinusSquare, label: 'Subtract' },
+                { id: 'intersect', icon: LucideIcons.Layers, label: 'Intersect' }
+              ].map(m => (
+                <button 
+                  key={m.id}
+                  onClick={() => setSelectionMode(m.id as any)}
+                  title={m.label}
+                  style={{
+                    padding: '4px', fontSize: '11px', border: 'none', borderRadius: '3px', cursor: 'pointer',
+                    background: selectionMode === m.id ? '#444' : 'transparent', color: selectionMode === m.id ? '#fff' : '#888',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                >
+                  <m.icon size={14} />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
+
       {activeTool === 'crop' && (
         <>
           <div className="option-control">
@@ -134,8 +168,33 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
+
+      {(activeTool === 'magic_wand' || activeTool === 'quick_selection' || activeTool === 'object_selection') && (
+        <>
+          <div className="option-control">
+            <label>Tolerance</label>
+            <input 
+              type="range" min="1" max="255" 
+              value={selectionTolerance} 
+              onChange={(e) => setSelectionTolerance(parseInt(e.target.value))} 
+            />
+            <span className="value-label">{selectionTolerance}</span>
+          </div>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={selectionContiguous} 
+                onChange={(e) => setSelectionContiguous(e.target.checked)} 
+              />
+              Contiguous
+            </label>
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
       
-      {(activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'text' || activeTool === 'shape') && (
+      {(activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'text' || activeTool === 'shape' || activeTool === 'quick_selection') && (
         <div className="option-control">
           <label>
             {activeTool === 'text' ? 'Font Size' : 'Size'}

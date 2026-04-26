@@ -8,7 +8,27 @@ export const hexToRgba = (hex: string, opacity: number) => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
-export type Tool = 'select' | 'move' | 'brush' | 'eraser' | 'text' | 'shape' | 'marquee' | 'lasso' | 'quick_select' | 'crop' | 'eyedropper' | 'healing' | 'clone' | 'gradient' | 'blur' | 'dodge' | 'pen' | 'path_select' | 'hand' | 'zoom_tool';
+export type Tool = 
+  | 'move' | 'artboard'
+  | 'marquee' | 'ellipse_marquee'
+  | 'lasso' | 'polygonal_lasso' | 'magnetic_lasso'
+  | 'quick_selection' | 'magic_wand' | 'object_selection'
+  | 'crop' | 'perspective_crop' | 'slice' | 'slice_select'
+  | 'eyedropper' | 'color_sampler' | 'ruler'
+  | 'healing' | 'healing_brush' | 'patch' | 'content_aware_move' | 'red_eye'
+  | 'brush' | 'pencil' | 'color_replacement'
+  | 'clone' | 'pattern_stamp'
+  | 'eraser' | 'background_eraser' | 'magic_eraser'
+  | 'gradient' | 'paint_bucket'
+  | 'blur' | 'sharpen' | 'smudge'
+  | 'dodge' | 'burn' | 'sponge'
+  | 'text' | 'vertical_text'
+  | 'pen' | 'free_pen' | 'curvature_pen' | 'add_anchor' | 'delete_anchor' | 'convert_point'
+  | 'path_select' | 'direct_select'
+  | 'shape' | 'ellipse_shape' | 'line_shape' | 'parametric_shape' | 'custom_shape'
+  | 'hand' | 'rotate_view'
+  | 'zoom_tool'
+  | 'select'; // select is used for general purpose selection if needed
 
 export interface Layer {
   id: string;
@@ -26,7 +46,7 @@ export interface Layer {
   strokeColor?: string;
   strokeWidth?: number;
   shapeData?: { 
-    type: 'rect' | 'path';
+    type: 'rect' | 'path' | 'ellipse';
     w?: number; h?: number; 
     points?: { x: number; y: number }[];
     fill: string; stroke: string; strokeWidth: number 
@@ -41,12 +61,16 @@ interface HistoryEntry {
     activeLayerId: string | null;
     lassoPaths: { x: number; y: number }[][];
     selectionRect: { x: number; y: number; w: number; h: number } | null;
+    isInverseSelection: boolean;
     documentSize: { w: number; h: number };
+    selectionTolerance: number;
+    selectionContiguous: boolean;
   };
 }
 
 interface EditorState {
   activeTool: Tool;
+  activeToolVariants: Record<string, Tool>;
   zoom: number;
   layers: Layer[];
   activeLayerId: string | null;
@@ -59,6 +83,10 @@ interface EditorState {
   canvasOffset: { x: number; y: number };
   lassoPaths: { x: number; y: number }[][] ;
   selectionRect: { x: number; y: number; w: number; h: number } | null;
+  selectionShape: 'rect' | 'ellipse' | 'lasso';
+  isInverseSelection: boolean;
+  selectionTolerance: number;
+  selectionContiguous: boolean;
   cropRect: { x: number; y: number; w: number; h: number } | null;
   documentSize: { w: number; h: number };
   history: HistoryEntry[];
@@ -67,21 +95,27 @@ interface EditorState {
   vectorPaths: { points: { x: number; y: number }[]; closed: boolean }[];
   activePathIndex: number | null;
   penMode: 'path' | 'shape';
+  selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
   
   // Actions
   setActiveTool: (tool: Tool) => void;
+  setToolVariant: (groupId: string, tool: Tool) => void;
   setZoom: (zoom: number) => void;
   setCanvasOffset: (offset: { x: number; y: number }) => void;
   setLassoPaths: (paths: { x: number; y: number }[][] | ((prev: { x: number; y: number }[][]) => { x: number; y: number }[][])) => void;
   setVectorPaths: (paths: { points: { x: number; y: number }[]; closed: boolean }[] | ((prev: { points: { x: number; y: number }[]; closed: boolean }[]) => { points: { x: number; y: number }[]; closed: boolean }[])) => void;
   setActivePathIndex: (index: number | null) => void;
   setPenMode: (mode: 'path' | 'shape') => void;
-  setSelectionRect: (rect: { x: number; y: number; w: number; h: number } | null | ((prev: { x: number; y: number; w: number; h: number } | null) => { x: number; y: number; w: number; h: number } | null)) => void;
+  setSelectionRect: (rect: { x: number; y: number; w: number; h: number } | null | ((prev: { x: number; y: number; w: number; h: number } | null) => { x: number; y: number; w: number; h: number } | null), shape?: 'rect' | 'ellipse') => void;
   setCropRect: (rect: { x: number; y: number; w: number; h: number } | null | ((prev: { x: number; y: number; w: number; h: number } | null) => { x: number; y: number; w: number; h: number } | null)) => void;
+  setIsInverseSelection: (value: boolean) => void;
   inverseSelection: () => void;
   addLayer: (layer: Partial<Layer>) => void;
   removeLayer: (id: string) => void;
   setActiveLayer: (id: string) => void;
+  setSelectionTolerance: (tolerance: number) => void;
+  setSelectionContiguous: (contiguous: boolean) => void;
+  setSelectionMode: (mode: 'new' | 'add' | 'subtract' | 'intersect') => void;
   toggleLayerVisibility: (id: string) => void;
   updateLayer: (id: string, updates: Partial<Layer>) => void;
   duplicateLayer: (id: string) => void;
@@ -104,7 +138,28 @@ interface EditorState {
 const initialLayers: Layer[] = [];
 
 export const useStore = create<EditorState>((set) => ({
-  activeTool: 'select',
+  activeTool: 'move',
+  activeToolVariants: {
+    move: 'move',
+    marquee: 'marquee',
+    lasso: 'lasso',
+    selection: 'quick_selection',
+    crop: 'crop',
+    eyedropper: 'eyedropper',
+    healing: 'healing',
+    brush: 'brush',
+    clone: 'clone',
+    eraser: 'eraser',
+    gradient: 'gradient',
+    blur: 'blur',
+    dodge: 'dodge',
+    text: 'text',
+    pen: 'pen',
+    path: 'path_select',
+    shape: 'shape',
+    hand: 'hand',
+    zoom: 'zoom_tool'
+  },
   zoom: 1,
   layers: initialLayers,
   activeLayerId: null,
@@ -117,6 +172,11 @@ export const useStore = create<EditorState>((set) => ({
   canvasOffset: { x: 0, y: 0 },
   lassoPaths: [],
   selectionRect: null,
+  selectionShape: 'rect',
+  isInverseSelection: false,
+  selectionTolerance: 32,
+  selectionContiguous: true,
+  selectionMode: 'new',
   cropRect: null,
   vectorPaths: [],
   activePathIndex: null,
@@ -132,55 +192,54 @@ export const useStore = create<EditorState>((set) => ({
         activeLayerId: null,
         lassoPaths: [],
         selectionRect: null,
+        isInverseSelection: false,
         documentSize: { w: 2000, h: 1400 },
+        selectionTolerance: 32,
+        selectionContiguous: true,
       },
     },
   ],
   historyIndex: 0,
 
   setActiveTool: (tool) => set({ activeTool: tool }),
+  setToolVariant: (groupId, tool) => set((state) => ({
+    activeToolVariants: { ...state.activeToolVariants, [groupId]: tool },
+    activeTool: tool
+  })),
+
   setZoom: (zoom) => set({ zoom }),
   setCanvasOffset: (offset) => set({ canvasOffset: offset }),
   setLassoPaths: (updater) => set((state) => ({ 
-    lassoPaths: typeof updater === 'function' ? updater(state.lassoPaths) : updater 
+    lassoPaths: typeof updater === 'function' ? updater(state.lassoPaths) : updater,
+    selectionShape: 'lasso',
+    isInverseSelection: false,
   })),
   setVectorPaths: (updater) => set((state) => ({ 
     vectorPaths: typeof updater === 'function' ? updater(state.vectorPaths) : updater 
   })),
   setActivePathIndex: (index) => set({ activePathIndex: index }),
   setPenMode: (mode) => set({ penMode: mode }),
-  setSelectionRect: (updater) => set((state) => ({ 
-    selectionRect: typeof updater === 'function' ? updater(state.selectionRect) : updater 
+  setSelectionRect: (updater, shape) => set((state) => ({ 
+    selectionRect: typeof updater === 'function' ? updater(state.selectionRect) : updater,
+    selectionShape: shape !== undefined ? shape : state.selectionShape,
+    isInverseSelection: false,
   })),
   setCropRect: (updater) => set((state) => ({ 
     cropRect: typeof updater === 'function' ? updater(state.cropRect) : updater 
   })),
+  setIsInverseSelection: (value) => set({ isInverseSelection: value }),
   inverseSelection: () => set((state) => {
     const { w, h } = state.documentSize;
-    
-    // Boundary is either the active layer's area or the full document
-    // For now, since all layers are documentSize internally, we use that,
-    // but we could shift it by layer.position if we wanted.
-    // The user said "on selected active canvas", so we use the document boundary
-    // but ensure it's applied correctly.
-    
-    let currentPaths = [...state.lassoPaths];
-    if (state.selectionRect) {
-      const { x, y, w: rw, h: rh } = state.selectionRect;
-      currentPaths.push([
-        { x, y }, { x: x + rw, y }, { x: x + rw, y: y + rh }, { x, y: y + rh }
-      ]);
-    }
-    const boundaryPath = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
-    const hasBoundary = currentPaths.some(p => p.length === 4 && p[0].x === 0 && p[0].y === 0 && p[1].x === w);
-    if (hasBoundary) {
-      return { 
-        lassoPaths: currentPaths.filter(p => !(p.length === 4 && p[0].x === 0 && p[0].y === 0 && p[1].x === w)), 
-        selectionRect: null 
+    if (!state.selectionRect && state.lassoPaths.length === 0) {
+      return {
+        selectionRect: { x: 0, y: 0, w, h },
+        lassoPaths: [],
+        isInverseSelection: false,
       };
-    } else {
-      return { lassoPaths: [boundaryPath, ...currentPaths], selectionRect: null };
     }
+    return {
+      isInverseSelection: !state.isInverseSelection,
+    };
   }),
   addLayer: (layer) => set((state) => {
     const newLayer: Layer = {
@@ -278,7 +337,10 @@ export const useStore = create<EditorState>((set) => ({
         activeLayerId: state.activeLayerId,
         lassoPaths: JSON.parse(JSON.stringify(state.lassoPaths)),
         selectionRect: state.selectionRect ? { ...state.selectionRect } : null,
+        isInverseSelection: state.isInverseSelection,
         documentSize: { ...state.documentSize },
+        selectionTolerance: state.selectionTolerance,
+        selectionContiguous: state.selectionContiguous,
       },
     };
     // Cut off any future history if we were in the middle of undo/redo
@@ -288,4 +350,8 @@ export const useStore = create<EditorState>((set) => ({
       historyIndex: newHistory.length,
     };
   }),
+
+  setSelectionTolerance: (selectionTolerance) => set({ selectionTolerance }),
+  setSelectionContiguous: (selectionContiguous) => set({ selectionContiguous }),
+  setSelectionMode: (selectionMode) => set({ selectionMode }),
 }));

@@ -26,8 +26,10 @@ const App: React.FC = () => {
     inverseSelection,
     duplicateLayer,
     setActiveTool,
+    setToolVariant,
     setZoom,
     setSelectionRect,
+    setIsInverseSelection,
     setCropRect,
     setLassoPaths,
     setDocumentSize,
@@ -66,7 +68,7 @@ const App: React.FC = () => {
 
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [processingText, setProcessingText] = React.useState('');
-  
+
   // Mobile UI state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isToolsOpen, setIsToolsOpen] = React.useState(false);
@@ -106,27 +108,43 @@ const App: React.FC = () => {
         redo();
       }
 
-      // Tool selection
+      // Tool selection & Cycling
       if (!isCtrl) {
-        switch (e.key.toLowerCase()) {
-          case 'v': setActiveTool('move'); break;
-          case 'b': setActiveTool('brush'); break;
-          case 'e': setActiveTool('eraser'); break;
-          case 't': setActiveTool('text'); break;
-          case 'm': setActiveTool('marquee'); break;
-          case 'l': setActiveTool('lasso'); break;
-          case 'w': setActiveTool('quick_select'); break;
-          case 'u': setActiveTool('shape'); break;
-          case 'c': setActiveTool('crop'); break;
-          case 'i': setActiveTool('eyedropper'); break;
-          case 'j': setActiveTool('healing'); break;
-          case 's': setActiveTool('clone'); break;
-          case 'g': setActiveTool('gradient'); break;
-          case 'p': setActiveTool('pen'); break;
-          case 'a': setActiveTool('path_select'); break;
-          case 'h': setActiveTool('hand'); break;
-          case 'z': setActiveTool('zoom_tool'); break;
-          case 'o': setActiveTool('dodge'); break;
+        const key = e.key.toLowerCase();
+        const toolGroups: Record<string, { id: string; tools: string[] }> = {
+          'v': { id: 'move', tools: ['move', 'artboard'] },
+          'm': { id: 'marquee', tools: ['marquee', 'ellipse_marquee'] },
+          'l': { id: 'lasso', tools: ['lasso', 'polygonal_lasso', 'magnetic_lasso'] },
+          'w': { id: 'selection', tools: ['quick_selection', 'magic_wand', 'object_selection'] },
+          'c': { id: 'crop', tools: ['crop', 'perspective_crop', 'slice'] },
+          'i': { id: 'eyedropper', tools: ['eyedropper', 'color_sampler', 'ruler'] },
+          'j': { id: 'healing', tools: ['healing', 'healing_brush', 'patch'] },
+          'b': { id: 'brush', tools: ['brush', 'pencil', 'color_replacement'] },
+          's': { id: 'clone', tools: ['clone', 'pattern_stamp'] },
+          'e': { id: 'eraser', tools: ['eraser', 'background_eraser'] },
+          'g': { id: 'gradient', tools: ['gradient', 'paint_bucket'] },
+          'o': { id: 'dodge', tools: ['dodge', 'burn', 'sponge'] },
+          't': { id: 'text', tools: ['text', 'vertical_text'] },
+          'p': { id: 'pen', tools: ['pen', 'free_pen', 'add_anchor', 'delete_anchor'] },
+          'a': { id: 'path', tools: ['path_select', 'direct_select'] },
+          'u': { id: 'shape', tools: ['shape', 'ellipse_shape', 'line_shape'] },
+          'h': { id: 'hand', tools: ['hand', 'rotate_view'] },
+          'z': { id: 'zoom', tools: ['zoom_tool'] }
+        };
+
+        if (toolGroups[key]) {
+          const group = toolGroups[key];
+          const toolsInGroup = group.tools;
+          const currentTool = useStore.getState().activeTool;
+          const { setToolVariant } = useStore.getState();
+
+          let nextTool = toolsInGroup[0];
+          if (toolsInGroup.includes(currentTool)) {
+            const currentIndex = toolsInGroup.indexOf(currentTool);
+            nextTool = toolsInGroup[(currentIndex + 1) % toolsInGroup.length];
+          }
+
+          setToolVariant(group.id, nextTool as any);
         }
       }
 
@@ -168,7 +186,12 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     zoom, activeLayerId, layers, undo, redo,
-    setActiveTool, setZoom, duplicateLayer, removeLayer, recordHistory
+    setActiveTool,
+    setToolVariant,
+    setZoom,
+    duplicateLayer,
+    removeLayer,
+    recordHistory
   ]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,11 +223,11 @@ const App: React.FC = () => {
     const ctx = canvas?.getContext('2d');
     if (!ctx) return;
 
-    const { selectionRect, lassoPaths } = useStore.getState();
+    const { selectionRect, lassoPaths, isInverseSelection } = useStore.getState();
 
     // Store the original state
     ctx.save();
-    
+
     // Create a temporary canvas for the inverted result
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
@@ -218,13 +241,19 @@ const App: React.FC = () => {
       const offX = layer?.position.x || 0;
       const offY = layer?.position.y || 0;
       ctx.beginPath();
+      if (isInverseSelection) {
+        ctx.rect(0, 0, canvas.width, canvas.height);
+      }
       ctx.rect(selectionRect.x - offX, selectionRect.y - offY, selectionRect.w, selectionRect.h);
-      ctx.clip();
+      ctx.clip(isInverseSelection ? 'evenodd' : 'nonzero');
     } else if (lassoPaths.length > 0) {
       const layer = layers.find(l => l.id === activeLayerId);
       const offX = layer?.position.x || 0;
       const offY = layer?.position.y || 0;
       ctx.beginPath();
+      if (isInverseSelection) {
+        ctx.rect(0, 0, canvas.width, canvas.height);
+      }
       lassoPaths.forEach(path => {
         if (path.length < 3) return;
         ctx.moveTo(path[0].x - offX, path[0].y - offY);
@@ -239,16 +268,16 @@ const App: React.FC = () => {
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
       data[i] = 255 - data[i];
-      data[i+1] = 255 - data[i+1];
-      data[i+2] = 255 - data[i+2];
+      data[i + 1] = 255 - data[i + 1];
+      data[i + 2] = 255 - data[i + 2];
     }
-    
+
     // We need to only apply the inverted data to the clipped area
     // A simple way is to use putImageData on the whole thing while clipped
     // But putImageData ignores clipping! 
     // So we put it on the temp canvas and then draw that back to the original with the clip active.
     tempCtx.putImageData(imageData, 0, 0);
-    
+
     // Clear the clipped area first (optional but safer for some blend modes)
     // Then draw the inverted version from the temp canvas
     ctx.drawImage(tempCanvas, 0, 0);
@@ -318,7 +347,7 @@ const App: React.FC = () => {
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
-    
+
     let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
     let found = false;
 
@@ -335,15 +364,16 @@ const App: React.FC = () => {
         }
       }
     }
-    
+
     if (found) {
       // Add a small 2px padding
-      setSelectionRect({ 
-        x: Math.max(0, minX - 2), 
-        y: Math.max(0, minY - 2), 
-        w: Math.min(canvas.width - minX, maxX - minX + 4), 
-        h: Math.min(canvas.height - minY, maxY - minY + 4) 
+      setSelectionRect({
+        x: Math.max(0, minX - 2),
+        y: Math.max(0, minY - 2),
+        w: Math.min(canvas.width - minX, maxX - minX + 4),
+        h: Math.min(canvas.height - minY, maxY - minY + 4)
       });
+      setIsInverseSelection(false);
       setLassoPaths([]); // Clear lasso paths if using rect
       recordHistory('Select Subject');
     } else {
@@ -356,14 +386,14 @@ const App: React.FC = () => {
       <input type="file" id="global-file-input" accept="image/*" hidden onChange={handleImageUpload} />
 
       {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
-        <div 
-          className="mobile-backdrop" 
+        <div
+          className="mobile-backdrop"
           onClick={() => {
             setIsMobileMenuOpen(false);
             setIsToolsOpen(false);
             setIsPanelsOpen(false);
             setActiveMobileSubmenu(null);
-          }} 
+          }}
         />
       )}
 
@@ -373,7 +403,7 @@ const App: React.FC = () => {
             <LucideIcons.Menu size={20} />
           </button>
           <div className="app-logo">
-            <LucideIcons.Layers size={18} color="#0078d4" />
+            <img src="./icon1.png" width={24} height={24} alt="icon" />
             <span>Pixelite</span>
           </div>
         </div>
@@ -385,8 +415,8 @@ const App: React.FC = () => {
               <button onClick={() => setIsMobileMenuOpen(false)}><LucideIcons.X size={20} /></button>
             </div>
           )}
-          <div className={`menu-item-container ${activeMobileSubmenu === 'file' ? 'active' : ''}`} 
-               onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'file' ? null : 'file')}>
+          <div className={`menu-item-container ${activeMobileSubmenu === 'file' ? 'active' : ''}`}
+            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'file' ? null : 'file')}>
             <span>File</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); document.getElementById('global-file-input')?.click(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
@@ -402,7 +432,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className={`menu-item-container ${activeMobileSubmenu === 'edit' ? 'active' : ''}`}
-               onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'edit' ? null : 'edit')}>
+            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'edit' ? null : 'edit')}>
             <span>Edit</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); undo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex <= 0 ? 0.5 : 1 }}>
@@ -417,9 +447,23 @@ const App: React.FC = () => {
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Paste</span> <span className="shortcut">Ctrl+V</span></div>
             </div>
           </div>
-          <div className="menu-item-container"><span>Image</span></div>
+          <div className={`menu-item-container ${activeMobileSubmenu === 'image' ? 'active' : ''}`}
+            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'image' ? null : 'image')}>
+            <span>Image</span>
+            <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
+              <div className="menu-option submenu-parent">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Adjustments</span>
+                <LucideIcons.ChevronRight size={12} />
+                <div className="menu-submenu">
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleInvert(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                    <span>Invert</span> <span className="shortcut">Ctrl+I</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           <div className={`menu-item-container ${activeMobileSubmenu === 'layer' ? 'active' : ''}`}
-               onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'layer' ? null : 'layer')}>
+            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'layer' ? null : 'layer')}>
             <span>Layer</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
@@ -435,7 +479,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className={`menu-item-container ${activeMobileSubmenu === 'select' ? 'active' : ''}`}
-               onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'select' ? null : 'select')}>
+            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'select' ? null : 'select')}>
             <span>Select</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleSelectSubject(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
@@ -443,12 +487,6 @@ const App: React.FC = () => {
               </div>
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleRemoveBackground(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Remove Bg</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleInvert(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Invert Colors</span> <span className="shortcut">Ctrl+I</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleInvert(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Invert Colors</span> <span className="shortcut">Ctrl+I</span>
               </div>
               <div className="menu-divider" />
               <div className="menu-option"><span>All</span> <span className="shortcut">Ctrl+A</span></div>
@@ -462,16 +500,16 @@ const App: React.FC = () => {
           <div className="menu-item-container"><span>View</span></div>
           <div className="menu-item-container"><span>Window</span></div>
         </nav>
-        
+
         <div className="header-right">
           {/* Mobile toggle buttons */}
-          <button 
+          <button
             className={`mobile-panel-toggle ${isToolsOpen ? 'active' : ''}`}
             onClick={() => { setIsToolsOpen(!isToolsOpen); setIsPanelsOpen(false); }}
           >
             <LucideIcons.Wrench size={18} />
           </button>
-          <button 
+          <button
             className={`mobile-panel-toggle ${isPanelsOpen ? 'active' : ''}`}
             onClick={() => { setIsPanelsOpen(!isPanelsOpen); setIsToolsOpen(false); }}
           >
@@ -494,46 +532,46 @@ const App: React.FC = () => {
         <main className="workspace">
           <div className="canvas-viewport">
             {/* Welcome Screen / Empty State */}
-      {layers.length === 0 && (
-        <div className="empty-workspace-overlay">
-          <div className="welcome-card">
-            <div className="welcome-icon">
-              <LucideIcons.Image size={48} />
-            </div>
-            <h2>Welcome to Pixelite</h2>
-            <p>Start a new project or open an existing image to begin.</p>
-            <div className="welcome-actions">
-              <button 
-                className="welcome-btn primary"
-                onClick={() => {
-                  addLayer({
-                    name: 'Background',
-                    type: 'paint',
-                    visible: true,
-                    locked: false,
-                    opacity: 1,
-                    position: { x: 0, y: 0 },
-                    blendMode: 'source-over'
-                  });
-                  recordHistory('New Blank Project');
-                }}
-              >
-                <LucideIcons.Plus size={18} />
-                New Blank Document
-              </button>
-              <button 
-                className="welcome-btn secondary"
-                onClick={() => document.getElementById('global-file-input')?.click()}
-              >
-                <LucideIcons.FolderOpen size={18} />
-                Open Image
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            {layers.length === 0 && (
+              <div className="empty-workspace-overlay">
+                <div className="welcome-card">
+                  <div className="welcome-icon">
+                    <LucideIcons.Image size={48} />
+                  </div>
+                  <h2>Welcome to Pixelite</h2>
+                  <p>Start a new project or open an existing image to begin.</p>
+                  <div className="welcome-actions">
+                    <button
+                      className="welcome-btn primary"
+                      onClick={() => {
+                        addLayer({
+                          name: 'Background',
+                          type: 'paint',
+                          visible: true,
+                          locked: false,
+                          opacity: 1,
+                          position: { x: 0, y: 0 },
+                          blendMode: 'source-over'
+                        });
+                        recordHistory('New Blank Project');
+                      }}
+                    >
+                      <LucideIcons.Plus size={18} />
+                      New Blank Document
+                    </button>
+                    <button
+                      className="welcome-btn secondary"
+                      onClick={() => document.getElementById('global-file-input')?.click()}
+                    >
+                      <LucideIcons.FolderOpen size={18} />
+                      Open Image
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-      <Canvas />
+            <Canvas />
           </div>
 
           {isProcessing && (
@@ -572,8 +610,8 @@ const App: React.FC = () => {
             <div className="panel-tab">Layers</div>
             <div className="panel-content">
               {layers.map((layer, idx) => (
-                <div 
-                  key={layer.id} 
+                <div
+                  key={layer.id}
                   className={`layer-node ${draggedIndex === idx ? 'dragging' : ''}`}
                   draggable={true}
                   onDragStart={() => setDraggedIndex(idx)}
@@ -632,7 +670,7 @@ const App: React.FC = () => {
               </button>
             </div>
             <div className="modal-body">
-              <ColorPicker 
+              <ColorPicker
                 label="Fill Color"
                 color={fillColor}
                 opacity={fillOpacity}
@@ -650,7 +688,7 @@ const App: React.FC = () => {
                   const { lassoPaths, selectionRect } = useStore.getState();
                   ctx.save();
                   ctx.fillStyle = hexToRgba(fillColor, fillOpacity);
-                  
+
                   if (lassoPaths.length > 0) {
                     ctx.beginPath();
                     lassoPaths.forEach(path => {
@@ -659,14 +697,14 @@ const App: React.FC = () => {
                       path.forEach(p => ctx.lineTo(p.x, p.y));
                       ctx.closePath();
                     });
-                    ctx.clip();
+                    ctx.clip('evenodd');
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                   } else if (selectionRect) {
                     ctx.fillRect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
                   } else {
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                   }
-                  
+
                   ctx.restore();
                   updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
                   recordHistory('Fill Layer');

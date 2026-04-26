@@ -5,53 +5,221 @@ import type { Tool } from '../../store/useStore';
 import ToolButton from './ToolButton';
 import CustomColorPicker from '../shared/ColorPicker';
 
+import ToolContextMenu from './ToolContextMenu';
+
 interface ToolbarProps {
   onAction?: () => void;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ onAction }) => {
-  const { activeTool, setActiveTool } = useStore();
+interface ToolInfo {
+  id: Tool;
+  icon: any;
+  label: string;
+  shortcut: string;
+}
 
-  const tools: { id: Tool; icon: any; label: string; shortcut: string }[] = [
-    { id: 'move', icon: LucideIcons.Move, label: 'Move Tool', shortcut: 'V' },
-    { id: 'marquee', icon: LucideIcons.BoxSelect, label: 'Rectangle Select', shortcut: 'M' },
-    { id: 'lasso', icon: LucideIcons.Spline, label: 'Lasso Select', shortcut: 'L' },
-    { id: 'quick_select', icon: LucideIcons.Sparkles, label: 'Quick Selection', shortcut: 'W' },
-    { id: 'crop', icon: LucideIcons.Crop, label: 'Perspective Crop', shortcut: 'C' },
-    { id: 'eyedropper', icon: LucideIcons.Pipette, label: 'Eyedropper', shortcut: 'I' },
-    { id: 'healing', icon: LucideIcons.Bandage, label: 'Spot Healing Brush', shortcut: 'J' },
-    { id: 'brush', icon: LucideIcons.Brush, label: 'Brush Tool', shortcut: 'B' },
-    { id: 'clone', icon: LucideIcons.Copy, label: 'Clone Tool', shortcut: 'S' },
-    { id: 'eraser', icon: LucideIcons.Eraser, label: 'Eraser Tool', shortcut: 'E' },
-    { id: 'gradient', icon: LucideIcons.PaintBucket, label: 'Gradient Tool', shortcut: 'G' },
-    { id: 'blur', icon: LucideIcons.Droplets, label: 'Blur Tool', shortcut: '' },
-    { id: 'dodge', icon: LucideIcons.Sun, label: 'Dodge Tool', shortcut: 'O' },
-    { id: 'text', icon: LucideIcons.Type, label: 'Type Tool', shortcut: 'T' },
-    { id: 'pen', icon: LucideIcons.PenTool, label: 'Pen', shortcut: 'P' },
-    { id: 'path_select', icon: LucideIcons.MousePointer2, label: 'Path Select', shortcut: 'A' },
-    { id: 'shape', icon: LucideIcons.Square, label: 'Rectangle', shortcut: 'U' },
-    { id: 'hand', icon: LucideIcons.Hand, label: 'Hand Tool', shortcut: 'H' },
-    { id: 'zoom_tool', icon: LucideIcons.Search, label: 'Zoom Tool', shortcut: 'Z' },
-  ];
+interface ToolGroup {
+  id: string;
+  tools: ToolInfo[];
+}
+
+const TOOL_GROUPS: ToolGroup[] = [
+  {
+    id: 'move',
+    tools: [
+      { id: 'move', icon: LucideIcons.Move, label: 'Move Tool', shortcut: 'V' },
+      { id: 'artboard', icon: LucideIcons.Layout, label: 'Artboard Tool', shortcut: 'V' },
+    ],
+  },
+  {
+    id: 'marquee',
+    tools: [
+      { id: 'marquee', icon: LucideIcons.BoxSelect, label: 'Rectangle Select', shortcut: 'M' },
+      { id: 'ellipse_marquee', icon: LucideIcons.Circle, label: 'Ellipse Select', shortcut: 'M' },
+    ],
+  },
+  {
+    id: 'lasso',
+    tools: [
+      { id: 'lasso', icon: LucideIcons.Spline, label: 'Lasso Select', shortcut: 'L' },
+      { id: 'polygonal_lasso', icon: LucideIcons.Triangle, label: 'Polygonal Lasso', shortcut: 'L' },
+      { id: 'magnetic_lasso', icon: LucideIcons.Zap, label: 'Magnetic Lasso', shortcut: 'L' },
+    ],
+  },
+  {
+    id: 'selection',
+    tools: [
+      { id: 'quick_selection', icon: LucideIcons.Sparkles, label: 'Quick Selection', shortcut: 'W' },
+      { id: 'magic_wand', icon: LucideIcons.Wand2, label: 'Magic Wand', shortcut: 'W' },
+      { id: 'object_selection', icon: LucideIcons.Focus, label: 'Object Selection', shortcut: 'W' },
+    ],
+  },
+  {
+    id: 'crop',
+    tools: [
+      { id: 'crop', icon: LucideIcons.Crop, label: 'Crop Tool', shortcut: 'C' },
+      { id: 'perspective_crop', icon: LucideIcons.Maximize, label: 'Perspective Crop', shortcut: 'C' },
+      { id: 'slice', icon: LucideIcons.Scissors, label: 'Slice Tool', shortcut: 'C' },
+    ],
+  },
+  {
+    id: 'eyedropper',
+    tools: [
+      { id: 'eyedropper', icon: LucideIcons.Pipette, label: 'Eyedropper', shortcut: 'I' },
+      { id: 'color_sampler', icon: LucideIcons.Crosshair, label: 'Color Sampler', shortcut: 'I' },
+      { id: 'ruler', icon: LucideIcons.Ruler, label: 'Ruler', shortcut: 'I' },
+    ],
+  },
+  {
+    id: 'healing',
+    tools: [
+      { id: 'healing', icon: LucideIcons.Bandage, label: 'Spot Healing Brush', shortcut: 'J' },
+      { id: 'healing_brush', icon: LucideIcons.Sticker, label: 'Healing Brush', shortcut: 'J' },
+      { id: 'patch', icon: LucideIcons.Wand2, label: 'Patch Tool', shortcut: 'J' },
+    ],
+  },
+  {
+    id: 'brush',
+    tools: [
+      { id: 'brush', icon: LucideIcons.Brush, label: 'Brush Tool', shortcut: 'B' },
+      { id: 'pencil', icon: LucideIcons.Pencil, label: 'Pencil Tool', shortcut: 'B' },
+      { id: 'color_replacement', icon: LucideIcons.Paintbrush, label: 'Color Replacement', shortcut: 'B' },
+    ],
+  },
+  {
+    id: 'clone',
+    tools: [
+      { id: 'clone', icon: LucideIcons.Copy, label: 'Clone Tool', shortcut: 'S' },
+      { id: 'pattern_stamp', icon: LucideIcons.Stamp, label: 'Pattern Stamp', shortcut: 'S' },
+    ],
+  },
+  {
+    id: 'eraser',
+    tools: [
+      { id: 'eraser', icon: LucideIcons.Eraser, label: 'Eraser Tool', shortcut: 'E' },
+      { id: 'background_eraser', icon: LucideIcons.Trash, label: 'Background Eraser', shortcut: 'E' },
+    ],
+  },
+  {
+    id: 'gradient',
+    tools: [
+      { id: 'gradient', icon: LucideIcons.Layers, label: 'Gradient Tool', shortcut: 'G' },
+      { id: 'paint_bucket', icon: LucideIcons.PaintBucket, label: 'Paint Bucket Tool', shortcut: 'G' },
+    ],
+  },
+  {
+    id: 'blur',
+    tools: [
+      { id: 'blur', icon: LucideIcons.Droplets, label: 'Blur Tool', shortcut: '' },
+      { id: 'sharpen', icon: LucideIcons.Zap, label: 'Sharpen Tool', shortcut: '' },
+      { id: 'smudge', icon: LucideIcons.Fingerprint, label: 'Smudge Tool', shortcut: '' },
+    ],
+  },
+  {
+    id: 'dodge',
+    tools: [
+      { id: 'dodge', icon: LucideIcons.Sun, label: 'Dodge Tool', shortcut: 'O' },
+      { id: 'burn', icon: LucideIcons.Moon, label: 'Burn Tool', shortcut: 'O' },
+      { id: 'sponge', icon: LucideIcons.Cloud, label: 'Sponge Tool', shortcut: 'O' },
+    ],
+  },
+  {
+    id: 'text',
+    tools: [
+      { id: 'text', icon: LucideIcons.Type, label: 'Type Tool', shortcut: 'T' },
+      { id: 'vertical_text', icon: LucideIcons.CaseSensitive, label: 'Vertical Type Tool', shortcut: 'T' },
+    ],
+  },
+  {
+    id: 'pen',
+    tools: [
+      { id: 'pen', icon: LucideIcons.PenTool, label: 'Pen', shortcut: 'P' },
+      { id: 'free_pen', icon: LucideIcons.Edit3, label: 'Free Pen', shortcut: 'P' },
+      { id: 'add_anchor', icon: LucideIcons.Plus, label: 'Add Anchor Point', shortcut: 'P' },
+      { id: 'delete_anchor', icon: LucideIcons.Minus, label: 'Delete Anchor Point', shortcut: 'P' },
+    ],
+  },
+  {
+    id: 'path',
+    tools: [
+      { id: 'path_select', icon: LucideIcons.MousePointer2, label: 'Path Select', shortcut: 'A' },
+      { id: 'direct_select', icon: LucideIcons.MousePointer, label: 'Direct Select', shortcut: 'A' },
+    ],
+  },
+  {
+    id: 'shape',
+    tools: [
+      { id: 'shape', icon: LucideIcons.Square, label: 'Rectangle', shortcut: 'U' },
+      { id: 'ellipse_shape', icon: LucideIcons.Circle, label: 'Ellipse', shortcut: 'U' },
+      { id: 'line_shape', icon: LucideIcons.Minus, label: 'Line', shortcut: 'U' },
+    ],
+  },
+  {
+    id: 'hand',
+    tools: [
+      { id: 'hand', icon: LucideIcons.Hand, label: 'Hand Tool', shortcut: 'H' },
+      { id: 'rotate_view', icon: LucideIcons.RefreshCw, label: 'Rotate View', shortcut: 'R' },
+    ],
+  },
+  {
+    id: 'zoom',
+    tools: [
+      { id: 'zoom_tool', icon: LucideIcons.Search, label: 'Zoom Tool', shortcut: 'Z' },
+    ],
+  },
+];
+
+const Toolbar: React.FC<ToolbarProps> = ({ onAction }) => {
+  const { activeTool, setActiveTool, activeToolVariants, setToolVariant } = useStore();
+  const [contextMenu, setContextMenu] = React.useState<{ groupId: string; x: number; y: number } | null>(null);
+
+  const handleToolClick = (_groupId: string, toolId: Tool) => {
+    setActiveTool(toolId);
+    onAction?.();
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, groupId: string) => {
+    setContextMenu({
+      groupId,
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
 
   return (
     <aside className="left-toolbar">
       <div className="tools-container">
-        {tools.map((tool) => (
-          <ToolButton
-            key={tool.id}
-            id={tool.id}
-            active={activeTool === tool.id}
-            icon={tool.icon}
-            label={tool.label}
-            shortcut={tool.shortcut}
-            onClick={() => {
-              setActiveTool(tool.id);
-              onAction?.();
-            }}
-          />
-        ))}
+        {TOOL_GROUPS.map((group) => {
+          const activeVariantId = activeToolVariants[group.id] || group.tools[0].id;
+          const activeVariant = group.tools.find(t => t.id === activeVariantId) || group.tools[0];
+          const isGroupActive = group.tools.some(t => t.id === activeTool);
+
+          return (
+            <ToolButton
+              key={group.id}
+              id={activeVariant.id}
+              active={isGroupActive}
+              icon={activeVariant.icon}
+              label={activeVariant.label}
+              shortcut={activeVariant.shortcut}
+              hasVariants={group.tools.length > 1}
+              onClick={() => handleToolClick(group.id, activeVariant.id)}
+              onContextMenu={(e) => handleContextMenu(e, group.id)}
+            />
+          );
+        })}
       </div>
+      
+      {contextMenu && (
+        <ToolContextMenu
+          tools={TOOL_GROUPS.find(g => g.id === contextMenu.groupId)?.tools || []}
+          activeTool={activeTool}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onSelect={(toolId) => setToolVariant(contextMenu.groupId, toolId)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
       <ColorPickerSection />
     </aside>
   );
