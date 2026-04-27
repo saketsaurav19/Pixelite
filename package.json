@@ -1,7 +1,8 @@
 {
-  "name": "photoshopclone",
+  "name": "pixelite",
   "private": true,
   "version": "0.0.0",
+  "homepage": "https://saketsaurav19.github.io/Pixelite/",
   "type": "module",
   "scripts": {
     "dev": "vite",
