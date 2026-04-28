@@ -12,7 +12,7 @@ export const commitText = (
   addLayer: (layer: any) => void,
   recordHistory: (label: string) => void,
   setTextEditor: (val: any) => void,
-  hiddenTextInputRef: React.RefObject<HTMLTextAreaElement>
+  hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>
 ) => {
   hiddenTextInputRef.current?.blur();
 
@@ -37,7 +37,7 @@ export const commitText = (
 
 export const cancelText = (
   setTextEditor: (val: any) => void,
-  hiddenTextInputRef: React.RefObject<HTMLTextAreaElement>
+  hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>
 ) => {
   hiddenTextInputRef.current?.blur();
   setTextEditor(null);

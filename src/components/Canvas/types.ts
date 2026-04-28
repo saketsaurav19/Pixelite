@@ -75,4 +75,6 @@ export interface CanvasContext {
   redEyePupilSize: number;
   redEyeDarkenAmount: number;
   isInteracting: boolean;
+  activeCropHandle: string | null;
+  setActiveCropHandle: (handle: string | null) => void;
 }

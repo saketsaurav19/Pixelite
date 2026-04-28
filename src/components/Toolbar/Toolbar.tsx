@@ -1,7 +1,7 @@
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import type { Tool } from '../../store/useStore';
+import type { Tool } from '../../store/types';
 import ToolButton from './ToolButton';
 import CustomColorPicker from '../shared/ColorPicker';
 
