@@ -19,7 +19,7 @@ interface TextRenderingOptions {
  * It provides immediate visual feedback while the user is typing, including an animated cursor.
  */
 export const useTextRendering = (
-  draftTextCanvasRef: React.RefObject<HTMLCanvasElement>,
+  draftTextCanvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: TextRenderingOptions
 ) => {
   const {

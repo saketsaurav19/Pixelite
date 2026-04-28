@@ -1,4 +1,4 @@
-import type { Tool } from '../store/useStore';
+import type { Tool } from '../store/types';
 
 export interface ToolContext {
   canvas: HTMLCanvasElement;
@@ -8,9 +8,11 @@ export interface ToolContext {
   lastPoint: { x: number; y: number } | null;
   isShift: boolean;
   isAlt: boolean;
+  isCtrl: boolean;
   brushSize: number;
   brushColor: string;
   zoom: number;
+  strokeWidth: number;
   activeLayerId: string | null;
   layers: any[];
   selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
@@ -35,6 +37,7 @@ export interface ToolContext {
   setBrushColor: (color: string) => void;
   addLayer: (layer: any) => void;
   setDocumentSize: (size: { w: number, h: number }) => void;
+  canvasOffset: { x: number; y: number };
   setSlices: (slices: any[]) => void;
   addSlice: (rect: { x: number, y: number, w: number, h: number }) => void;
   addColorSampler: (coords: { x: number; y: number }, color: string) => void;
@@ -54,6 +57,9 @@ export interface ToolContext {
   redEyePupilSize: number;
   redEyeDarkenAmount: number;
   isInteracting: boolean;
+  cropRect: { x: number, y: number, w: number, h: number } | null;
+  activeCropHandle: string | null;
+  setActiveCropHandle: (handle: string | null) => void;
 }
 
 export interface ToolModule {

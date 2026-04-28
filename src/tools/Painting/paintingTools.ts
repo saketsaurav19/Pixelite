@@ -1,5 +1,4 @@
-import type { ToolModule } from './types';
-import { useStore } from '../store/useStore';
+import type { ToolModule } from '../types';
 
 export const paintingTools: ToolModule[] = [
   {
@@ -282,7 +281,7 @@ export const paintingTools: ToolModule[] = [
   },
   {
     id: 'history_brush',
-    start: ({ canvas, ctx, setIsInteracting, history, activeLayerId }) => {
+    start: ({ canvas, ctx, setIsInteracting, history, activeLayerId, primaryOpacity }) => {
       if (!canvas || !ctx || !history || history.length === 0) return;
 
       // Find the first history state where this layer had actual image data
@@ -310,7 +309,7 @@ export const paintingTools: ToolModule[] = [
           sCtx.drawImage(source, 0, 0);
         }
         (window as any)._historySnapshot = snapshot;
-        (window as any)._historyOpacity = useStore.getState().primaryOpacity;
+        (window as any)._historyOpacity = primaryOpacity;
         setIsInteracting(true);
       };
 
@@ -353,7 +352,7 @@ export const paintingTools: ToolModule[] = [
   },
   {
     id: 'art_history_brush',
-    start: ({ canvas, ctx, setIsInteracting, history, activeLayerId }) => {
+    start: ({ canvas, ctx, setIsInteracting, history, activeLayerId, primaryOpacity }) => {
       if (!canvas || !ctx || !history || history.length === 0) return;
 
       let sourceLayer = null;
@@ -379,7 +378,7 @@ export const paintingTools: ToolModule[] = [
           sCtx.drawImage(source, 0, 0);
         }
         (window as any)._artHistorySnapshot = snapshot;
-        (window as any)._artHistoryOpacity = useStore.getState().primaryOpacity;
+        (window as any)._artHistoryOpacity = primaryOpacity;
         setIsInteracting(true);
       };
 

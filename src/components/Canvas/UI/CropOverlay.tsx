@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Point, Rect } from '../types';
-import { stopOverlayEvent } from '../utils/eventUtils';
+import { stopOverlayEvent } from '../Core/eventUtils';
 
 interface CropOverlayProps {
   cropRect: Rect | null;
@@ -44,7 +44,6 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
       className="crop-marquee"
       onMouseDown={handleMouseDown('move')}
       onTouchStart={handleTouchStart('move')}
-      onPointerDown={stopOverlayEvent}
       style={{
         left: cropRect.w >= 0 ? cropRect.x / 2 : (cropRect.x + cropRect.w) / 2,
         top: cropRect.h >= 0 ? cropRect.y / 2 : (cropRect.y + cropRect.h) / 2,
@@ -57,21 +56,22 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
         cursor: 'move'
       }}
     >
-      {['tl', 'tr', 'bl', 'br', 'tm', 'bm', 'lm', 'rm'].map(handle => (
+      {/* 4 Corner Handles Only */}
+      {['tl', 'tr', 'bl', 'br'].map(handle => (
         <div
           key={handle}
           className={`crop-handle ${handle}`}
           onMouseDown={handleMouseDown(handle)}
           onTouchStart={handleTouchStart(handle)}
-          onPointerDown={stopOverlayEvent}
         />
       ))}
 
-      <div className="crop-actions-bar bottom" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+      <div className="crop-actions-bar bottom" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} style={{ width: 'fit-content' }}>
         <button
           className="crop-action-btn confirm"
           onClick={(e) => { e.stopPropagation(); applyCrop(); }}
           title="Apply Crop"
+          style={{ cursor: 'pointer' }}
         >
           ✓
         </button>
@@ -79,6 +79,7 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
           className="crop-action-btn cancel"
           onClick={(e) => { e.stopPropagation(); setCropRect(null); }}
           title="Cancel Crop"
+          style={{ cursor: 'pointer' }}
         >
           ✕
         </button>

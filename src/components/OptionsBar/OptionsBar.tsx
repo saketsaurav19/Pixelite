@@ -1,5 +1,6 @@
 import React from 'react';
-import { useStore, hexToRgba } from '../../store/useStore';
+import { useStore } from '../../store/useStore';
+import { hexToRgba } from '../../utils/canvasUtils';
 import ColorPicker from '../shared/ColorPicker';
 import * as LucideIcons from 'lucide-react';
 

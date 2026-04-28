@@ -1,10 +1,12 @@
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
-import { useStore, hexToRgba } from './store/useStore';
+import { useStore } from './store/useStore';
+import { hexToRgba } from './utils/canvasUtils';
 import Canvas from './components/Canvas/Canvas';
 import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
+import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
 import { removeBackground } from '@imgly/background-removal';
 import './App.css';
 
@@ -609,46 +611,6 @@ const App: React.FC = () => {
 
         <main className="workspace">
           <div className="canvas-viewport">
-            {/* Welcome Screen / Empty State */}
-            {layers.length === 0 && (
-              <div className="empty-workspace-overlay">
-                <div className="welcome-card">
-                  <div className="welcome-icon">
-                    <LucideIcons.Image size={48} />
-                  </div>
-                  <h2>Welcome to Pixelite</h2>
-                  <p>Start a new project or open an existing image to begin.</p>
-                  <div className="welcome-actions">
-                    <button
-                      className="welcome-btn primary"
-                      onClick={() => {
-                        addLayer({
-                          name: 'Background',
-                          type: 'paint',
-                          visible: true,
-                          locked: false,
-                          opacity: 1,
-                          position: { x: 0, y: 0 },
-                          blendMode: 'source-over'
-                        });
-                        recordHistory('New Blank Project');
-                      }}
-                    >
-                      <LucideIcons.Plus size={18} />
-                      New Blank Document
-                    </button>
-                    <button
-                      className="welcome-btn secondary"
-                      onClick={() => document.getElementById('global-file-input')?.click()}
-                    >
-                      <LucideIcons.FolderOpen size={18} />
-                      Open Image
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <Canvas />
           </div>
 
@@ -852,6 +814,9 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {layers.length === 0 && (
+        <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
       )}
     </div>
   );

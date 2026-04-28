@@ -1,11 +1,11 @@
 import type { ToolModule } from './types';
-import { selectionTools } from './selections';
-import { paintingTools } from './paintingTools';
-import { transformTools } from './transformTools';
-import { utilityTools } from './utilityTools';
-import { healingTools } from './healingTools';
-import { retouchingTools } from './retouchingTools';
-import { exposureTools } from './exposureTools';
+import { selectionTools } from './Selection';
+import { paintingTools } from './Painting/paintingTools';
+import { transformTools } from './Transform/transformTools';
+import { utilityTools } from './Utility/utilityTools';
+import { healingTools } from './Retouching/healingTools';
+import { retouchingTools } from './Retouching/retouchingTools';
+import { exposureTools } from './Retouching/exposureTools';
 
 const allTools: ToolModule[] = [
   ...selectionTools,

@@ -24,7 +24,7 @@ interface SelectionAnimationOptions {
  * It handles the "marching ants" effect, vector path anchors, and real-time tool previews.
  */
 export const useSelectionAnimation = (
-  selectionCanvasRef: React.RefObject<HTMLCanvasElement>,
+  selectionCanvasRef: React.RefObject<HTMLCanvasElement | null>,
   options: SelectionAnimationOptions
 ) => {
   const {
@@ -55,10 +55,10 @@ export const useSelectionAnimation = (
       // 1. Draw Lasso Selections
       if (lassoPaths.length > 0) {
         ctx.beginPath();
-        lassoPaths.forEach((path) => {
+        lassoPaths.forEach((path: Point[]) => {
           if (path.length < 1) return;
           ctx.moveTo(path[0].x, path[0].y);
-          path.forEach(p => ctx.lineTo(p.x, p.y));
+          path.forEach((p: Point) => ctx.lineTo(p.x, p.y));
           ctx.closePath();
         });
         ctx.fillStyle = 'rgba(0, 120, 215, 0.15)';
@@ -71,10 +71,10 @@ export const useSelectionAnimation = (
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        lassoPaths.forEach((path) => {
+        lassoPaths.forEach((path: Point[]) => {
           if (path.length < 1) return;
           ctx.moveTo(path[0].x, path[0].y);
-          path.forEach(p => ctx.lineTo(p.x, p.y));
+          path.forEach((p: Point) => ctx.lineTo(p.x, p.y));
           ctx.closePath();
         });
         ctx.stroke();
@@ -85,10 +85,10 @@ export const useSelectionAnimation = (
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        lassoPaths.forEach((path) => {
+        lassoPaths.forEach((path: Point[]) => {
           if (path.length < 1) return;
           ctx.moveTo(path[0].x, path[0].y);
-          path.forEach(p => ctx.lineTo(p.x, p.y));
+          path.forEach((p: Point) => ctx.lineTo(p.x, p.y));
           ctx.closePath();
         });
         ctx.stroke();
@@ -104,7 +104,7 @@ export const useSelectionAnimation = (
 
             ctx.beginPath();
             ctx.moveTo(lastPath[0].x, lastPath[0].y);
-            lastPath.forEach(p => ctx.lineTo(p.x, p.y));
+            lastPath.forEach((p: Point) => ctx.lineTo(p.x, p.y));
 
             if (currentMousePos) {
               if (activeTool === 'magnetic_lasso') {
@@ -122,7 +122,7 @@ export const useSelectionAnimation = (
 
             // Draw Anchors
             const pointSize = 6 / (zoom || 1);
-            lastPath.forEach((p, idx) => {
+            lastPath.forEach((p: Point, idx: number) => {
               let isNearStart = false;
               if (idx === 0 && currentMousePos) {
                 const dist = Math.hypot(currentMousePos.x - p.x, currentMousePos.y - p.y);
@@ -179,12 +179,12 @@ export const useSelectionAnimation = (
       }
 
       // 3. Draw Vector Paths
-      vectorPaths.forEach((path, idx) => {
+      vectorPaths.forEach((path: any, idx: number) => {
         if (path.points.length === 0) return;
         ctx.beginPath();
         ctx.setLineDash([]);
         ctx.moveTo(path.points[0].x, path.points[0].y);
-        path.points.forEach(p => ctx.lineTo(p.x, p.y));
+        path.points.forEach((p: Point) => ctx.lineTo(p.x, p.y));
         if (path.closed) ctx.closePath();
 
         let pathColor = '#00ffff';
@@ -194,7 +194,7 @@ export const useSelectionAnimation = (
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        path.points.forEach((p, pIdx) => {
+        path.points.forEach((p: Point, pIdx: number) => {
           const isActive = (idx === activePathIndex && pIdx === path.points.length - 1);
           const dist = currentMousePos ? Math.hypot(p.x - currentMousePos.x, p.y - currentMousePos.y) : Infinity;
           const isHovered = dist < 15 / (zoom || 1);

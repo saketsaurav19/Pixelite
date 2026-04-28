@@ -3,8 +3,8 @@ import React from 'react';
 interface TextEditorOverlayProps {
   textEditor: { x: number, y: number, value: string } | null;
   setTextEditor: React.Dispatch<React.SetStateAction<{ x: number, y: number, value: string } | null>>;
-  hiddenTextInputRef: React.RefObject<HTMLTextAreaElement>;
-  draftTextCanvasRef: React.RefObject<HTMLCanvasElement>;
+  hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>;
+  draftTextCanvasRef: React.RefObject<HTMLCanvasElement | null>;
   documentSize: { w: number, h: number };
   commitText: () => void;
   cancelText: () => void;

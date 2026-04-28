@@ -1,0 +1,356 @@
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: #0d0d0d;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: #fff;
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  padding: 20px 0;
+}
+
+/* Custom Scrollbar for Welcome Overlay */
+.welcome-overlay::-webkit-scrollbar {
+  width: 6px;
+}
+.welcome-overlay::-webkit-scrollbar-track {
+  background: transparent;
+}
+.welcome-overlay::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.welcome-bg-glow {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle, rgba(0, 120, 212, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+  filter: blur(60px);
+  z-index: 0;
+}
+
+.welcome-content {
+  width: 100%;
+  max-width: 800px;
+  padding: 40px 20px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  margin: auto;
+}
+
+.welcome-header {
+  text-align: center;
+}
+
+.welcome-logo {
+  margin-bottom: 20px;
+  display: inline-block;
+}
+
+.welcome-header h1 {
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 800;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.02em;
+}
+
+.welcome-header p {
+  color: #888;
+  font-size: clamp(14px, 2vw, 18px);
+  font-weight: 400;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  min-height: 200px;
+}
+
+.welcome-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  height: 100%;
+}
+
+.welcome-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 120, 212, 0.4);
+  transform: translateY(-4px);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(0, 120, 212, 0.1);
+  color: #0078d4;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-info h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.card-info p {
+  color: #777;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.card-shortcut {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  font-size: 10px;
+  color: #444;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* New Doc Form */
+.new-doc-form {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.new-doc-form h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.orientation-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.orientation-toggle button {
+  background: transparent;
+  border: none;
+  color: #555;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.orientation-toggle button:hover {
+  color: #aaa;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.orientation-toggle button.active {
+  color: #0078d4;
+  background: rgba(0, 120, 212, 0.1);
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-group label {
+  font-size: 11px;
+  color: #555;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.input-group input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.input-group input:focus {
+  border-color: #0078d4;
+}
+
+.form-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.form-presets button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  color: #888;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.form-presets button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.btn-cancel {
+  flex: 1;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #666;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.btn-create {
+  flex: 2;
+  background: #0078d4;
+  border: none;
+  color: #fff;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.welcome-footer {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 20px 40px;
+  margin-top: 20px;
+}
+
+.footer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #555;
+  font-size: 13px;
+}
+
+.github-star-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 13px;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.github-star-btn:hover {
+  background: #24292e;
+  border-color: #fff;
+  transform: translateY(-2px);
+}
+
+.welcome-social {
+  margin-top: 40px;
+  color: #333;
+  font-size: 11px;
+  text-align: center;
+  padding-bottom: 20px;
+}
+
+@media (max-width: 600px) {
+  .welcome-overlay {
+    justify-content: flex-start;
+    padding-top: 40px;
+  }
+  
+  .welcome-content {
+    gap: 30px;
+  }
+
+  .welcome-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .welcome-card, .new-doc-form {
+    padding: 20px;
+  }
+
+  .welcome-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-left: 20px;
+    gap: 12px;
+  }
+  
+  .card-shortcut {
+    display: none;
+  }
+}

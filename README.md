@@ -1,73 +1,89 @@
-# React + TypeScript + Vite
+# Pixelite 🎨
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Pixelite** is a high-performance, professional-grade photo editor that runs entirely in your browser. Inspired by industry standards like Photoshop, it offers a rich set of tools for digital painting, photo manipulation, and vector design—all without a server or any cloud dependencies.
 
-Currently, two official plugins are available:
+[![Star on GitHub](https://img.shields.io/github/stars/saketsaurav19/Pixelite?style=social)](https://github.com/saketsaurav19/Pixelite)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen)](https://pixelite.taskcraft.site/)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🚀 Key Features
 
-## React Compiler
+### 🖼️ Advanced Layer System
+*   **Multi-Layer Management**: Create, duplicate, reorder, and delete layers with ease.
+*   **Blend Modes**: Professional blending options including Multiply, Screen, Overlay, and more.
+*   **Opacity & Visibility**: Fine-tune layer transparency and toggle visibility instantly.
+*   **Layer Locking**: Protect your work from accidental modifications.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 🖌️ Professional Painting Engine
+*   **Versatile Brushes**: A suite of tools including Brush, Pencil, and Eraser.
+*   **Retouching Suite**: Advanced tools like Healing Brush, Patch tool, Dodge, Burn, and Smudge.
+*   **Artistic Effects**: Blur, Sharpen, and Art History Brush for creative finishes.
+*   **Mixer Brush**: Experience natural media blending directly on the canvas.
 
-## Expanding the ESLint configuration
+### 📐 Selection & Transform Tools
+*   **Smart Selection**: Magic Wand, Quick Selection, and Object Selection tools.
+*   **Lasso Suite**: Free-form, Polygonal, and Magnetic lasso for precise cutouts.
+*   **Perspective Crop**: 8-point quad manipulation with a rule-of-thirds grid for perfect perspective correction.
+*   **Standard Crop**: Clean, 4-handle crop tool with canvas movement support.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### ✒️ Vector Design
+*   **Pen Tool**: Create precise paths with the standard Pen, Curvature Pen, and Freeform Pen.
+*   **Path Manipulation**: Add/delete anchor points and convert point types.
+*   **Direct Selection**: Move individual anchors or entire paths.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 🤖 AI-Powered Tools
+*   **Background Removal**: One-click background removal powered by local AI processing (no server required).
+*   **Subject Selection**: Automatically detect and select the primary subject in your layer.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### ⚡ Performance & UX
+*   **Full Browser Execution**: All processing happens locally on your device. Your data never leaves your computer.
+*   **GPU Accelerated Rendering**: High-performance canvas rendering with 32-bit color support.
+*   **Full History System**: Robust undo/redo functionality to explore creative directions safely.
+*   **Responsive Design**: Fully optimized for Desktop, Tablet, and Mobile with native touch gesture support.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 🛠️ Technology Stack
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+*   **Core**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+*   **Build Tool**: [Vite](https://vitejs.dev/)
+*   **State Management**: [Zustand](https://github.com/pmndrs/zustand) (Modular slice-based architecture)
+*   **Animations**: [Framer Motion](https://www.framer.com/motion/)
+*   **Icons**: [Lucide React](https://lucide.dev/)
+*   **AI**: [@imgly/background-removal](https://www.npmjs.com/package/@imgly/background-removal)
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 📦 Getting Started
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### Prerequisites
+*   [Node.js](https://nodejs.org/) (Latest LTS version recommended)
+*   npm or yarn
+
+### Installation
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/saketsaurav19/Pixelite.git
+    ```
+2.  Navigate to the project directory:
+    ```bash
+    cd Pixelite
+    ```
+3.  Install dependencies:
+    ```bash
+    npm install
+    ```
+4.  Start the development server:
+    ```bash
+    npm run dev
+    ```
+
+## 📱 Mobile Support
+Pixelite is designed to be a first-class citizen on mobile devices.
+*   **Pinch to Zoom**: Natural multi-touch zooming and panning.
+*   **Touch Optimizations**: Custom touch handlers for all painting and selection tools.
+*   **Adaptive UI**: A responsive interface that rearranges panels and toolbars for smaller screens.
+
+## 🤝 Contributing
+Contributions are welcome! Please feel free to submit a Pull Request or open an issue for any bugs or feature requests.
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+Made with passion by [Saket Saurav](https://github.com/saketsaurav19)

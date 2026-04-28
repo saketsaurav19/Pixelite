@@ -1,5 +1,5 @@
-import type { ToolModule } from './types';
-import { warpPerspective } from '../utils/canvasUtils';
+import type { ToolModule } from '../types';
+import { warpPerspective } from '../../utils/canvasUtils';
 
 export const transformTools: ToolModule[] = [
   {
@@ -51,11 +51,36 @@ export const transformTools: ToolModule[] = [
   },
   {
     id: 'crop',
-    start: ({ coords, setSelectionRect, setIsInteracting }) => {
+    start: ({ coords, setSelectionRect, setIsInteracting, activeCropHandle }) => {
+      // If we are already manipulating a handle (set by CropOverlay), don't start a new rect
+      if (activeCropHandle) return;
       setSelectionRect({ x: coords.x, y: coords.y, w: 0, h: 0 }, 'rect');
       setIsInteracting(true);
     },
-    move: ({ coords, startCoords, setSelectionRect }) => {
+    move: ({ coords, startCoords, setSelectionRect, cropRect, activeCropHandle, setCropRect, lastPoint }) => {
+      if (activeCropHandle && cropRect && lastPoint) {
+        const { x, y, w, h } = cropRect;
+        const dx = coords.x - lastPoint.x;
+        const dy = coords.y - lastPoint.y;
+
+        if (activeCropHandle === 'move') {
+          setCropRect({ ...cropRect, x: x + dx, y: y + dy });
+          return;
+        }
+
+        let nr = { ...cropRect };
+        if (activeCropHandle === 'tl') { nr.x = coords.x; nr.y = coords.y; nr.w = w + (x - coords.x); nr.h = h + (y - coords.y); }
+        else if (activeCropHandle === 'tr') { nr.y = coords.y; nr.w = coords.x - x; nr.h = h + (y - coords.y); }
+        else if (activeCropHandle === 'bl') { nr.x = coords.x; nr.w = w + (x - coords.x); nr.h = coords.y - y; }
+        else if (activeCropHandle === 'br') { nr.w = coords.x - x; nr.h = coords.y - y; }
+        else if (activeCropHandle === 'tm') { nr.y = coords.y; nr.h = h + (y - coords.y); }
+        else if (activeCropHandle === 'bm') { nr.h = coords.y - y; }
+        else if (activeCropHandle === 'lm') { nr.x = coords.x; nr.w = w + (x - coords.x); }
+        else if (activeCropHandle === 'rm') { nr.w = coords.x - x; }
+        setCropRect(nr);
+        return;
+      }
+
       if (!startCoords) return;
       setSelectionRect({
         x: Math.min(startCoords.x, coords.x),
@@ -64,8 +89,8 @@ export const transformTools: ToolModule[] = [
         h: Math.abs(coords.y - startCoords.y)
       }, 'rect');
     },
-    end: ({ selectionRect, setCropRect, setSelectionRect, setIsInteracting }) => {
-      if (selectionRect && selectionRect.w > 10 && selectionRect.h > 10) {
+    end: ({ selectionRect, setCropRect, setSelectionRect, setIsInteracting, activeCropHandle }) => {
+      if (!activeCropHandle && selectionRect && selectionRect.w > 10 && selectionRect.h > 10) {
         setCropRect(selectionRect);
       }
       setSelectionRect(null);

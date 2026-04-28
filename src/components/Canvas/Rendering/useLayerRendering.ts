@@ -1,14 +1,20 @@
 import { useEffect } from 'react';
-import type { Layer } from '../../../store/useStore';
+import type { Layer } from '../../../store/types';
 import type { CanvasRefs } from '../types';
 
 export const useLayerRendering = (
   layers: Layer[],
   documentSize: { w: number, h: number },
-  canvasRefs: CanvasRefs
+  canvasRefs: CanvasRefs,
+  isInteracting: boolean,
+  activeLayerId: string | null
 ) => {
   useEffect(() => {
     layers.forEach(layer => {
+      // Skip re-rendering the active layer if we are currently interacting with it
+      // to avoid clearing the temporary brush strokes/drafts.
+      if (isInteracting && layer.id === activeLayerId) return;
+
       const canvas = canvasRefs.current[layer.id];
       const ctx = canvas?.getContext('2d', { willReadFrequently: true });
       if (!ctx || !canvas) return;
@@ -28,11 +34,11 @@ export const useLayerRendering = (
         ctx.fillStyle = layer.color || '#000000';
         const fs = layer.fontSize || 40;
         ctx.font = `${fs}px Arial`;
-        layer.textContent.split('\n').forEach((line, i) => {
+        layer.textContent.split('\n').forEach((line: string, i: number) => {
           if (layer.isVertical) {
             const chars = line.split('');
             const xPos = i * fs * 1.2;
-            chars.forEach((char, j) => {
+            chars.forEach((char: string, j: number) => {
               const yPos = (j + 1) * fs;
               if (layer.strokeColor && layer.strokeWidth && layer.strokeWidth > 0) {
                 ctx.strokeStyle = layer.strokeColor;
@@ -113,5 +119,5 @@ export const useLayerRendering = (
         }
       }
     });
-  }, [layers, documentSize]);
+  }, [layers, documentSize, isInteracting, activeLayerId]);
 };

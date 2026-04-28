@@ -1,32 +1,32 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import './Canvas.css';
-import { getCoordinates as getCoordsUtil, getSnappedCoords as getSnappedCoordsUtil } from './utils/coordUtils';
-import { applySelectionClip as applySelectionClipUtil, getSelectionPathData as getSelectionPathDataUtil, clearSelection as clearSelectionUtil } from './utils/selectionUtils';
-import { getSvgPathData as getSvgPathDataUtil } from './utils/pathUtils';
-import { handleEyedropper as handleEyedropperUtil, hexToRgba } from './utils/colorUtils';
-import { applyCrop as applyCropUtil, isCropUiTarget } from './utils/cropUtils';
-import { applyGradient as applyGradientUtil } from './utils/gradientUtils';
-import { commitText as commitTextUtil, cancelText as cancelTextUtil } from './utils/textUtils';
-import { findBestEdgePoint as findBestEdgePointUtil } from './utils/edgeUtils';
-import { handlePaintBucket as handlePaintBucketUtil } from './utils/paintBucketUtils';
-import { getCursor as getCursorUtil } from './utils/cursorUtils';
-import { startAction as startActionHandler, moveAction as moveActionHandler, endAction as endActionHandler, handleDoubleClick as handleDoubleClickUtil } from './handlers/interactionHandlers';
-import { handleTouchStart as handleTouchStartUtil, handleTouchMove as handleTouchMoveUtil } from './handlers/touchHandlers';
-import { BRUSH_TOOLS } from './utils/toolUtils';
-import { useLayerRendering } from './hooks/useLayerRendering';
-import { useThumbnailGeneration } from './hooks/useThumbnailGeneration';
-import { useSelectionAnimation } from './hooks/useSelectionAnimation';
-import { useTextRendering } from './hooks/useTextRendering';
-import { CanvasLayer } from './components/CanvasLayer';
-import { SelectionOverlay } from './components/SelectionOverlay';
-import { VectorOverlay } from './components/VectorOverlay';
-import { CropOverlay } from './components/CropOverlay';
-import { TextEditorOverlay } from './components/TextEditorOverlay';
-import { RulerOverlay } from './components/RulerOverlay';
-import { DraftOverlay } from './components/DraftOverlay';
-import { PerspectiveCropOverlay } from './components/PerspectiveCropOverlay';
-import { SVGFilters } from './components/SVGFilters';
+import { getCoordinates as getCoordsUtil, getSnappedCoords as getSnappedCoordsUtil } from './Core/coordUtils';
+import { applySelectionClip as applySelectionClipUtil, getSelectionPathData as getSelectionPathDataUtil, clearSelection as clearSelectionUtil } from './Core/selectionUtils';
+import { getSvgPathData as getSvgPathDataUtil } from './Core/pathUtils';
+import { handleEyedropper as handleEyedropperUtil, hexToRgba } from './Core/colorUtils';
+import { applyCrop as applyCropUtil, isCropUiTarget } from './Core/cropUtils';
+import { applyGradient as applyGradientUtil } from './Core/gradientUtils';
+import { commitText as commitTextUtil, cancelText as cancelTextUtil } from './Core/textUtils';
+import { findBestEdgePoint as findBestEdgePointUtil } from './Core/edgeUtils';
+import { handlePaintBucket as handlePaintBucketUtil } from './Core/paintBucketUtils';
+import { getCursor as getCursorUtil } from './Core/cursorUtils';
+import { startAction as startActionHandler, moveAction as moveActionHandler, endAction as endActionHandler, handleDoubleClick as handleDoubleClickUtil } from './Events/interactionHandlers';
+import { handleTouchStart as handleTouchStartUtil, handleTouchMove as handleTouchMoveUtil } from './Events/touchHandlers';
+import { BRUSH_TOOLS } from './Core/toolUtils';
+import { useLayerRendering } from './Rendering/useLayerRendering';
+import { useThumbnailGeneration } from './Rendering/useThumbnailGeneration';
+import { useSelectionAnimation } from './Rendering/useSelectionAnimation';
+import { useTextRendering } from './Rendering/useTextRendering';
+import { CanvasLayer } from './UI/CanvasLayer';
+import { SelectionOverlay } from './UI/SelectionOverlay';
+import { VectorOverlay } from './UI/VectorOverlay';
+import { CropOverlay } from './UI/CropOverlay';
+import { TextEditorOverlay } from './UI/TextEditorOverlay';
+import { RulerOverlay } from './UI/RulerOverlay';
+import { DraftOverlay } from './UI/DraftOverlay';
+import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
+import { SVGFilters } from './UI/SVGFilters';
 
 /**
  * The main Canvas component that acts as the primary viewport for the Photoshop clone.
@@ -152,7 +152,7 @@ const Canvas: React.FC = () => {
   // --- Modular Rendering Hooks ---
   
   // Handles the periodic rendering of all layers to their respective canvases
-  useLayerRendering(layers, documentSize, canvasRefs);
+  useLayerRendering(layers, documentSize, canvasRefs, isInteracting, activeLayerId);
   
   // Asynchronously generates layer thumbnails for the sidebar
   useThumbnailGeneration(layers, documentSize, canvasRefs, updateLayer);
@@ -164,15 +164,12 @@ const Canvas: React.FC = () => {
     selectionShape: store.selectionShape, activePathIndex, penMode,
     findBestEdgePoint
   });
-  
+
   // Renders the live preview of text while typing
   useTextRendering(draftTextCanvasRef, {
     textEditor, brushSize, brushColor, primaryOpacity, strokeWidth,
     secondaryColor, secondaryOpacity, hexToRgba
   });
-
-
-
 
   // --- Global Event Listeners ---
 
@@ -272,7 +269,7 @@ const Canvas: React.FC = () => {
       isShift: (e as any).shiftKey || false,
       isAlt: (e as any).altKey || false,
       isCtrl: (e as any).ctrlKey || (e as any).metaKey || false,
-      brushSize, brushColor, zoom,
+      activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
       activeLayerId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
@@ -289,7 +286,7 @@ const Canvas: React.FC = () => {
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
       redEyePupilSize, redEyeDarkenAmount, isInteracting, setIsTyping,
-      cropRect
+      cropRect, activeCropHandle, setActiveCropHandle
     };
 
     startActionHandler(clientX, clientY, e, context, {
@@ -297,7 +294,7 @@ const Canvas: React.FC = () => {
     }, {
       lastPointRef, startMouseRef, startOffsetRef, hiddenTextInputRef
     });
-  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, lassoPaths, vectorPaths, activePathIndex, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, setSelectedPoint, isAltPressed, isCtrlPressed, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, applySelectionClip]);
+  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, lassoPaths, vectorPaths, activePathIndex, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, setSelectedPoint, isAltPressed, isCtrlPressed, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, applySelectionClip, activeCropHandle]);
 
   const handleDoubleClick = useCallback(() => {
     const id = activeLayerId || layers[0]?.id;
@@ -307,7 +304,7 @@ const Canvas: React.FC = () => {
     const context: any = {
       canvas, ctx, coords: currentMousePos || { x: 0, y: 0 },
       startCoords: null, lastPoint: lastPointRef.current,
-      brushSize, brushColor, zoom,
+      activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
       activeLayerId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
@@ -321,18 +318,18 @@ const Canvas: React.FC = () => {
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
       isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
-      cropRect
+      cropRect, activeCropHandle, setActiveCropHandle
     };
 
     handleDoubleClickUtil(context);
-  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer, setDocumentSize, isAltPressed, isCtrlPressed, vectorPaths, activePathIndex, lassoPaths, isInverseSelection, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, secondaryColor, primaryOpacity, secondaryOpacity, applySelectionClip]);
+  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer, setDocumentSize, isAltPressed, isCtrlPressed, vectorPaths, activePathIndex, lassoPaths, isInverseSelection, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, secondaryColor, primaryOpacity, secondaryOpacity, applySelectionClip, activeCropHandle]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Backspace' || e.key === 'Delete') {
         if (activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') {
           if (lassoPaths.length > 0) {
-            setLassoPaths(prev => {
+            setLassoPaths((prev: { x: number; y: number }[][]) => {
               const next = [...prev];
               const currentPath = [...next[next.length - 1]];
               if (currentPath.length > 1) {
@@ -387,7 +384,7 @@ const Canvas: React.FC = () => {
       coords,
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
-      brushSize, brushColor, zoom,
+      activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
       activeLayerId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
@@ -404,7 +401,7 @@ const Canvas: React.FC = () => {
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
       isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
-      cropRect
+      cropRect, activeCropHandle, setActiveCropHandle
     };
 
     moveActionHandler(clientX, clientY, context, {
@@ -435,7 +432,7 @@ const Canvas: React.FC = () => {
       coords: currentMousePos || { x: 0, y: 0 },
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
-      brushSize, brushColor, zoom, toolStrength, toolHardness,
+      activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
       activeLayerId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
@@ -454,7 +451,7 @@ const Canvas: React.FC = () => {
       isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
       setIsTyping,
       redEyePupilSize, redEyeDarkenAmount,
-      cropRect
+      cropRect, activeCropHandle, setActiveCropHandle
     };
 
     endActionHandler(context, {
@@ -464,7 +461,7 @@ const Canvas: React.FC = () => {
     }, {
       isInteracting, draftShape, gradientStart
     });
-  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths]);
+  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle]);
 
 
   // Handles mouse wheel zooming

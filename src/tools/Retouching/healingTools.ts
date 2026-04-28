@@ -1,4 +1,4 @@
-import type { ToolModule } from './types';
+import type { ToolModule } from '../types';
 
 export const healingTools: ToolModule[] = [
   {
