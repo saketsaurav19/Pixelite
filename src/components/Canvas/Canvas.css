@@ -93,13 +93,24 @@
 
 .crop-handle {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background-color: #0078d4;
   border: 2px solid #fff;
   border-radius: 2px;
   z-index: 10001;
   pointer-events: auto;
+}
+
+/* Larger hit area for touch */
+.crop-handle::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  right: -12px;
+  bottom: -12px;
+  background: transparent;
 }
 
 .crop-handle.tl {

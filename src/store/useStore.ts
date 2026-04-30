@@ -5,6 +5,7 @@ import { createSelectionSlice } from './slices/selectionSlice';
 import { createToolSlice } from './slices/toolSlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createDocumentSlice } from './slices/documentSlice';
+import { createLightingSlice } from './slices/lightingSlice';
 
 export type { EditorState, Layer, Tool } from './types';
 
@@ -14,10 +15,16 @@ export const useStore = create<EditorState>()((...a) => ({
   ...createToolSlice(...a),
   ...createHistorySlice(...a),
   ...createDocumentSlice(...a),
+  ...createLightingSlice(...a),
+  documents: [],
+  activeDocumentId: '',
+  activeDocumentName: '',
 }));
 
+import { nanoid } from 'nanoid';
 // Initialize history with initial state
-useStore.setState({
+const initialDocId = nanoid();
+const initialState = {
   layers: [],
   activeLayerId: null,
   history: [
@@ -34,22 +41,79 @@ useStore.setState({
         selectionContiguous: true,
         slices: [],
         colorSamplers: [],
-        toolStrength: 50,
-        toolHardness: 50,
         canvasRotation: 0,
-        gradientType: 'linear',
-        selectionMode: 'new',
-        selectionFeather: 0,
-        selectionAntiAlias: true,
-        healingSourceMode: 'sampled',
-        patchMode: 'source',
-        contentAwareMoveMode: 'move',
-        moveAutoSelect: true,
-        moveShowTransform: false,
-        textFontFamily: 'Inter, system-ui, sans-serif',
-        textAlign: 'left',
+        zoom: 1,
+        canvasOffset: { x: 0, y: 0 },
+        rulerData: null,
+        vectorPaths: [],
+        activePathIndex: null,
+        penMode: 'path' as const,
+        cloneSource: null,
+        customPattern: null,
+        cropRect: null,
+        showRulers: true,
+        showGrid: false,
+        showGuides: true,
+        lights: [],
+        isLightingEnabled: false,
+        lightingQuality: 'medium' as const,
+        workflow: {
+          step: 'image' as const,
+          status: {
+            image: 'pending' as const,
+            depth: 'pending' as const,
+            simulation: 'pending' as const,
+            refinement: 'pending' as const,
+            output: 'pending' as const,
+          },
+        },
       },
     },
   ],
   historyIndex: 0,
+  documentSize: { w: 1920, h: 1080 },
+  zoom: 1,
+  canvasOffset: { x: 0, y: 0 },
+  canvasRotation: 0,
+  lassoPaths: [],
+  selectionRect: null,
+  isInverseSelection: false,
+  selectionTolerance: 32,
+  selectionContiguous: true,
+  slices: [],
+  colorSamplers: [],
+  rulerData: null,
+  vectorPaths: [],
+  activePathIndex: null,
+  penMode: 'path' as const,
+  cloneSource: null,
+  customPattern: null,
+  cropRect: null,
+  showRulers: true,
+  showGrid: false,
+  showGuides: true,
+  lights: [],
+  isLightingEnabled: false,
+  lightingQuality: 'medium' as const,
+  workflow: {
+    step: 'image' as const,
+    status: {
+      image: 'pending' as const,
+      depth: 'pending' as const,
+      simulation: 'pending' as const,
+      refinement: 'pending' as const,
+      output: 'pending' as const,
+    },
+  },
+};
+
+useStore.setState({
+  documents: [{
+    id: initialDocId,
+    name: 'Untitled-1',
+    state: initialState
+  }],
+  activeDocumentId: initialDocId,
+  activeDocumentName: 'Untitled-1',
+  ...initialState
 });

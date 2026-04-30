@@ -179,9 +179,11 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       background: '#2d2d2d',
       borderRadius: '12px',
       padding: '12px',
-      zIndex: 10000,
+      zIndex: 999999,
       boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-      border: '1px solid #444'
+      border: '1px solid #444',
+      overflow: 'visible',
+      minHeight: '280px'
     };
 
     if (isMobile) {
@@ -324,7 +326,7 @@ const ColorPickerPopover = React.forwardRef<HTMLDivElement, any>((props, ref) =>
         <div style={{ position: 'absolute', left: `${s * 100}%`, top: `${(1 - v) * 100}%`, width: '12px', height: '12px', border: '2px solid white', borderRadius: '50%', transform: 'translate(-50%, -50%)', boxShadow: '0 0 2px rgba(0,0,0,0.5)', pointerEvents: 'none' }} />
       </div>
 
-      <div className="picker-controls" onMouseDown={e => e.stopPropagation()}>
+      <div className="picker-controls" onMouseDown={e => e.stopPropagation()} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Custom Hue Slider */}

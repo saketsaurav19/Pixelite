@@ -58,7 +58,17 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
 
   return (
     <>
-      <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10000 }}>
+      <svg style={{ 
+        position: 'absolute', 
+        top: -2000, 
+        left: -2000, 
+        width: 'calc(100% + 4000px)', 
+        height: 'calc(100% + 4000px)', 
+        pointerEvents: 'none', 
+        zIndex: 10000,
+        overflow: 'visible'
+      }}>
+        <g transform="translate(2000, 2000)">
         {/* Quad Area */}
         <path
           d={`M ${p[0].x / 2},${p[0].y / 2} L ${p[1].x / 2},${p[1].y / 2} L ${p[2].x / 2},${p[2].y / 2} L ${p[3].x / 2},${p[3].y / 2} Z`}
@@ -85,16 +95,7 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
 
         {/* Corner Handles */}
         {p.map((point, i) => (
-          <rect
-            key={`corner-${i}`}
-            x={point.x / 2 - 4}
-            y={point.y / 2 - 4}
-            width={8}
-            height={8}
-            fill="#fff"
-            stroke="#00aaff"
-            strokeWidth={1}
-            style={{ cursor: i % 2 === 0 ? 'nwse-resize' : 'nesw-resize', pointerEvents: 'auto' }}
+          <g key={`corner-g-${i}`} 
             onMouseDown={(e) => {
               stopOverlayEvent(e);
               const c = getCoordinates(e.clientX, e.clientY);
@@ -102,32 +103,80 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
               (window as any)._pcDragIdx = i;
               setIsInteracting(true);
             }}
-          />
+            onTouchStart={(e) => {
+              stopOverlayEvent(e);
+              const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY);
+              if (c) lastPointRef.current = c;
+              (window as any)._pcDragIdx = i;
+              setIsInteracting(true);
+            }}
+            style={{ cursor: i % 2 === 0 ? 'nwse-resize' : 'nesw-resize', pointerEvents: 'auto' }}
+          >
+            {/* Hit Area */}
+            <rect
+              x={point.x / 2 - 15}
+              y={point.y / 2 - 15}
+              width={30}
+              height={30}
+              fill="transparent"
+            />
+            {/* Visual Handle */}
+            <rect
+              x={point.x / 2 - 5}
+              y={point.y / 2 - 5}
+              width={10}
+              height={10}
+              fill="#fff"
+              stroke="#00aaff"
+              strokeWidth={1}
+            />
+          </g>
         ))}
 
         {/* Midpoint Handles */}
         {midpoints.map((point, i) => (
-          <rect
-            key={`mid-${i}`}
-            x={point.x / 2 - 3}
-            y={point.y / 2 - 3}
-            width={6}
-            height={6}
-            fill="#fff"
-            stroke="#00aaff"
-            strokeWidth={1}
-            style={{ cursor: i % 2 === 0 ? 'ns-resize' : 'ew-resize', pointerEvents: 'auto' }}
+          <g key={`mid-g-${i}`}
             onMouseDown={(e) => {
               stopOverlayEvent(e);
               const c = getCoordinates(e.clientX, e.clientY);
               if (c) lastPointRef.current = c;
-              (window as any)._pcDragIdx = i + 4; // Midpoint indices are 4-7
+              (window as any)._pcDragIdx = i + 4;
               (window as any)._pcStartPoint = { ...c };
               (window as any)._pcOrigPoints = p.map(pt => ({ ...pt }));
               setIsInteracting(true);
             }}
-          />
+            onTouchStart={(e) => {
+              stopOverlayEvent(e);
+              const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY);
+              if (c) lastPointRef.current = c;
+              (window as any)._pcDragIdx = i + 4;
+              (window as any)._pcStartPoint = { ...c };
+              (window as any)._pcOrigPoints = p.map(pt => ({ ...pt }));
+              setIsInteracting(true);
+            }}
+            style={{ cursor: i % 2 === 0 ? 'ns-resize' : 'ew-resize', pointerEvents: 'auto' }}
+          >
+            {/* Hit Area */}
+            <rect
+              x={point.x / 2 - 12}
+              y={point.y / 2 - 12}
+              width={24}
+              height={24}
+              fill="transparent"
+            />
+            {/* Visual Handle */}
+            <rect
+              x={point.x / 2 - 4}
+              y={point.y / 2 - 4}
+              width={8}
+              height={8}
+              fill="#fff"
+              stroke="#00aaff"
+              strokeWidth={1}
+            />
+          </g>
         ))}
+        </g>
       </svg>
 
       <div

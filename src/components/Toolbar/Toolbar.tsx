@@ -186,6 +186,12 @@ const TOOL_GROUPS: ToolGroup[] = [
       { id: 'zoom_tool', icon: LucideIcons.Search, label: 'Zoom Tool', shortcut: 'Z' },
     ],
   },
+  {
+    id: 'lighting',
+    tools: [
+      { id: 'lighting', icon: LucideIcons.Sun, label: 'Lighting System', shortcut: 'L' },
+    ],
+  },
 ];
 
 const Toolbar: React.FC<ToolbarProps> = ({ onAction }) => {

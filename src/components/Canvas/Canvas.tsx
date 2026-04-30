@@ -26,7 +26,10 @@ import { TextEditorOverlay } from './UI/TextEditorOverlay';
 import { RulerOverlay } from './UI/RulerOverlay';
 import { DraftOverlay } from './UI/DraftOverlay';
 import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
+import { LightingOverlay } from './UI/LightingOverlay';
+import { WorkflowStatus } from './UI/WorkflowStatus';
 import { SVGFilters } from './UI/SVGFilters';
+import { useLighting } from './Rendering/useLighting';
 
 /**
  * The main Canvas component that acts as the primary viewport for the Photoshop clone.
@@ -49,7 +52,8 @@ const Canvas: React.FC = () => {
     colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData,
     setIsTyping, toolStrength, toolHardness,
     redEyePupilSize, redEyeDarkenAmount,
-    textEditor, setTextEditor
+    textEditor, setTextEditor,
+    lights, isLightingEnabled, lightingQuality, ambientIntensity
   } = store;
   // --- UI & Interaction State ---
   const [isInteracting, setIsInteracting] = useState(false); // True during active mouse/touch drag
@@ -170,6 +174,18 @@ const Canvas: React.FC = () => {
     textEditor, brushSize, brushColor, primaryOpacity, strokeWidth,
     secondaryColor, secondaryOpacity, hexToRgba
   });
+
+  useLighting(canvasRefs, activeLayerId, layers, isLightingEnabled, lights, lightingQuality, ambientIntensity);
+
+  const [litLayerData, setLitLayerData] = useState<{ [key: string]: string }>({});
+
+  useEffect(() => {
+    const handleLightingResult = (e: any) => {
+      setLitLayerData(prev => ({ ...prev, [e.detail.layerId]: e.detail.dataUrl }));
+    };
+    window.addEventListener('lighting-result', handleLightingResult);
+    return () => window.removeEventListener('lighting-result', handleLightingResult);
+  }, []);
 
   // --- Global Event Listeners ---
 
@@ -691,6 +707,27 @@ const Canvas: React.FC = () => {
           />
         ))}
 
+        {isLightingEnabled && activeLayerId && litLayerData[activeLayerId] && (
+          <div 
+            className="lighting-result-overlay"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              zIndex: 10
+            }}
+          >
+            <img 
+              src={litLayerData[activeLayerId]} 
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+              alt="Lit Layer"
+            />
+          </div>
+        )}
+
         {activeLayerId && (
           <SelectionOverlay
             selectionRect={selectionRect}
@@ -730,6 +767,8 @@ const Canvas: React.FC = () => {
           handleDoubleClick={handleDoubleClick}
           setLassoPaths={setLassoPaths}
         />
+
+        <LightingOverlay />
 
         <DraftOverlay
           draftShape={draftShape}
@@ -784,6 +823,8 @@ const Canvas: React.FC = () => {
         {/* Other cursors and indicators */}
         <SVGFilters />
       </div>
+      
+      <WorkflowStatus />
     </div>
   );
 };

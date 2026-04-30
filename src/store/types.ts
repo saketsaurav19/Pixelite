@@ -7,7 +7,7 @@ export type Tool =
   | 'blur' | 'sharpen' | 'smudge' | 'dodge' | 'burn' | 'sponge' | 'text' | 'vertical_text' | 'pen' | 'free_pen' 
   | 'curvature_pen' | 'add_anchor' | 'delete_anchor' | 'convert_point' | 'path_select' | 'direct_select' 
   | 'shape' | 'ellipse_shape' | 'triangle_shape' | 'polygon_shape' | 'line_shape' | 'custom_shape' 
-  | 'hand' | 'rotate_view' | 'zoom_tool';
+  | 'hand' | 'rotate_view' | 'zoom_tool' | 'lighting';
 
 export interface Layer {
   id: string;
@@ -35,39 +35,76 @@ export interface Layer {
     cornerRadius?: number;
   };
   thumbnail?: string;
+  depthMap?: string; // Data URL of the depth map
+  normalMap?: string; // Data URL of the normal map
+}
+
+export interface Light {
+  id: string;
+  name?: string;
+  type: 'point' | 'spot' | 'area';
+  position: { x: number; y: number; z: number };
+  intensity: number;
+  color: string; // Hex color
+  radius: number;
+  falloff: 'linear' | 'quadratic';
+  direction?: { x: number; y: number; z: number };
+  angle?: number;
+  visible: boolean;
+}
+
+export interface DocumentSpecificState {
+  layers: Layer[];
+  activeLayerId: string | null;
+  history: HistoryEntry[];
+  historyIndex: number;
+  documentSize: { w: number; h: number };
+  zoom: number;
+  canvasOffset: { x: number; y: number };
+  canvasRotation: number;
+  lassoPaths: { x: number; y: number }[][];
+  selectionRect: { x: number; y: number; w: number; h: number } | null;
+  isInverseSelection: boolean;
+  selectionTolerance: number;
+  selectionContiguous: boolean;
+  slices: { id: string; rect: { x: number; y: number; w: number; h: number } }[];
+  colorSamplers: { id: string; x: number; y: number; color: string }[];
+  rulerData: { start: { x: number; y: number }; end: { x: number; y: number } } | null;
+  vectorPaths: { points: { x: number; y: number }[]; closed: boolean; smooth?: boolean }[];
+  activePathIndex: number | null;
+  penMode: 'path' | 'shape';
+  cloneSource: { x: number; y: number } | null;
+  customPattern: string | null;
+  cropRect: { x: number; y: number; w: number; h: number } | null;
+  showRulers: boolean;
+  showGrid: boolean;
+  showGuides: boolean;
+  lights: Light[];
+  isLightingEnabled: boolean;
+  lightingQuality: 'low' | 'medium' | 'high';
+  workflow: {
+    step: 'image' | 'depth' | 'simulation' | 'refinement' | 'output';
+    status: Record<'image' | 'depth' | 'simulation' | 'refinement' | 'output', 'pending' | 'completed' | 'error' | 'loading'>;
+  };
+}
+
+export interface DocumentArchive {
+  id: string;
+  name: string;
+  state: DocumentSpecificState;
 }
 
 export interface HistoryEntry {
   name: string;
-  state: {
-    layers: Layer[];
-    activeLayerId: string | null;
-    lassoPaths: { x: number; y: number }[][];
-    selectionRect: { x: number; y: number; w: number; h: number } | null;
-    isInverseSelection: boolean;
-    documentSize: { w: number; h: number };
-    selectionTolerance: number;
-    selectionContiguous: boolean;
-    slices: { id: string; rect: { x: number; y: number; w: number; h: number } }[];
-    colorSamplers: { id: string; x: number; y: number; color: string }[];
-    toolStrength: number;
-    toolHardness: number;
-    canvasRotation: number;
-    gradientType: 'linear' | 'radial' | 'angle' | 'reflected' | 'diamond';
-    selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
-    selectionFeather: number;
-    selectionAntiAlias: boolean;
-    healingSourceMode: 'sampled' | 'pattern';
-    patchMode: 'source' | 'destination';
-    contentAwareMoveMode: 'move' | 'extend';
-    moveAutoSelect: boolean;
-    moveShowTransform: boolean;
-    textFontFamily: string;
-    textAlign: 'left' | 'center' | 'right';
-  };
+  state: Omit<DocumentSpecificState, 'history' | 'historyIndex'>;
 }
 
-export interface EditorState {
+export interface EditorState extends DocumentSpecificState {
+  // Global App State
+  documents: DocumentArchive[];
+  activeDocumentId: string;
+  activeDocumentName: string;
+
   // Tool State
   activeTool: Tool;
   activeToolVariants: Record<string, Tool>;
@@ -99,38 +136,10 @@ export interface EditorState {
   textFontFamily: string;
   textAlign: 'left' | 'center' | 'right';
   textEditor: { x: number; y: number; value: string } | null;
-
-  // Selection State
-  lassoPaths: { x: number; y: number }[][];
-  selectionRect: { x: number; y: number; w: number; h: number } | null;
   selectionShape: 'rect' | 'ellipse' | 'lasso';
-  isInverseSelection: boolean;
-  selectionTolerance: number;
-  selectionContiguous: boolean;
   selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
-
-  // Layer State
-  layers: Layer[];
-  activeLayerId: string | null;
-
-  // Document State
-  zoom: number;
-  canvasOffset: { x: number; y: number };
-  canvasRotation: number;
-  documentSize: { w: number; h: number };
-  slices: { id: string; rect: { x: number; y: number; w: number; h: number } }[];
-  colorSamplers: { id: string; x: number; y: number; color: string }[];
-  rulerData: { start: { x: number; y: number }; end: { x: number; y: number } } | null;
-  vectorPaths: { points: { x: number; y: number }[]; closed: boolean; smooth?: boolean }[];
-  activePathIndex: number | null;
-  penMode: 'path' | 'shape';
-  cloneSource: { x: number; y: number } | null;
-  customPattern: string | null;
-
-  // History State
-  history: HistoryEntry[];
-  historyIndex: number;
 
   // Actions - These will be defined in slices
   [key: string]: any;
 }
+

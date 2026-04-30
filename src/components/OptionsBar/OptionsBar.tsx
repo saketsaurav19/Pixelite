@@ -94,7 +94,14 @@ const OptionsBar: React.FC = () => {
     moveAutoSelect, setMoveAutoSelect,
     moveShowTransform, setMoveShowTransform,
     textFontFamily, setTextFontFamily,
-    textAlign, setTextAlign
+    textAlign, setTextAlign,
+    isLightingEnabled, setLightingEnabled,
+    lights, updateLight, removeLight, addLight,
+    activeLightId, setActiveLightId,
+    ambientIntensity, setAmbientIntensity,
+    ambientColor, setAmbientColor,
+    lightingDepthScale, updateLighting,
+    documentSize, setActiveLayer, layers
   } = useStore();
 
   const handleDeselect = () => {
@@ -137,18 +144,18 @@ const OptionsBar: React.FC = () => {
                 if (paths.length > 0) {
                   const subdividedPaths = paths.map(path => {
                     if (!path.smooth || path.points.length < 3) return path.points;
-                    
+
                     const result: { x: number, y: number }[] = [];
                     const steps = 12; // High resolution for selection
                     const points = path.points;
                     const len = points.length;
-                    
+
                     for (let i = 0; i < (path.closed ? len : len - 1); i++) {
                       const p0 = points[(i - 1 + len) % len];
                       const p1 = points[i % len];
                       const p2 = points[(i + 1) % len];
                       const p3 = points[(i + 2) % len];
-                      
+
                       for (let t = 0; t < steps; t++) {
                         const u = t / steps;
                         const x = 0.5 * (
@@ -169,7 +176,7 @@ const OptionsBar: React.FC = () => {
                     if (!path.closed) result.push(points[len - 1]);
                     return result;
                   });
-                  
+
                   setLassoPaths(subdividedPaths);
                   setVectorPaths([]);
                   setActivePathIndex(null);
@@ -432,6 +439,188 @@ const OptionsBar: React.FC = () => {
         </>
       )}
 
+      {activeTool === 'lighting' && (
+        <>
+          <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label className="switch-label">Preview Lighting</label>
+            <input
+              type="checkbox"
+              checked={isLightingEnabled}
+              onChange={(e) => setLightingEnabled(e.target.checked)}
+            />
+          </div>
+          <div className="options-divider" />
+          <div className="option-control">
+            <button
+              className="premium-btn-sm"
+              title="Step 1: Analyze image geometry"
+              onClick={() => {
+                const fallbackLayer = layers.find((layer) => layer.visible !== false);
+                const targetLayerId = activeLayerId ?? fallbackLayer?.id ?? null;
+                if (!targetLayerId) return;
+                if (!activeLayerId && fallbackLayer) setActiveLayer(fallbackLayer.id);
+                window.dispatchEvent(new CustomEvent('generate-depth-map'));
+              }}
+              style={{ background: '#4b7bec', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 12px', fontWeight: 'bold' }}
+            >
+              <LucideIcons.Scan size={14} style={{ marginRight: '6px' }} />
+              ANALYZE DEPTH
+            </button>
+            <button
+              className="premium-btn-sm"
+              title="Step 2: Apply professional lighting simulation"
+              onClick={() => {
+                setLightingEnabled(true);
+                window.dispatchEvent(new CustomEvent('render-lighting'));
+              }}
+              style={{ background: '#eb3b5a', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 12px', fontWeight: 'bold', marginLeft: '8px' }}
+            >
+              <LucideIcons.Sparkles size={14} style={{ marginRight: '6px' }} />
+              MAGIC RELIGHT
+            </button>
+          </div>
+          <div className="options-divider" />
+
+          <div className="option-control">
+            <label>Lights</label>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button
+                className="action-btn-circle"
+                onClick={() => addLight({
+                  type: 'point',
+                  position: { x: documentSize.w / 2, y: documentSize.h / 2, z: 400 },
+                  intensity: 1.0,
+                  color: '#ffffff',
+                  radius: 500,
+                  falloff: 'quadratic',
+                  visible: true
+                })}
+                title="Add New Light Source"
+              >
+                <LucideIcons.Plus size={14} />
+              </button>
+                <select
+                  className="premium-select"
+                  style={{ width: '120px' }}
+                  value={activeLightId || ''}
+                  onChange={(e) => setActiveLightId(e.target.value || null)}
+                >
+                  <option value="">Select Light</option>
+                  <option value="ambient">Ambient Light</option>
+                  {lights.map((l, i) => (
+                    <option key={l.id} value={l.id}>{l.name || `Light ${i + 1}`}</option>
+                  ))}
+                </select>
+            </div>
+          </div>
+
+          <div className="option-control">
+            <label title="Strength of the 3D depth effect">Depth Scale</label>
+            <input
+              type="range" min="0" max="1000" step="10"
+              value={lightingDepthScale || 200}
+              onChange={(e) => updateLighting({ lightingDepthScale: parseInt(e.target.value) })}
+              style={{ width: '80px' }}
+            />
+            <span className="value-label">{(lightingDepthScale || 200)}px</span>
+          </div>
+
+          {activeLightId && (() => {
+            if (activeLightId === 'ambient') {
+              return (
+                <>
+                  <div className="options-divider" />
+                  <div className="option-control">
+                    <label>Ambient Int.</label>
+                    <input
+                      type="range" min="0" max="1" step="0.01"
+                      value={ambientIntensity}
+                      onChange={(e) => setAmbientIntensity(parseFloat(e.target.value))}
+                      style={{ width: '100px' }}
+                    />
+                    <span className="value-label">{Math.round(ambientIntensity * 100)}%</span>
+                  </div>
+                  <div className="option-control">
+                    <ColorPicker
+                      label="Ambient Color"
+                      color={ambientColor || '#ffffff'}
+                      opacity={1}
+                      onColorChange={(color) => setAmbientColor(color)}
+                      onOpacityChange={() => { }}
+                    />
+                  </div>
+                </>
+              );
+            }
+
+            const activeLight = lights.find(l => l.id === activeLightId);
+            if (!activeLight) return null;
+            return (
+              <>
+                <div className="options-divider" />
+                <div className="option-control">
+                  <label>Type</label>
+                  <select
+                    className="premium-select"
+                    style={{ width: '80px', height: '24px', fontSize: '11px' }}
+                    value={activeLight.type}
+                    onChange={(e) => updateLight(activeLight.id, { type: e.target.value as any })}
+                  >
+                    <option value="point">Point</option>
+                    <option value="spot">Spot</option>
+                    <option value="area">Area</option>
+                  </select>
+                </div>
+                <div className="option-control">
+                  <label>Name</label>
+                  <input
+                    type="text"
+                    className="premium-input"
+                    style={{ width: '80px', height: '24px', fontSize: '11px' }}
+                    value={activeLight.name || ''}
+                    onChange={(e) => updateLight(activeLight.id, { name: e.target.value })}
+                  />
+                </div>
+                <div className="option-control">
+                  <label>Power</label>
+                  <input
+                    type="range" min="0" max="10" step="0.1"
+                    value={activeLight.intensity}
+                    onChange={(e) => updateLight(activeLight.id, { intensity: parseFloat(e.target.value) })}
+                  />
+                  <span className="value-label">{activeLight.intensity.toFixed(1)}</span>
+                </div>
+                <div className="option-control">
+                  <label>Radius</label>
+                  <input
+                    type="range" min="50" max="5000" step="10"
+                    value={activeLight.radius}
+                    onChange={(e) => updateLight(activeLight.id, { radius: parseInt(e.target.value) })}
+                  />
+                  <span className="value-label">{activeLight.radius}px</span>
+                </div>
+                <div className="options-divider" />
+                <ColorPicker
+                  label="Color"
+                  color={activeLight.color}
+                  opacity={1}
+                  onColorChange={(color) => updateLight(activeLight.id, { color })}
+                  onOpacityChange={() => { }}
+                />
+                <button
+                  className="action-btn delete-btn"
+                  style={{ marginLeft: '8px' }}
+                  onClick={() => removeLight(activeLight.id)}
+                >
+                  <LucideIcons.Trash2 size={14} />
+                </button>
+              </>
+            );
+          })()}
+
+        </>
+      )}
+
       {activeTool === 'zoom_tool' && (
         <>
           <div className="option-control">
@@ -558,7 +747,7 @@ const OptionsBar: React.FC = () => {
             />
             <EditableValue value={Math.round(canvasRotation)} unit="°" onCommit={setCanvasRotation} />
           </div>
-          <button 
+          <button
             className="option-btn"
             onClick={() => setCanvasRotation(0)}
             style={{ marginLeft: '10px', padding: '4px 12px' }}
@@ -569,7 +758,7 @@ const OptionsBar: React.FC = () => {
       )}
 
       {activeTool === 'hand' && (
-        <button 
+        <button
           className="option-btn"
           onClick={() => {
             useStore.getState().setCanvasOffset({ x: 0, y: 0 });
@@ -743,8 +932,8 @@ const OptionsBar: React.FC = () => {
           {(activeTool === 'dodge' || activeTool === 'burn') && (
             <div className="option-control">
               <label>Range</label>
-              <select 
-                value={useStore.getState().toningRange} 
+              <select
+                value={useStore.getState().toningRange}
                 onChange={(e) => useStore.getState().setToningRange(e.target.value as any)}
                 style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
               >
@@ -758,8 +947,8 @@ const OptionsBar: React.FC = () => {
           {activeTool === 'sponge' && (
             <div className="option-control">
               <label>Mode</label>
-              <select 
-                value={useStore.getState().spongeMode} 
+              <select
+                value={useStore.getState().spongeMode}
                 onChange={(e) => useStore.getState().setSpongeMode(e.target.value as any)}
                 style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
               >
