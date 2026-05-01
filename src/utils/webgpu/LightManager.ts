@@ -10,19 +10,27 @@ export class LightManager {
   private depthCache = new Map<string, GPUTexture>();
   private normalCache = new Map<string, GPUTexture>();
   private depthDataCache = new Map<string, { data: Float32Array; width: number; height: number }>();
+  private currentDevice: GPUDevice | null = null;
+
+  private async checkDevice(device: GPUDevice) {
+    if (this.currentDevice !== device) {
+      console.log('[Lighting] Device change detected, clearing texture cache');
+      this.depthCache.clear();
+      this.normalCache.clear();
+      this.currentDevice = device;
+    }
+  }
 
   async processLayer(
-    layerId: string, 
-    imageCanvas: HTMLCanvasElement, 
-    quality: 'low' | 'medium' | 'high' = 'medium', 
+    layerId: string,
+    imageCanvas: HTMLCanvasElement,
+    quality: 'low' | 'medium' | 'high' = 'medium',
     isHQ: boolean = false,
     onStatus?: (step: 'depth' | 'simulation', status: 'loading' | 'completed' | 'error') => void
   ) {
     console.log(`[Lighting] processLayer start layer=${layerId} quality=${quality} hq=${isHQ}`);
     const device = await getGPUDevice();
-    
-    // For HQ, we use larger resolution, otherwise keep it small for real-time
-    const res = isHQ ? 512 : quality === 'high' ? 384 : quality === 'low' ? 192 : 256;
+    await this.checkDevice(device);
 
     // 1. Get depth map
     let depthTexture: GPUTexture;
@@ -45,9 +53,11 @@ export class LightManager {
     // 2. Generate normal map
     onStatus?.('simulation', 'loading');
     try {
-      normalTexture = await generateNormalMap(depthTexture, res, res);
+      const fullWidth = imageCanvas.width;
+      const fullHeight = imageCanvas.height;
+      normalTexture = await generateNormalMap(device, depthTexture, fullWidth, fullHeight);
       this.normalCache.set(layerId, normalTexture);
-      console.log(`[Lighting] Normal map generated at ${res}x${res} for layer=${layerId}`);
+      console.log(`[Lighting] Normal map generated at ${fullWidth}x${fullHeight} for layer=${layerId}`);
       // Don't mark simulation as completed yet, as the lighting pass follows
     } catch (e) {
       onStatus?.('simulation', 'error');
@@ -65,6 +75,7 @@ export class LightManager {
     ambientIntensity: number = 0.1,
     ambientColor: string = '#ffffff',
     depthScale: number = 200,
+    showLightSource: boolean = true,
     quality: 'low' | 'medium' | 'high' = 'medium',
     isHQ: boolean = false,
     onStatus?: (step: 'depth' | 'simulation' | 'refinement' | 'output', status: 'loading' | 'completed' | 'error') => void
@@ -78,6 +89,7 @@ export class LightManager {
 
     try {
       const device = await getGPUDevice();
+      await this.checkDevice(device);
       const width = albedoCanvas.width;
       const height = albedoCanvas.height;
 
@@ -99,6 +111,7 @@ export class LightManager {
       console.log(`[Lighting] Albedo texture created ${width}x${height}`);
 
       const resultTexture = await this.lightingRenderer.renderLighting(
+        device,
         albedoTexture,
         normalTexture,
         visibleLights,
@@ -108,7 +121,8 @@ export class LightManager {
         layerPosition.y,
         ambientIntensity,
         ambientColor,
-        depthScale
+        depthScale,
+        showLightSource
       );
       console.log(`[Lighting] GPU lighting pass complete for layer=${layerId}`);
       onStatus?.('simulation', 'completed');
@@ -124,13 +138,13 @@ export class LightManager {
     } catch (error) {
       console.error('[Lighting] GPU lighting failed, falling back to CPU renderer', error);
       onStatus?.('simulation', 'error');
-      
+
       const depthResult = this.depthDataCache.get(layerId) ?? await this.depthProcessor.estimateDepth(albedoCanvas);
       this.depthDataCache.set(layerId, depthResult);
-      
+
       console.log(`[Lighting] CPU fallback render start for layer=${layerId}`);
       const fallbackResult = await this.renderFallback2D(albedoCanvas, depthResult, visibleLights, ambientIntensity);
-      
+
       onStatus?.('refinement', 'completed');
       onStatus?.('output', 'completed');
       return fallbackResult;
@@ -150,7 +164,7 @@ export class LightManager {
         if (!ctx) return resolve(dataUrl);
 
         ctx.drawImage(img, 0, 0);
-        
+
         // Apply a subtle contrast boost using globalCompositeOperation
         ctx.globalCompositeOperation = 'overlay';
         ctx.globalAlpha = 0.15;
@@ -231,7 +245,7 @@ export class LightManager {
           }
 
           const diffuse = Math.max(0, normalX * dirX + normalY * dirY + normalZ * dirZ);
-          
+
           // Specular (Blinn-Phong)
           const vx = (width / 2) - x;
           const vy = (height / 2) - y;

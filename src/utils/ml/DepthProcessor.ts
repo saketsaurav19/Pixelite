@@ -130,7 +130,38 @@ export class DepthProcessor {
       }
 
       console.log(`[Lighting][Depth] Normalized depth range min=${min.toFixed(4)} max=${max.toFixed(4)}`);
-      return { data: normalizedOutput, width, height };
+      
+      // Upscale the 256x256 depth map back to the original image dimensions
+      const originalWidth = imageCanvas.width;
+      const originalHeight = imageCanvas.height;
+      
+      const upscaleCanvas = document.createElement('canvas');
+      upscaleCanvas.width = originalWidth;
+      upscaleCanvas.height = originalHeight;
+      const upscaleCtx = upscaleCanvas.getContext('2d')!;
+      
+      // Convert normalized float data to grayscale for upscaling
+      const depthImage = ctx.createImageData(width, height);
+      for (let i = 0; i < normalizedOutput.length; i++) {
+        const val = Math.floor(normalizedOutput[i] * 255);
+        depthImage.data[i * 4] = val;
+        depthImage.data[i * 4 + 1] = val;
+        depthImage.data[i * 4 + 2] = val;
+        depthImage.data[i * 4 + 3] = 255;
+      }
+      ctx.putImageData(depthImage, 0, 0);
+      
+      // Draw 256x256 depth map onto full-size canvas (bilinear interpolation)
+      upscaleCtx.drawImage(tempCanvas, 0, 0, originalWidth, originalHeight);
+      const upscaledData = upscaleCtx.getImageData(0, 0, originalWidth, originalHeight);
+      
+      // Convert back to Float32
+      const finalDepth = new Float32Array(originalWidth * originalHeight);
+      for (let i = 0; i < upscaledData.data.length / 4; i++) {
+        finalDepth[i] = upscaledData.data[i * 4] / 255.0;
+      }
+      
+      return { data: finalDepth, width: originalWidth, height: originalHeight };
     } catch (error) {
       console.warn('[Depth] ONNX depth failed, using heuristic fallback depth map', error);
       return { data: this.createHeuristicDepth(imageData, width, height), width, height };

@@ -50,6 +50,7 @@ export interface Light {
   falloff: 'linear' | 'quadratic';
   direction?: { x: number; y: number; z: number };
   angle?: number;
+  distance?: number; // Orbital distance for cinematic positioning
   visible: boolean;
 }
 
@@ -82,6 +83,7 @@ export interface DocumentSpecificState {
   lights: Light[];
   isLightingEnabled: boolean;
   lightingQuality: 'low' | 'medium' | 'high';
+  lightingDepthScale: number;
   workflow: {
     step: 'image' | 'depth' | 'simulation' | 'refinement' | 'output';
     status: Record<'image' | 'depth' | 'simulation' | 'refinement' | 'output', 'pending' | 'completed' | 'error' | 'loading'>;

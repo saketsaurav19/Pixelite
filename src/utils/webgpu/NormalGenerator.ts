@@ -1,13 +1,12 @@
-import { getGPUDevice } from './gpuDevice';
 import { normalMapShader } from './normalMapShader';
 
 export async function generateNormalMap(
+  device: GPUDevice,
   depthTexture: GPUTexture,
   width: number,
   height: number,
   strength: number = 5.0
 ): Promise<GPUTexture> {
-  const device = await getGPUDevice();
 
   const normalTexture = device.createTexture({
     size: [width, height],
@@ -38,18 +37,12 @@ export async function generateNormalMap(
     }
   });
 
-  const sampler = device.createSampler({
-    magFilter: 'linear',
-    minFilter: 'linear'
-  });
-
   const bindGroup = device.createBindGroup({
     layout: computePipeline.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: depthTexture.createView() },
       { binding: 1, resource: normalTexture.createView() },
-      { binding: 2, resource: sampler },
-      { binding: 3, resource: { buffer: paramsBuffer } }
+      { binding: 2, resource: { buffer: paramsBuffer } }
     ]
   });
 

@@ -2,6 +2,22 @@ import type { StateCreator } from 'zustand';
 import type { EditorState, Light } from '../types';
 import { nanoid } from 'nanoid';
 
+// Helper for cinematic light positioning along an orbital arc
+function computeInitialCinematicPosition(distance: number, center: { x: number; y: number }) {
+  const maxDistance = 1000;
+  const t = Math.max(0, Math.min(1, distance / maxDistance));
+
+  // Straight line in Z: -600 (behind) to +1400 (far front)
+  const z = (t * 2000) - 600;
+
+  // Fixed cinematic offset: 300px right, 150px up from center
+  return {
+    x: center.x + 300,
+    y: center.y - 150,
+    z: z
+  };
+}
+
 export interface LightingSlice {
   lights: Light[];
   isLightingEnabled: boolean;
@@ -23,7 +39,8 @@ export interface LightingSlice {
   setWorkflowStatus: (step: keyof EditorState['workflow']['status'], status: EditorState['workflow']['status'][keyof EditorState['workflow']['status']]) => void;
   setActiveLightId: (id: string | null) => void;
   lightingDepthScale: number;
-  setLightingDepthScale: (scale: number) => void;
+  showLightSource: boolean;
+  updateLighting: (updates: Partial<Pick<LightingSlice, 'lightingDepthScale' | 'isLightingEnabled' | 'lightingQuality' | 'ambientIntensity' | 'ambientColor' | 'showLightSource'>>) => void;
 }
 
 export const createLightingSlice: StateCreator<EditorState, [], [], LightingSlice> = (set) => ({
@@ -34,6 +51,7 @@ export const createLightingSlice: StateCreator<EditorState, [], [], LightingSlic
   ambientIntensity: 0.1,
   ambientColor: '#ffffff',
   lightingDepthScale: 200,
+  showLightSource: true,
   workflow: {
     step: 'image' as const,
     status: {
@@ -56,48 +74,51 @@ export const createLightingSlice: StateCreator<EditorState, [], [], LightingSlic
       activeLightId: newId
     };
   }),
-  updateLight: (id, updates) => set((state) => ({
-    lights: state.lights.map((l) => (l.id === id ? { ...l, ...updates } : l))
-  })),
+  updateLight: (id, updates) => set((state) => {
+    return {
+      lights: state.lights.map((l) => {
+        if (l.id !== id) return l;
+
+        // If distance changed, recompute ONLY the Z position along the line
+        if (updates.distance !== undefined) {
+          const maxDistance = 1000;
+          const t = Math.max(0, Math.min(1, updates.distance / maxDistance));
+
+          // Straight line in Z: -600 (behind) to +1400 (far front)
+          const z = (t * 2000) - 600;
+
+          return {
+            ...l,
+            ...updates,
+            position: {
+              ...l.position,
+              z: z
+            }
+          };
+        }
+
+        return { ...l, ...updates };
+      })
+    };
+  }),
   removeLight: (id) => set((state) => ({
     lights: state.lights.filter((l) => l.id !== id)
   })),
   setLightingEnabled: (enabled) => set((state) => {
     // If enabling for the first time and no lights exist, add a default one
     if (enabled && state.lights.length === 0) {
-      return { 
+      return {
         isLightingEnabled: enabled,
         lights: [
           {
             id: nanoid(),
-            name: 'Key Light',
+            name: 'Point Light',
             type: 'point',
-            position: { x: state.documentSize.w * 0.25, y: state.documentSize.h * 0.2, z: 400 },
-            intensity: 1.2,
-            color: '#f5e1d2', // Peach/White
-            radius: state.documentSize.w * 0.6,
-            falloff: 'linear',
-            visible: true
-          },
-          {
-            id: nanoid(),
-            name: 'Rim Light',
-            type: 'point',
-            position: { x: state.documentSize.w * 0.85, y: state.documentSize.h * 0.15, z: 350 },
+            position: computeInitialCinematicPosition(500, { x: state.documentSize.w * 0.5, y: state.documentSize.h * 0.5 }),
+            distance: 500,
             intensity: 1.0,
-            color: '#ff5ec1', // Pink
-            radius: state.documentSize.w * 0.5,
-            falloff: 'linear',
-            visible: true
-          },
-          {
-            id: nanoid(),
-            name: 'Fill Light',
-            type: 'point',
-            position: { x: state.documentSize.w * 0.75, y: state.documentSize.h * 0.8, z: 300 },
-            intensity: 0.9,
-            color: '#4da6ff', // Blue
-            radius: state.documentSize.w * 0.5,
+            color: '#ffffff',
+            radius: state.documentSize.w * 0.4,
             falloff: 'linear',
             visible: true
           }
@@ -122,5 +143,5 @@ export const createLightingSlice: StateCreator<EditorState, [], [], LightingSlic
       status: { ...state.workflow.status, [step]: status }
     }
   })),
-  setLightingDepthScale: (scale) => set({ lightingDepthScale: scale }),
+  updateLighting: (updates) => set((state) => ({ ...state, ...updates })),
 });

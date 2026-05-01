@@ -499,18 +499,18 @@ const OptionsBar: React.FC = () => {
               >
                 <LucideIcons.Plus size={14} />
               </button>
-                <select
-                  className="premium-select"
-                  style={{ width: '120px' }}
-                  value={activeLightId || ''}
-                  onChange={(e) => setActiveLightId(e.target.value || null)}
-                >
-                  <option value="">Select Light</option>
-                  <option value="ambient">Ambient Light</option>
-                  {lights.map((l, i) => (
-                    <option key={l.id} value={l.id}>{l.name || `Light ${i + 1}`}</option>
-                  ))}
-                </select>
+              <select
+                className="premium-select"
+                style={{ width: '120px' }}
+                value={activeLightId || ''}
+                onChange={(e) => setActiveLightId(e.target.value || null)}
+              >
+                <option value="">Select Light</option>
+                <option value="ambient">Ambient Light</option>
+                {lights.map((l, i) => (
+                  <option key={l.id} value={l.id}>{l.name || `Light ${i + 1}`}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -523,6 +523,17 @@ const OptionsBar: React.FC = () => {
               style={{ width: '80px' }}
             />
             <span className="value-label">{(lightingDepthScale || 200)}px</span>
+          </div>
+
+          <div className="option-control" style={{ marginLeft: '12px', display: 'flex', alignItems: 'center' }}>
+            <label htmlFor="show-source-toggle" style={{ marginRight: '6px', fontSize: '11px', whiteSpace: 'nowrap' }}>Show Source</label>
+            <input
+              id="show-source-toggle"
+              type="checkbox"
+              checked={useStore.getState().showLightSource ?? true}
+              onChange={(e) => updateLighting({ showLightSource: e.target.checked })}
+              style={{ cursor: 'pointer' }}
+            />
           </div>
 
           {activeLightId && (() => {
@@ -578,7 +589,23 @@ const OptionsBar: React.FC = () => {
                     className="premium-input"
                     style={{ width: '80px', height: '24px', fontSize: '11px' }}
                     value={activeLight.name || ''}
+                    onFocus={() => useStore.getState().setIsTyping(true)}
+                    onBlur={() => useStore.getState().setIsTyping(false)}
                     onChange={(e) => updateLight(activeLight.id, { name: e.target.value })}
+                  />
+                </div>
+                <div className="option-control">
+                  <label>Distance</label>
+                  <input
+                    type="range" min="0" max="1000" step="10"
+                    value={activeLight.distance ?? 500}
+                    onChange={(e) => updateLight(activeLight.id, { distance: parseInt(e.target.value) })}
+                    title="Adjust light depth from behind to front of subject"
+                  />
+                  <EditableValue 
+                    value={activeLight.distance ?? 500} 
+                    unit="" 
+                    onCommit={(val) => updateLight(activeLight.id, { distance: val })} 
                   />
                 </div>
                 <div className="option-control">
@@ -588,7 +615,11 @@ const OptionsBar: React.FC = () => {
                     value={activeLight.intensity}
                     onChange={(e) => updateLight(activeLight.id, { intensity: parseFloat(e.target.value) })}
                   />
-                  <span className="value-label">{activeLight.intensity.toFixed(1)}</span>
+                  <EditableValue 
+                    value={activeLight.intensity} 
+                    unit="" 
+                    onCommit={(val) => updateLight(activeLight.id, { intensity: val })} 
+                  />
                 </div>
                 <div className="option-control">
                   <label>Radius</label>
@@ -596,8 +627,13 @@ const OptionsBar: React.FC = () => {
                     type="range" min="50" max="5000" step="10"
                     value={activeLight.radius}
                     onChange={(e) => updateLight(activeLight.id, { radius: parseInt(e.target.value) })}
+                    title="Size of the light's illumination area"
                   />
-                  <span className="value-label">{activeLight.radius}px</span>
+                  <EditableValue 
+                    value={activeLight.radius} 
+                    unit="px" 
+                    onCommit={(val) => updateLight(activeLight.id, { radius: val })} 
+                  />
                 </div>
                 <div className="options-divider" />
                 <ColorPicker

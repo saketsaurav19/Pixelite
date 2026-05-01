@@ -57,6 +57,7 @@ const initialState = {
         lights: [],
         isLightingEnabled: false,
         lightingQuality: 'medium' as const,
+        lightingDepthScale: 200,
         workflow: {
           step: 'image' as const,
           status: {
@@ -95,6 +96,7 @@ const initialState = {
   lights: [],
   isLightingEnabled: false,
   lightingQuality: 'medium' as const,
+  lightingDepthScale: 200,
   workflow: {
     step: 'image' as const,
     status: {

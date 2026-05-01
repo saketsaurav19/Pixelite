@@ -1,27 +1,27 @@
-import { getGPUDevice } from './gpuDevice';
 import { lightingShader } from './lightingShader';
 import type { Light } from '../../store/types';
 
 export class LightingRenderer {
-  private device: GPUDevice | null = null;
   private pipeline: GPUComputePipeline | null = null;
+  private currentDevice: GPUDevice | null = null;
 
-  async init() {
-    this.device = await getGPUDevice();
-    const shaderModule = this.device.createShaderModule({
+  async init(device: GPUDevice) {
+    const shaderModule = device.createShaderModule({
       code: lightingShader
     });
 
-    this.pipeline = await this.device.createComputePipelineAsync({
+    this.pipeline = await device.createComputePipelineAsync({
       layout: 'auto',
       compute: {
         module: shaderModule,
         entryPoint: 'main'
       }
     });
+    this.currentDevice = device;
   }
 
   async renderLighting(
+    device: GPUDevice,
     albedoTexture: GPUTexture,
     normalTexture: GPUTexture,
     lights: Light[],
@@ -31,10 +31,12 @@ export class LightingRenderer {
     layerY: number = 0,
     ambientIntensity: number = 0.1,
     ambientColor: string = '#ffffff',
-    depthScale: number = 200.0
+    depthScale: number = 200.0,
+    showLightSource: boolean = true
   ): Promise<GPUTexture> {
-    if (!this.device || !this.pipeline) await this.init();
-    const device = this.device!;
+    if (this.currentDevice !== device || !this.pipeline) {
+      await this.init(device);
+    }
 
     const outputTexture = device.createTexture({
       size: [width, height],
@@ -67,7 +69,7 @@ export class LightingRenderer {
     f32View[8] = rgb.r;
     f32View[9] = rgb.g;
     f32View[10] = rgb.b;
-    f32View[11] = 0; // _pad2
+    f32View[11] = showLightSource ? 1.0 : 0.0; // showLightSource replaces _pad2
 
     device.queue.writeBuffer(paramsBuffer, 0, paramsData);
 

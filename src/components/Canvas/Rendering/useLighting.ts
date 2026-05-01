@@ -17,6 +17,9 @@ export const useLighting = (
   const setActiveLayer = useStore((state) => state.setActiveLayer);
   const setWorkflowStep = useStore((state) => state.setWorkflowStep);
   const setWorkflowStatus = useStore((state) => state.setWorkflowStatus);
+  const ambientColor = useStore((state) => state.ambientColor);
+  const lightingDepthScale = useStore((state) => state.lightingDepthScale);
+  const showLightSource = useStore((state) => state.showLightSource);
   const didLogListenerRef = useRef(false);
 
   const resolveTargetLayerId = useCallback(() => {
@@ -38,37 +41,34 @@ export const useLighting = (
       return;
     }
 
-    const depthLayerName = `${sourceLayer.name} Depth Map`;
-    const existingDepthLayer = state.layers.find((layer) => layer.name === depthLayerName);
+    const depthLayerId = `depth-${layerId}`;
+    const existingDepthLayer = state.layers.find((layer) => layer.id === depthLayerId);
+
     if (existingDepthLayer) {
-      console.log(`[Depth] Updating existing depth layer for ${sourceLayer.name}`);
-      updateLayer(existingDepthLayer.id, {
+      updateLayer(depthLayerId, { dataUrl: depthDataUrl, visible: true });
+    } else {
+      addLayer({
+        id: depthLayerId,
+        name: `Depth Map - ${sourceLayer.name}`,
+        type: 'image',
+        visible: true,
         dataUrl: depthDataUrl,
         position: { ...sourceLayer.position },
-        visible: true,
-        opacity: 1
+        opacity: 1,
+        blendMode: 'normal',
+        locked: true,
       });
-      setActiveLayer(existingDepthLayer.id);
-      return;
     }
-
-    console.log(`[Depth] Creating new depth layer for ${sourceLayer.name}`);
-    addLayer({
-      name: depthLayerName,
-      type: 'image',
-      visible: true,
-      locked: false,
-      opacity: 1,
-      position: { ...sourceLayer.position },
-      blendMode: 'source-over',
-      dataUrl: depthDataUrl
-    });
+    setLayerDepthMap(layerId, depthDataUrl);
   };
 
   const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleRenderLighting = useCallback(async (immediate: boolean = false) => {
-    if (renderTimeoutRef.current) clearTimeout(renderTimeoutRef.current);
+  useEffect(() => {
+    if (!isLightingEnabled) {
+      if (renderTimeoutRef.current) clearTimeout(renderTimeoutRef.current);
+      return;
+    }
 
     const performRender = async () => {
       const targetLayerId = resolveTargetLayerId();
@@ -84,31 +84,22 @@ export const useLighting = (
       setWorkflowStatus('simulation', 'pending');
       setWorkflowStatus('refinement', 'pending');
       setWorkflowStatus('output', 'pending');
-      
+
       window.dispatchEvent(new CustomEvent('lighting-start'));
 
       try {
         const layer = layers.find(l => l.id === targetLayerId);
         const layerPosition = layer?.position || { x: 0, y: 0 };
 
-        // Transform lights to layer-relative coordinates
-        const relativeLights = lights.map(light => ({
-          ...light,
-          position: {
-            x: light.position.x - layerPosition.x,
-            y: light.position.y - layerPosition.y,
-            z: light.position.z
-          }
-        }));
-
         const litDataUrl = await lightManager.render(
           targetLayerId,
           canvas,
-          relativeLights,
-          { x: 0, y: 0 }, // Position is now 0 because lights are relative
+          lights,
+          layerPosition,
           ambientIntensity,
-          useStore.getState().ambientColor || '#ffffff',
-          useStore.getState().lightingDepthScale || 200,
+          ambientColor || '#ffffff',
+          lightingDepthScale || 200,
+          showLightSource ?? true,
           lightingQuality,
           false,
           (step, status) => {
@@ -122,10 +113,10 @@ export const useLighting = (
         setWorkflowStatus('output', 'completed');
 
         // Dispatch the result to Canvas.tsx for rendering the overlay
-        window.dispatchEvent(new CustomEvent('lighting-result', { 
-          detail: { layerId: targetLayerId, dataUrl: litDataUrl } 
+        window.dispatchEvent(new CustomEvent('lighting-result', {
+          detail: { layerId: targetLayerId, dataUrl: litDataUrl }
         }));
-        
+
         console.log('[Lighting] Relighting pipeline complete');
       } catch (error) {
         console.error('[Lighting] Pipeline failed', error);
@@ -135,12 +126,26 @@ export const useLighting = (
       }
     };
 
-    if (immediate) {
-      performRender();
-    } else {
-      renderTimeoutRef.current = setTimeout(performRender, 50); // Small debounce for smoothness
-    }
-  }, [resolveTargetLayerId, canvasRefs, lights, lightingQuality, ambientIntensity, setWorkflowStep, setWorkflowStatus]);
+    if (renderTimeoutRef.current) clearTimeout(renderTimeoutRef.current);
+    renderTimeoutRef.current = setTimeout(performRender, 50); // Small debounce for smoothness
+
+    return () => {
+      if (renderTimeoutRef.current) clearTimeout(renderTimeoutRef.current);
+    };
+  }, [
+    isLightingEnabled,
+    resolveTargetLayerId,
+    canvasRefs,
+    lights,
+    layers,
+    lightingQuality,
+    ambientIntensity,
+    ambientColor,
+    lightingDepthScale,
+    showLightSource,
+    setWorkflowStep,
+    setWorkflowStatus
+  ]);
 
   useEffect(() => {
     const generateDepthMap = async () => {
@@ -181,22 +186,14 @@ export const useLighting = (
       didLogListenerRef.current = true;
     }
 
-    const onRenderLighting = () => handleRenderLighting(true);
+
 
     window.addEventListener('generate-depth-map', generateDepthMap);
-    window.addEventListener('render-lighting', onRenderLighting);
-    
+
     return () => {
       window.removeEventListener('generate-depth-map', generateDepthMap);
-      window.removeEventListener('render-lighting', onRenderLighting);
     };
-  }, [resolveTargetLayerId, canvasRefs, addLayer, updateLayer, setActiveLayer, setLayerDepthMap, handleRenderLighting, setWorkflowStep, setWorkflowStatus]);
+  }, [resolveTargetLayerId, canvasRefs, setLayerDepthMap, setWorkflowStep, setWorkflowStatus]);
 
-  // Auto-render when lights change and lighting is enabled
-  useEffect(() => {
-    if (isLightingEnabled && lights.length > 0) {
-      handleRenderLighting();
-    }
-  }, [lights, isLightingEnabled, lightingQuality, ambientIntensity, handleRenderLighting]);
 };
 
