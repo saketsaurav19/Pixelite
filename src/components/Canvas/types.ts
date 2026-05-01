@@ -77,4 +77,6 @@ export interface CanvasContext {
   isInteracting: boolean;
   activeCropHandle: string | null;
   setActiveCropHandle: (handle: string | null) => void;
+  isLightingEnabled: boolean;
+  setLightingEnabled: (enabled: boolean) => void;
 }

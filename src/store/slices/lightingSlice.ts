@@ -40,7 +40,8 @@ export interface LightingSlice {
   setActiveLightId: (id: string | null) => void;
   lightingDepthScale: number;
   showLightSource: boolean;
-  updateLighting: (updates: Partial<Pick<LightingSlice, 'lightingDepthScale' | 'isLightingEnabled' | 'lightingQuality' | 'ambientIntensity' | 'ambientColor' | 'showLightSource'>>) => void;
+  lastResultUrl: string | null;
+  updateLighting: (updates: Partial<Pick<LightingSlice, 'lightingDepthScale' | 'isLightingEnabled' | 'lightingQuality' | 'ambientIntensity' | 'ambientColor' | 'showLightSource' | 'lastResultUrl'>>) => void;
 }
 
 export const createLightingSlice: StateCreator<EditorState, [], [], LightingSlice> = (set) => ({
@@ -52,6 +53,7 @@ export const createLightingSlice: StateCreator<EditorState, [], [], LightingSlic
   ambientColor: '#ffffff',
   lightingDepthScale: 200,
   showLightSource: true,
+  lastResultUrl: null,
   workflow: {
     step: 'image' as const,
     status: {

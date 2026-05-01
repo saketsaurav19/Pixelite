@@ -97,17 +97,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     
     // Diffuse Calculation (Wrapped lighting for a fuller 360-degree feel)
     var diffuse = 0.0;
-    var omni = 0.0;
     if (light.lightType > 1.5) { // Area Light (Soft/Wrapped)
       diffuse = max(dot(normal, L) * 0.7 + 0.3, 0.0);
     } else {
       // Point/Spot: Use a standard Wrap factor to prevent harsh cutoffs
       diffuse = max(dot(normal, L) * 0.4 + 0.6, 0.0);
-      
-      // If point light (type 0), add an omnidirectional 'glow' that ignores normals
-      if (light.lightType < 0.5) {
-        omni = pow(max(0.0, 1.0 - d), 3.0) * 0.4 * params.showLightSource;
-      }
     }
     let H = normalize(L + V);
     let spec = pow(max(dot(normal, H), 0.0), 32.0);
@@ -137,7 +131,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         specular *= (1.0 - behindFactor);
     }
     
-    totalLighting += light.color * light.intensity * (diffuse + specular + omni + rimBoost) * attenuation;
+    // Combine lighting components
+    // We separate the 'omni' (visual bulb) from the physical lighting (diffuse + specular + rim)
+    let physicalLighting = (diffuse + specular + rimBoost) * attenuation;
+    totalLighting += light.color * light.intensity * physicalLighting;
+    
+    // Add the visual source 'bulb' only if toggled on
+    if (params.showLightSource > 0.5) {
+        let bulb = pow(max(0.0, 1.0 - d), 16.0) * 0.9;
+        totalLighting += light.color * bulb * light.intensity;
+    }
   }
 
   let finalColor = vec4<f32>(albedo.rgb * totalLighting, albedo.a);

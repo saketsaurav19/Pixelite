@@ -3,9 +3,9 @@ import { useStore } from '../../../store/useStore';
 import type { Light } from '../../../store/types';
 
 export const LightingOverlay: React.FC = () => {
-  const { lights, updateLight, activeTool, zoom, recordHistory, isLightingEnabled } = useStore();
+  const { lights, updateLight, activeTool, zoom, recordHistory, isLightingEnabled, showLightSource } = useStore();
 
-  if (activeTool !== 'lighting' && !isLightingEnabled) return null;
+  if ((activeTool !== 'lighting' && !isLightingEnabled) || !showLightSource) return null;
 
   return (
     <div

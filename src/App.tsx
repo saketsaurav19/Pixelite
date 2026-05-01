@@ -81,17 +81,131 @@ const App: React.FC = () => {
     return exportCanvas.toDataURL(format);
   };
 
-  const handleSave = (asNew: boolean = false) => {
-    const dataUrl = getMergedImageData();
-    if (!dataUrl) return;
+  const handleSave = async (asNew: boolean = false) => {
+    // For standard "Save", we default to our high-fidelity editable format (PSD or JSON)
+    const suggestedBase = activeDocumentName || 'pixelite_project';
+    const fileName = asNew ? `${suggestedBase}_copy.psd` : `${suggestedBase}.psd`;
 
-    const filename = asNew ? prompt('Save as...', 'pixelite_project.png') : 'pixelite_project.png';
-    if (!filename) return;
+    // Helper to ensure we have a real canvas for ag-psd
+    const getLayerCanvas = async (layer: any): Promise<HTMLCanvasElement | undefined> => {
+      const el = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+      if (el) return el;
+      if (!layer.dataUrl) return undefined;
 
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          canvas.getContext('2d')?.drawImage(img, 0, 0);
+          resolve(canvas);
+        };
+        img.src = layer.dataUrl;
+      });
+    };
+
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: 'Photoshop Document',
+            accept: { 'application/x-photoshop': ['.psd'] },
+          }],
+        });
+
+        const writable = await handle.createWritable();
+
+        const metadata = {
+          lights: useStore.getState().lights,
+          ambientIntensity: useStore.getState().ambientIntensity,
+          ambientColor: useStore.getState().ambientColor,
+          lightingDepthScale: useStore.getState().lightingDepthScale
+        };
+
+        const children = [];
+        // Add metadata as a hidden layer for persistence
+        children.push({
+          name: '__pixelite_metadata__',
+          canvas: document.createElement('canvas'), // Dummy canvas
+          visible: false,
+          annotations: [{ type: 'text', data: JSON.stringify(metadata) }] // Custom metadata storage
+        } as any);
+
+        for (const layer of [...layers].reverse()) {
+          const canvas = await getLayerCanvas(layer);
+          if (canvas) {
+            children.push({
+              name: layer.name,
+              canvas: canvas,
+              left: layer.position.x,
+              top: layer.position.y,
+              opacity: layer.opacity,
+              visible: layer.visible,
+              blendMode: (layer.blendMode || 'normal') as any
+            });
+          }
+        }
+
+        const buffer = writePsd({
+          width: documentSize.w,
+          height: documentSize.h,
+          children
+        });
+
+        await writable.write(buffer);
+        await writable.close();
+        return;
+      } catch (err) {
+        if ((err as any).name === 'AbortError') return;
+        console.error('Advanced save failed', err);
+      }
+    }
+
+    // Fallback if API not available
+    const metadata = {
+      lights: useStore.getState().lights,
+      ambientIntensity: useStore.getState().ambientIntensity,
+      ambientColor: useStore.getState().ambientColor,
+      lightingDepthScale: useStore.getState().lightingDepthScale
+    };
+
+    const children = [];
+    children.push({
+      name: '__pixelite_metadata__',
+      canvas: document.createElement('canvas'),
+      visible: false,
+      annotations: [{ type: 'text', data: JSON.stringify(metadata) }]
+    } as any);
+
+    for (const layer of [...layers].reverse()) {
+      const canvas = await getLayerCanvas(layer);
+      if (canvas) {
+        children.push({
+          name: layer.name,
+          canvas: canvas,
+          left: layer.position.x,
+          top: layer.position.y,
+          opacity: layer.opacity,
+          visible: layer.visible,
+          blendMode: (layer.blendMode || 'normal') as any
+        });
+      }
+    }
+
+    const buffer = writePsd({
+      width: documentSize.w,
+      height: documentSize.h,
+      children
+    });
+
+    const blob = new Blob([buffer], { type: 'application/x-photoshop' });
     const link = document.createElement('a');
-    link.download = filename;
-    link.href = dataUrl;
+    link.download = fileName;
+    link.href = URL.createObjectURL(blob);
     link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -264,7 +378,7 @@ const App: React.FC = () => {
 
   const handleFile = (file: File | Blob, name?: string, skipResize: boolean = false) => {
     const isOpening = !skipResize;
-    
+
     // 1. Handle Native Project File (.psd)
     if ((file as File).name?.toLowerCase().endsWith('.psd')) {
       const reader = new FileReader();
@@ -276,30 +390,57 @@ const App: React.FC = () => {
           // Try loading as a real PSD first
           const psd = readPsd(result as ArrayBuffer);
           if (psd && psd.children) {
-            const loadedLayers = psd.children.map((child: any) => ({
-              id: nanoid(),
-              name: child.name || 'Layer',
-              visible: child.visible !== false,
-              opacity: child.opacity !== undefined ? child.opacity : 1,
-              blendMode: child.blendMode || 'normal',
-              locked: false,
-              type: 'image' as const,
-              position: { x: child.left || 0, y: child.top || 0 },
-              dataUrl: child.canvas ? child.canvas.toDataURL() : null
-            })).reverse();
+            // Extract lighting metadata if it exists
+            const metadataLayer = psd.children.find((c: any) => c.name === '__pixelite_metadata__');
+            let lightingMetadata: any = {};
+            
+            if (metadataLayer) {
+              const meta = metadataLayer as any;
+              if (meta.annotations && meta.annotations[0]) {
+                try {
+                  lightingMetadata = JSON.parse(meta.annotations[0].data);
+                  console.log('[Lighting] Restored metadata from PSD:', lightingMetadata);
+                } catch (e) {
+                  console.warn('[Lighting] Failed to parse PSD metadata', e);
+                }
+              }
+            }
+
+            const loadedLayers = psd.children
+              .filter((child: any) => child.name !== '__pixelite_metadata__')
+              .map((child: any) => ({
+                id: nanoid(),
+                name: child.name || 'Layer',
+                visible: child.visible !== false,
+                opacity: child.opacity !== undefined ? child.opacity : 1,
+                blendMode: child.blendMode || 'normal',
+                locked: false,
+                type: 'image' as const,
+                position: { x: child.left || 0, y: child.top || 0 },
+                dataUrl: child.canvas ? child.canvas.toDataURL() : null
+              })).reverse();
+
+            const projectState = {
+              layers: loadedLayers,
+              documentSize: { w: psd.width, h: psd.height },
+              ...lightingMetadata, // Restore lights, ambient settings, etc.
+              isLightingEnabled: !!lightingMetadata?.lights?.length
+            };
 
             if (isOpening) {
               addDocument((file as File).name, { w: psd.width, h: psd.height }, {
-                layers: loadedLayers,
-                documentSize: { w: psd.width, h: psd.height },
+                ...projectState,
                 zoom: 1,
                 canvasOffset: { x: 0, y: 0 },
-                history: [{ name: 'Open PSD', state: { layers: loadedLayers, documentSize: { w: psd.width, h: psd.height } } }],
+                history: [{ name: 'Open PSD', state: projectState }],
                 historyIndex: 0
               });
             } else {
               setDocumentSize({ w: psd.width, h: psd.height });
               setLayers(loadedLayers);
+              if (lightingMetadata.lights) {
+                useStore.getState().updateLighting(lightingMetadata);
+              }
               recordHistory(`Import PSD: ${(file as File).name}`);
             }
             return;
@@ -603,7 +744,7 @@ const App: React.FC = () => {
     addDocument();
   };
 
-  const handleExport = (format: string) => {
+  const handleExport = async (format: string) => {
     if (format === 'psd') {
       try {
         const psdData = {
@@ -671,29 +812,86 @@ const App: React.FC = () => {
     const ctx = exportCanvas.getContext('2d');
     if (!ctx) return;
 
-    [...layers].reverse().forEach(layer => {
-      if (!layer.visible) return;
-      const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-      if (layerCanvas) {
-        ctx.globalAlpha = layer.opacity || 1;
-        ctx.globalCompositeOperation = (layer.blendMode || 'source-over') as any;
-        ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
+    // Helper to load image from data URL
+    const loadImage = (url: string): Promise<HTMLImageElement> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = url;
+      });
+    };
+
+    // Draw layers from bottom to top
+    const layerList = [...layers].reverse();
+    for (const layer of layerList) {
+      if (!layer.visible) continue;
+
+      const isLit = useStore.getState().isLightingEnabled && layer.id === useStore.getState().activeLayerId;
+      const lastResultUrl = useStore.getState().lastResultUrl;
+
+      ctx.globalAlpha = layer.opacity || 1;
+      ctx.globalCompositeOperation = (layer.blendMode || 'source-over') as any;
+
+      if (isLit && lastResultUrl) {
+        const litImg = await loadImage(lastResultUrl);
+        ctx.drawImage(litImg, layer.position.x, layer.position.y);
+      } else {
+        const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+        if (layerCanvas) {
+          ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
+        }
       }
-    });
+    }
 
     let mimeType = 'image/png';
-    switch (format) {
-      case 'jpg': mimeType = 'image/jpeg'; break;
+    let extension = format.toLowerCase();
+    switch (format.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        mimeType = 'image/jpeg';
+        extension = 'jpg';
+        break;
       case 'webp': mimeType = 'image/webp'; break;
       case 'bmp': mimeType = 'image/bmp'; break;
       case 'gif': mimeType = 'image/gif'; break;
-      default: mimeType = 'image/png';
+      default:
+        mimeType = 'image/png';
+        extension = 'png';
     }
 
+    const baseName = activeDocumentName ? activeDocumentName.replace(/\.[^/.]+$/, "") : 'pixelite_export';
+    const fileName = `${baseName}.${extension}`;
+
+    // Try to use the modern File System Access API to force a "Save As" dialog
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: `${extension.toUpperCase()} Image`,
+            accept: { [mimeType]: [`.${extension}`] },
+          }],
+        });
+
+        const writable = await handle.createWritable();
+        const blob = await (await fetch(exportCanvas.toDataURL(mimeType, 0.9))).blob();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (err) {
+        // User cancelled or error, fallback to standard download
+        if ((err as any).name === 'AbortError') return;
+        console.warn('File System Access API failed, falling back to standard download', err);
+      }
+    }
+
+    // Fallback: Standard <a> link download
     const link = document.createElement('a');
-    link.download = `pixelite_export.${format}`;
-    link.href = exportCanvas.toDataURL(mimeType);
+    link.download = fileName;
+    link.href = exportCanvas.toDataURL(mimeType, 0.9);
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   const handleOpenURL = () => {
@@ -1141,7 +1339,7 @@ const App: React.FC = () => {
                   <div key={light.id} className={`layer-row light-row ${activeLightId === light.id ? 'active' : ''}`} onClick={() => useStore.getState().setActiveLightId(light.id)}>
                     <LucideIcons.Sun size={12} style={{ marginRight: '8px', color: light.color, filter: `drop-shadow(0 0 2px ${light.color})` }} />
                     <span className="light-name" style={{ flex: 1 }}>{light.name || `Light ${i + 1}`}</span>
-                    <button 
+                    <button
                       className="layer-action-btn"
                       title="Delete Light"
                       onClick={() => {
@@ -1226,7 +1424,7 @@ const App: React.FC = () => {
           onSave={async (provider, filename) => {
             const dataUrl = getMergedImageData();
             if (!dataUrl) return;
-            
+
             try {
               if (provider === 'google_drive') {
                 // In a real app, you'd handle OAuth here. 
@@ -1259,7 +1457,7 @@ const App: React.FC = () => {
           onUpload={async (service) => {
             const dataUrl = getMergedImageData();
             if (!dataUrl) throw new Error('No image data');
-            
+
             if (service === 'imgur') {
               return await uploadToImgur(dataUrl);
             } else if (service === 'imagebb') {

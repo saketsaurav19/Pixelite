@@ -27,7 +27,14 @@ export const startAction = (
     hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>;
   }
 ) => {
-  const { coords, activeTool, canvasOffset, lassoPaths, primaryOpacity } = context;
+  const { coords, activeTool, canvasOffset, lassoPaths, primaryOpacity, isLightingEnabled, setLightingEnabled } = context;
+
+  if (activeTool === 'lighting') {
+    if (!isLightingEnabled) {
+      if (setLightingEnabled) setLightingEnabled(true);
+      window.dispatchEvent(new CustomEvent('generate-depth-map'));
+    }
+  }
 
   const isAltPressedLocal = (e as any).altKey || context.isAlt;
   const isCtrlPressedLocal = (e as any).ctrlKey || (e as any).metaKey || context.isCtrl;

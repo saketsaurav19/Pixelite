@@ -117,6 +117,9 @@ export const useLighting = (
           detail: { layerId: targetLayerId, dataUrl: litDataUrl }
         }));
 
+        // Also save to store for the 'Apply' button
+        useStore.getState().updateLighting({ lastResultUrl: litDataUrl });
+
         console.log('[Lighting] Relighting pipeline complete');
       } catch (error) {
         console.error('[Lighting] Pipeline failed', error);

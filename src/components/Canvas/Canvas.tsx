@@ -287,6 +287,8 @@ const Canvas: React.FC = () => {
       isCtrl: (e as any).ctrlKey || (e as any).metaKey || false,
       activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
       activeLayerId, layers,
+      setLightingEnabled: store.setLightingEnabled,
+      isLightingEnabled,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
       selectionContiguous: store.selectionContiguous,

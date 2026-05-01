@@ -95,13 +95,12 @@ const OptionsBar: React.FC = () => {
     moveShowTransform, setMoveShowTransform,
     textFontFamily, setTextFontFamily,
     textAlign, setTextAlign,
-    isLightingEnabled, setLightingEnabled,
     lights, updateLight, removeLight, addLight,
     activeLightId, setActiveLightId,
     ambientIntensity, setAmbientIntensity,
     ambientColor, setAmbientColor,
-    lightingDepthScale, updateLighting,
-    documentSize, setActiveLayer, layers
+    lightingDepthScale, showLightSource, updateLighting,
+    documentSize
   } = useStore();
 
   const handleDeselect = () => {
@@ -441,44 +440,6 @@ const OptionsBar: React.FC = () => {
 
       {activeTool === 'lighting' && (
         <>
-          <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label className="switch-label">Preview Lighting</label>
-            <input
-              type="checkbox"
-              checked={isLightingEnabled}
-              onChange={(e) => setLightingEnabled(e.target.checked)}
-            />
-          </div>
-          <div className="options-divider" />
-          <div className="option-control">
-            <button
-              className="premium-btn-sm"
-              title="Step 1: Analyze image geometry"
-              onClick={() => {
-                const fallbackLayer = layers.find((layer) => layer.visible !== false);
-                const targetLayerId = activeLayerId ?? fallbackLayer?.id ?? null;
-                if (!targetLayerId) return;
-                if (!activeLayerId && fallbackLayer) setActiveLayer(fallbackLayer.id);
-                window.dispatchEvent(new CustomEvent('generate-depth-map'));
-              }}
-              style={{ background: '#4b7bec', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 12px', fontWeight: 'bold' }}
-            >
-              <LucideIcons.Scan size={14} style={{ marginRight: '6px' }} />
-              ANALYZE DEPTH
-            </button>
-            <button
-              className="premium-btn-sm"
-              title="Step 2: Apply professional lighting simulation"
-              onClick={() => {
-                setLightingEnabled(true);
-                window.dispatchEvent(new CustomEvent('render-lighting'));
-              }}
-              style={{ background: '#eb3b5a', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 12px', fontWeight: 'bold', marginLeft: '8px' }}
-            >
-              <LucideIcons.Sparkles size={14} style={{ marginRight: '6px' }} />
-              MAGIC RELIGHT
-            </button>
-          </div>
           <div className="options-divider" />
 
           <div className="option-control">
@@ -530,7 +491,7 @@ const OptionsBar: React.FC = () => {
             <input
               id="show-source-toggle"
               type="checkbox"
-              checked={useStore.getState().showLightSource ?? true}
+              checked={showLightSource ?? true}
               onChange={(e) => updateLighting({ showLightSource: e.target.checked })}
               style={{ cursor: 'pointer' }}
             />
@@ -602,10 +563,10 @@ const OptionsBar: React.FC = () => {
                     onChange={(e) => updateLight(activeLight.id, { distance: parseInt(e.target.value) })}
                     title="Adjust light depth from behind to front of subject"
                   />
-                  <EditableValue 
-                    value={activeLight.distance ?? 500} 
-                    unit="" 
-                    onCommit={(val) => updateLight(activeLight.id, { distance: val })} 
+                  <EditableValue
+                    value={activeLight.distance ?? 500}
+                    unit=""
+                    onCommit={(val) => updateLight(activeLight.id, { distance: val })}
                   />
                 </div>
                 <div className="option-control">
@@ -615,10 +576,10 @@ const OptionsBar: React.FC = () => {
                     value={activeLight.intensity}
                     onChange={(e) => updateLight(activeLight.id, { intensity: parseFloat(e.target.value) })}
                   />
-                  <EditableValue 
-                    value={activeLight.intensity} 
-                    unit="" 
-                    onCommit={(val) => updateLight(activeLight.id, { intensity: val })} 
+                  <EditableValue
+                    value={activeLight.intensity}
+                    unit=""
+                    onCommit={(val) => updateLight(activeLight.id, { intensity: val })}
                   />
                 </div>
                 <div className="option-control">
@@ -629,10 +590,10 @@ const OptionsBar: React.FC = () => {
                     onChange={(e) => updateLight(activeLight.id, { radius: parseInt(e.target.value) })}
                     title="Size of the light's illumination area"
                   />
-                  <EditableValue 
-                    value={activeLight.radius} 
-                    unit="px" 
-                    onCommit={(val) => updateLight(activeLight.id, { radius: val })} 
+                  <EditableValue
+                    value={activeLight.radius}
+                    unit="px"
+                    onCommit={(val) => updateLight(activeLight.id, { radius: val })}
                   />
                 </div>
                 <div className="options-divider" />
