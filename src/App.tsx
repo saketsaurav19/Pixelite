@@ -96,6 +96,11 @@ const App: React.FC = () => {
       const isCtrl = e.ctrlKey || e.metaKey;
 
       // File operations
+      // New Document
+      if (isCtrl && e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNew();
+      }
       if (isCtrl && e.key === 'o') {
         e.preventDefault();
         document.getElementById('global-file-input')?.click();
@@ -922,8 +927,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-      // New Document
-      if (isCtrl && e.altKey && e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        handleNew();
-      }
