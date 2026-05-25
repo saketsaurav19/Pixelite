@@ -386,6 +386,207 @@ const App: React.FC = () => {
     };
   }, [layers, documentSize, addLayer, recordHistory, setDocumentSize]);
 
+  const setClipboardDataUrl = useStore(state => state.setClipboardDataUrl);
+  const clipboardDataUrl = useStore(state => state.clipboardDataUrl);
+
+  const handleCopy = () => {
+    if (!activeLayerId) return;
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    const { selectionRect, lassoPaths, isInverseSelection } = useStore.getState();
+
+    let tempCanvas = document.createElement('canvas');
+    let tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    // If there is no selection, just copy the whole layer
+    if (!selectionRect && lassoPaths.length === 0) {
+        setClipboardDataUrl(canvas.toDataURL());
+        return;
+    }
+
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+
+    tempCtx.save();
+    tempCtx.beginPath();
+    let hasClip = false;
+
+    if (selectionRect) {
+      tempCtx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+      hasClip = true;
+    } else if (lassoPaths.length > 0) {
+      lassoPaths.forEach(path => {
+        if (path.length > 0) {
+          tempCtx.moveTo(path[0].x, path[0].y);
+          for (let i = 1; i < path.length; i++) {
+            tempCtx.lineTo(path[i].x, path[i].y);
+          }
+        }
+      });
+      hasClip = true;
+    }
+
+    if (hasClip) {
+        if (isInverseSelection) {
+            let outerCanvas = document.createElement('canvas');
+            let outerCtx = outerCanvas.getContext('2d');
+            if(outerCtx) {
+                outerCanvas.width = canvas.width;
+                outerCanvas.height = canvas.height;
+                outerCtx.rect(0, 0, canvas.width, canvas.height);
+                outerCtx.clip();
+                outerCtx.beginPath();
+                if (selectionRect) {
+                  outerCtx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+                } else if (lassoPaths.length > 0) {
+                  lassoPaths.forEach(path => {
+                    if (path.length > 0) {
+                      outerCtx.moveTo(path[0].x, path[0].y);
+                      for (let i = 1; i < path.length; i++) {
+                        outerCtx.lineTo(path[i].x, path[i].y);
+                      }
+                    }
+                  });
+                }
+                outerCtx.clip();
+
+                let reverseCanvas = document.createElement('canvas');
+                let reverseCtx = reverseCanvas.getContext('2d');
+                if(reverseCtx) {
+                    reverseCanvas.width = canvas.width;
+                    reverseCanvas.height = canvas.height;
+                    reverseCtx.drawImage(canvas, 0, 0);
+                    reverseCtx.globalCompositeOperation = 'destination-out';
+                    reverseCtx.drawImage(outerCanvas, 0, 0);
+                    tempCtx.drawImage(reverseCanvas, 0, 0);
+                }
+            }
+        } else {
+            tempCtx.clip();
+            tempCtx.drawImage(canvas, 0, 0);
+        }
+    } else {
+         tempCtx.drawImage(canvas, 0, 0);
+    }
+
+    tempCtx.restore();
+
+    // Now find the bounding box to crop the copied image
+    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const data = imageData.data;
+    let hasVisiblePixels = false;
+
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        const index = (y * canvas.width + x) * 4;
+        if (data[index + 3] > 0) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+          hasVisiblePixels = true;
+        }
+      }
+    }
+
+    if (hasVisiblePixels) {
+        let finalCanvas = document.createElement('canvas');
+        let finalCtx = finalCanvas.getContext('2d');
+        if (finalCtx) {
+            finalCanvas.width = maxX - minX + 1;
+            finalCanvas.height = maxY - minY + 1;
+            finalCtx.putImageData(tempCtx.getImageData(minX, minY, finalCanvas.width, finalCanvas.height), 0, 0);
+            setClipboardDataUrl(finalCanvas.toDataURL());
+        }
+    }
+  };
+
+  const handleClear = () => {
+    if (!activeLayerId) return;
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    const { selectionRect, lassoPaths, isInverseSelection } = useStore.getState();
+
+    ctx.save();
+    ctx.beginPath();
+    let hasClip = false;
+
+    if (selectionRect) {
+      ctx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+      hasClip = true;
+    } else if (lassoPaths.length > 0) {
+      lassoPaths.forEach(path => {
+        if (path.length > 0) {
+          ctx.moveTo(path[0].x, path[0].y);
+          for (let i = 1; i < path.length; i++) {
+            ctx.lineTo(path[i].x, path[i].y);
+          }
+        }
+      });
+      hasClip = true;
+    }
+
+    if (hasClip) {
+        if (!isInverseSelection) {
+            ctx.clip();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else {
+             // to clear inverse, we clear everything EXCEPT the clip.
+             // a simple way is globalCompositeOperation
+             let tempCanvas = document.createElement('canvas');
+             let tempCtx = tempCanvas.getContext('2d');
+             if(tempCtx) {
+                 tempCanvas.width = canvas.width;
+                 tempCanvas.height = canvas.height;
+                 tempCtx.drawImage(canvas, 0, 0);
+                 tempCtx.globalCompositeOperation = 'destination-out';
+                 tempCtx.beginPath();
+                 if (selectionRect) {
+                     tempCtx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+                 } else if (lassoPaths.length > 0) {
+                     lassoPaths.forEach(path => {
+                        if (path.length > 0) {
+                          tempCtx.moveTo(path[0].x, path[0].y);
+                          for (let i = 1; i < path.length; i++) {
+                            tempCtx.lineTo(path[i].x, path[i].y);
+                          }
+                        }
+                      });
+                 }
+                 tempCtx.fill();
+
+                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                 ctx.drawImage(tempCanvas, 0, 0);
+             }
+        }
+    } else {
+         ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    ctx.restore();
+    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+    recordHistory('Clear');
+  };
+
+  const handleCut = () => {
+      handleCopy();
+      handleClear();
+      recordHistory('Cut');
+  };
+
+  const handlePasteApp = () => {
+      if (clipboardDataUrl) {
+          addLayer({ dataUrl: clipboardDataUrl, position: { x: documentSize.w/2, y: documentSize.h/2 }});
+          recordHistory('Paste');
+      }
+  };
+
   const handleInvert = () => {
     if (!activeLayerId) return;
     const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
@@ -698,20 +899,104 @@ const App: React.FC = () => {
 
             </div>
           </div>
-          <div className={`menu-item-container ${activeMobileSubmenu === 'edit' ? 'active' : ''}`}
+                    <div className={`menu-item-container ${activeMobileSubmenu === 'edit' ? 'active' : ''}`}
             onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'edit' ? null : 'edit')}>
             <span>Edit</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); undo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex <= 0 ? 0.5 : 1 }}>
-                <span>Undo</span> <span className="shortcut">Ctrl+Z</span>
+
+              {/* Undo / Redo - As placeholder since user wanted it but logic isn't easily toggleable without confusing existing undo/redo */}
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Undo / Redo</span>
               </div>
+
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); redo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>
-                <span>Redo</span> <span className="shortcut">Ctrl+Y</span>
+                <span>Step Forward</span> <span className="shortcut">Shift+Ctrl+Z</span>
               </div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); undo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex <= 0 ? 0.5 : 1 }}>
+                <span>Step Backward</span> <span className="shortcut">Ctrl+Z</span>
+              </div>
+
               <div className="menu-divider" />
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Cut</span> <span className="shortcut">Ctrl+X</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy</span> <span className="shortcut">Ctrl+C</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Paste</span> <span className="shortcut">Ctrl+V</span></div>
+
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Fade...</span> <span className="shortcut">Shift+Ctrl+F</span>
+              </div>
+
+              <div className="menu-divider" />
+
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleCut(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Cut</span> <span className="shortcut">Ctrl+X</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleCopy(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy</span> <span className="shortcut">Ctrl+C</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy Merged</span> <span className="shortcut">Shift+Ctrl+C</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handlePasteApp(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Paste</span> <span className="shortcut">Ctrl+V</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleClear(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Clear</span> <span className="shortcut">Delete</span></div>
+
+              <div className="menu-divider" />
+
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Fill...</span> <span className="shortcut">Shift+F5</span>
+              </div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Stroke...</span>
+              </div>
+
+              <div className="menu-divider" />
+
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Content-Aware Scale</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Puppet Warp</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Perspective Warp</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Free Transform</span> <span className="shortcut">Alt+Ctrl+T</span></div>
+
+              <div className="menu-option submenu-parent">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Transform</span>
+                <LucideIcons.ChevronRight size={12} />
+                <div className="menu-submenu">
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                    <span>Placeholder</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Align</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Blend</span></div>
+
+              <div className="menu-divider" />
+
+              <div className="menu-option submenu-parent">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Assign Profile</span>
+                <LucideIcons.ChevronRight size={12} />
+                <div className="menu-submenu">
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                    <span>Placeholder</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="menu-option submenu-parent">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Convert to Profile</span>
+                <LucideIcons.ChevronRight size={12} />
+                <div className="menu-submenu">
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                    <span>Placeholder</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="menu-divider" />
+
+              <div className="menu-option submenu-parent">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Define New</span>
+                <LucideIcons.ChevronRight size={12} />
+                <div className="menu-submenu">
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                    <span>Placeholder</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preset Manager...</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preferences...</span> <span className="shortcut">Ctrl+K</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Local Storage...</span></div>
+
             </div>
           </div>
           <div className={`menu-item-container ${activeMobileSubmenu === 'image' ? 'active' : ''}`}
