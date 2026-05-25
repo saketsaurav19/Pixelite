@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Point } from '../types';
 import { stopOverlayEvent } from '../Core/eventUtils';
+import { toolState } from '../../../tools/toolState';
 
 interface PerspectiveCropOverlayProps {
   lassoPaths: Point[][];
@@ -27,9 +28,9 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
     stopOverlayEvent(e);
     const c = getCoordinates(e.clientX, e.clientY);
     if (!c) return;
-    (window as any)._pcDragIdx = 8; // Move whole quad
-    (window as any)._pcStartPoint = { ...c };
-    (window as any)._pcOrigPoints = p.map(point => ({ ...point }));
+    toolState._pcDragIdx = 8; // Move whole quad
+    toolState._pcStartPoint = { ...c };
+    toolState._pcOrigPoints = p.map(point => ({ ...point }));
     setIsInteracting(true);
     lastPointRef.current = c;
   };
@@ -99,7 +100,7 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
               stopOverlayEvent(e);
               const c = getCoordinates(e.clientX, e.clientY);
               if (c) lastPointRef.current = c;
-              (window as any)._pcDragIdx = i;
+              toolState._pcDragIdx = i;
               setIsInteracting(true);
             }}
           />
@@ -121,9 +122,9 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
               stopOverlayEvent(e);
               const c = getCoordinates(e.clientX, e.clientY);
               if (c) lastPointRef.current = c;
-              (window as any)._pcDragIdx = i + 4; // Midpoint indices are 4-7
-              (window as any)._pcStartPoint = { ...c };
-              (window as any)._pcOrigPoints = p.map(pt => ({ ...pt }));
+              toolState._pcDragIdx = i + 4; // Midpoint indices are 4-7
+              toolState._pcStartPoint = { ...c };
+              toolState._pcOrigPoints = p.map(pt => ({ ...pt }));
               setIsInteracting(true);
             }}
           />
@@ -143,7 +144,7 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button onClick={handleDoubleClick} style={{ background: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}>✓</button>
-        <button onClick={() => { delete (window as any)._pcPoints; setLassoPaths([]); setIsInteracting(false); }} style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}>✕</button>
+        <button onClick={() => { delete toolState._pcPoints; setLassoPaths([]); setIsInteracting(false); }} style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}>✕</button>
       </div>
     </>
   );

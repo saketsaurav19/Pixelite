@@ -1,6 +1,7 @@
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from './store/useStore';
+import { toolState } from './tools/toolState';
 import { hexToRgba } from './utils/canvasUtils';
 import Canvas from './components/Canvas/Canvas';
 import Toolbar from './components/Toolbar/Toolbar';
@@ -206,12 +207,12 @@ const App: React.FC = () => {
             removeLayer(activeLayerId);
             recordHistory('Delete Layer');
           }
-        } else if (activeTool === 'slice_select' && (window as any)._sliceLastClickedIdx !== undefined) {
-          const idx = (window as any)._sliceLastClickedIdx;
+        } else if (activeTool === 'slice_select' && toolState._sliceLastClickedIdx !== undefined) {
+          const idx = toolState._sliceLastClickedIdx;
           const { slices, setSlices } = useStore.getState();
           const nextSlices = slices.filter((_, i) => i !== idx);
           setSlices(nextSlices);
-          delete (window as any)._sliceLastClickedIdx;
+          delete toolState._sliceLastClickedIdx;
           recordHistory('Delete Slice');
         } else {
           window.dispatchEvent(new CustomEvent('delete-selection'));
