@@ -796,13 +796,13 @@ const App: React.FC = () => {
             onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'file' ? null : 'file')}>
             <span>File</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleNew(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleNew(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>New...</span> <span className="shortcut">Alt+Ctrl+N</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); document.getElementById('global-file-input')?.click(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); document.getElementById('global-file-input')?.click(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Open...</span> <span className="shortcut">Ctrl+O</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); document.getElementById('global-file-input')?.click(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); document.getElementById('global-file-input')?.click(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Open & Place...</span>
               </div>
 
@@ -810,7 +810,7 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Open More</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
@@ -822,7 +822,7 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Share</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
@@ -830,10 +830,10 @@ const App: React.FC = () => {
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleSave(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleSave(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Save</span> <span className="shortcut">Ctrl+S</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleSavePSD(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleSavePSD(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Save as PSD</span>
               </div>
 
@@ -841,7 +841,7 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Save More</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
@@ -851,34 +851,34 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Export as</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>PNG</span>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                    <span>PNG (Placeholder)</span>
                   </div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>JPG</span>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                    <span>JPG (Placeholder)</span>
                   </div>
                 </div>
               </div>
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); window.print(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.print(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Print...</span> <span className="shortcut">Ctrl+P</span>
               </div>
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Export Layers...</span>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Export Layers... (Placeholder)</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Export Color Lookup...</span>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Export Color Lookup... (Placeholder)</span>
               </div>
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>File Info...</span>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>File Info... (Placeholder)</span>
               </div>
 
               <div className="menu-divider" />
@@ -887,14 +887,14 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Automate</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
               </div>
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Script...</span>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Script... (Placeholder)</span>
               </div>
 
             </div>
@@ -904,60 +904,57 @@ const App: React.FC = () => {
             <span>Edit</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
 
-              {/* Undo / Redo - As placeholder since user wanted it but logic isn't easily toggleable without confusing existing undo/redo */}
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Undo / Redo</span>
-              </div>
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); redo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>
-                <span>Step Forward</span> <span className="shortcut">Shift+Ctrl+Z</span>
+
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); redo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>
+                <span>Redo</span> <span className="shortcut">Shift+Ctrl+Z</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); undo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex <= 0 ? 0.5 : 1 }}>
-                <span>Step Backward</span> <span className="shortcut">Ctrl+Z</span>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); undo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex <= 0 ? 0.5 : 1 }}>
+                <span>Undo</span> <span className="shortcut">Ctrl+Z</span>
               </div>
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Fade...</span> <span className="shortcut">Shift+Ctrl+F</span>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Fade... (Placeholder)</span> <span className="shortcut">Shift+Ctrl+F</span>
               </div>
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleCut(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Cut</span> <span className="shortcut">Ctrl+X</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleCopy(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy</span> <span className="shortcut">Ctrl+C</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy Merged</span> <span className="shortcut">Shift+Ctrl+C</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handlePasteApp(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Paste</span> <span className="shortcut">Ctrl+V</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleClear(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Clear</span> <span className="shortcut">Delete</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleCut(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Cut</span> <span className="shortcut">Ctrl+X</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleCopy(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy</span> <span className="shortcut">Ctrl+C</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy Merged (Placeholder)</span> <span className="shortcut">Shift+Ctrl+C</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePasteApp(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Paste</span> <span className="shortcut">Ctrl+V</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleClear(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Clear</span> <span className="shortcut">Delete</span></div>
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Fill...</span> <span className="shortcut">Shift+F5</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Stroke...</span>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                <span>Stroke... (Placeholder)</span>
               </div>
 
               <div className="menu-divider" />
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Content-Aware Scale</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Puppet Warp</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Perspective Warp</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Free Transform</span> <span className="shortcut">Alt+Ctrl+T</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Content-Aware Scale (Placeholder)</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Puppet Warp (Placeholder)</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Perspective Warp (Placeholder)</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Free Transform (Placeholder)</span> <span className="shortcut">Alt+Ctrl+T</span></div>
 
               <div className="menu-option submenu-parent">
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Transform</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
               </div>
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Align</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Blend</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Align (Placeholder)</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Blend (Placeholder)</span></div>
 
               <div className="menu-divider" />
 
@@ -965,7 +962,7 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Assign Profile</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
@@ -975,7 +972,7 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Convert to Profile</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
@@ -987,15 +984,15 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Define New</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Placeholder</span>
                   </div>
                 </div>
               </div>
 
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preset Manager...</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preferences...</span> <span className="shortcut">Ctrl+K</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Local Storage...</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preset Manager... (Placeholder)</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preferences... (Placeholder)</span> <span className="shortcut">Ctrl+K</span></div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Local Storage... (Placeholder)</span></div>
 
             </div>
           </div>
@@ -1007,7 +1004,7 @@ const App: React.FC = () => {
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Adjustments</span>
                 <LucideIcons.ChevronRight size={12} />
                 <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleInvert(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleInvert(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                     <span>Invert</span> <span className="shortcut">Ctrl+I</span>
                   </div>
                 </div>
@@ -1018,14 +1015,14 @@ const App: React.FC = () => {
             onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'layer' ? null : 'layer')}>
             <span>Layer</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Fill Layer...</span>
               </div>
               <div className="menu-divider" />
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); activeLayerId && duplicateLayer(activeLayerId); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); activeLayerId && duplicateLayer(activeLayerId); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Duplicate Layer</span> <span className="shortcut">Ctrl+J</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); activeLayerId && removeLayer(activeLayerId); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); activeLayerId && removeLayer(activeLayerId); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Delete Layer</span> <span className="shortcut">Del</span>
               </div>
             </div>
@@ -1034,16 +1031,16 @@ const App: React.FC = () => {
             onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'select' ? null : 'select')}>
             <span>Select</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleSelectSubject(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleSelectSubject(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Select Subject</span> <span className="shortcut">Ctrl+Alt+S</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleRemoveBackground(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleRemoveBackground(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Remove Bg</span>
               </div>
               <div className="menu-divider" />
               <div className="menu-option"><span>All</span> <span className="shortcut">Ctrl+A</span></div>
               <div className="menu-option"><span>Deselect</span> <span className="shortcut">Ctrl+D</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); inverseSelection(); recordHistory('Inverse Selection'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); inverseSelection(); recordHistory('Inverse Selection'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Inverse Selection</span> <span className="shortcut">Shift+Ctrl+I</span>
               </div>
             </div>
