@@ -113,6 +113,7 @@ export interface EditorState {
   layers: Layer[];
   activeLayerId: string | null;
 
+  clipboardDataUrl: string | null;
   // Document State
   zoom: number;
   canvasOffset: { x: number; y: number };
