@@ -7,6 +7,7 @@ import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
+import { writePsdUint8Array } from "ag-psd";
 import { removeBackground } from '@imgly/background-removal';
 import './App.css';
 
@@ -42,6 +43,87 @@ const App: React.FC = () => {
     setIsTyping,
     setLayers
   } = useStore();
+
+  const handleSavePSD = (asNew: boolean = false) => {
+    const { w, h } = documentSize;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const psdChildren: any[] = [];
+    // PSD layers are stored from bottom to top in ag-psd typically, but let's reverse to match display order if needed.
+    // In ag-psd, children array is top-to-bottom or bottom-to-top depending on version, let's test the standard canvas order.
+    // we will match the order in useStore which is bottom-to-top, let's keep it as is, or we might need to reverse.
+    // Actually, PS layers are typically top-to-bottom in UI, ag-psd children[0] is the top-most layer.
+    // Let's map `layers` (where index 0 is bottom) to `psdChildren` (where index 0 is top).
+
+    [...layers].reverse().forEach(layer => {
+      const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+      if (layerCanvas) {
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const ctx = tempCanvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
+        }
+
+        // Map canvas blend mode to PSD blend mode
+        let psdBlendMode = "normal";
+        const blendMap: Record<string, string> = {
+          "source-over": "normal",
+          "multiply": "multiply",
+          "screen": "screen",
+          "overlay": "overlay",
+          "darken": "darken",
+          "lighten": "lighten",
+          "color-dodge": "color dodge",
+          "color-burn": "color burn",
+          "hard-light": "hard light",
+          "soft-light": "soft light",
+          "difference": "difference",
+          "exclusion": "exclusion",
+          "hue": "hue",
+          "saturation": "saturation",
+          "color": "color",
+          "luminosity": "luminosity"
+        };
+        if (layer.blendMode && blendMap[layer.blendMode]) {
+          psdBlendMode = blendMap[layer.blendMode];
+        }
+
+        psdChildren.push({
+          name: layer.name,
+          opacity: Math.round((layer.opacity !== undefined ? layer.opacity : 1) * 255),
+          hidden: !layer.visible,
+          blendMode: psdBlendMode,
+          canvas: tempCanvas
+        });
+      }
+    });
+
+    const psd = {
+      width: w,
+      height: h,
+      children: psdChildren
+    };
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const buffer = writePsdUint8Array(psd as any);
+      const blob = new Blob([buffer as any], { type: "application/octet-stream" });
+
+      const filename = asNew ? prompt("Save as...", "photoshop_clone_project.psd") : "photoshop_clone_project.psd";
+      if (!filename) return;
+
+      const link = document.createElement("a");
+      link.download = filename;
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (e) {
+      console.error("Error saving PSD:", e);
+      alert("Failed to save PSD file.");
+    }
+  };
 
   const handleSave = (asNew: boolean = false) => {
     const { w, h } = documentSize;
@@ -549,7 +631,7 @@ const App: React.FC = () => {
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleSave(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Save</span> <span className="shortcut">Ctrl+S</span>
               </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleSave(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); handleSavePSD(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
                 <span>Save as PSD</span>
               </div>
 
