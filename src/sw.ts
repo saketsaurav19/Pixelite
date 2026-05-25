@@ -45,7 +45,11 @@ self.addEventListener("message", (ev) => {
             .unregister()
             .then(() => self.clients.matchAll())
             .then(clients => {
-                clients.forEach((client) => client.navigate(client.url));
+                clients.forEach((client) => {
+                    if (client.type === 'window') {
+                        (client as WindowClient).navigate(client.url);
+                    }
+                });
             });
     } else if (ev.data.type === "coepCredentialless") {
         coepCredentialless = ev.data.value;
