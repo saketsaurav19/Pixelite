@@ -1,5 +1,6 @@
 import type { ToolModule } from '../types';
 import { warpPerspective } from '../../utils/canvasUtils';
+import { toolState } from '../toolState';
 
 export const transformTools: ToolModule[] = [
   {
@@ -104,11 +105,11 @@ export const transformTools: ToolModule[] = [
       
       // If lassoPaths is empty (e.g. after Undo), clear internal state
       if (!lassoPaths || lassoPaths.length === 0 || lassoPaths[0].length !== 4) {
-        delete (window as any)._pcPoints;
-        delete (window as any)._pcDragIdx;
+        delete toolState._pcPoints;
+        delete toolState._pcDragIdx;
       }
 
-      const points = (window as any)._pcPoints;
+      const points = toolState._pcPoints;
       if (points && points.length === 4) {
         // Check corners first (0-3)
         let dragIdx = points.findIndex((p: any) => Math.hypot(p.x - coords.x, p.y - coords.y) < threshold);
@@ -141,33 +142,33 @@ export const transformTools: ToolModule[] = [
         }
 
         if (dragIdx !== -1) {
-          (window as any)._pcDragIdx = dragIdx;
-          (window as any)._pcStartPoint = { ...coords };
-          (window as any)._pcOrigPoints = JSON.parse(JSON.stringify(points));
+          toolState._pcDragIdx = dragIdx;
+          toolState._pcStartPoint = { ...coords };
+          toolState._pcOrigPoints = JSON.parse(JSON.stringify(points));
           setIsInteracting(true);
           return;
         }
       }
       
       // Prepare for a potential new quad (but wait for move)
-      (window as any)._pcPendingCoords = { ...coords };
+      toolState._pcPendingCoords = { ...coords };
       setIsInteracting(true);
     },
     move: ({ coords, setLassoPaths, zoom }) => {
-      let points = (window as any)._pcPoints;
-      let dragIdx = (window as any)._pcDragIdx;
+      let points = toolState._pcPoints;
+      let dragIdx = toolState._pcDragIdx;
       
       // Check if we need to start a new quad (min movement 5px)
-      if (dragIdx === undefined && (window as any)._pcPendingCoords) {
-        const start = (window as any)._pcPendingCoords;
+      if (dragIdx === undefined && toolState._pcPendingCoords) {
+        const start = toolState._pcPendingCoords;
         const dist = Math.hypot(coords.x - start.x, coords.y - start.y);
         if (dist > 5 / (zoom || 1)) {
-          (window as any)._pcPoints = [ { ...start }, { ...start }, { ...start }, { ...start } ];
-          (window as any)._pcDragIdx = 2; // Bottom right
-          (window as any)._pcIsInitialDrag = true;
-          delete (window as any)._pcPendingCoords;
+          toolState._pcPoints = [ { ...start }, { ...start }, { ...start }, { ...start } ];
+          toolState._pcDragIdx = 2; // Bottom right
+          toolState._pcIsInitialDrag = true;
+          delete toolState._pcPendingCoords;
           dragIdx = 2;
-          points = (window as any)._pcPoints;
+          points = toolState._pcPoints;
         } else {
           return; // Still in dead zone
         }
@@ -175,10 +176,10 @@ export const transformTools: ToolModule[] = [
 
       if (!points || dragIdx === undefined) return;
       
-      const startPoint = (window as any)._pcStartPoint;
-      const origPoints = (window as any)._pcOrigPoints;
+      const startPoint = toolState._pcStartPoint;
+      const origPoints = toolState._pcOrigPoints;
 
-      if ((window as any)._pcIsInitialDrag) {
+      if (toolState._pcIsInitialDrag) {
         const start = points[0];
         points = [
           { x: start.x, y: start.y },
@@ -186,7 +187,7 @@ export const transformTools: ToolModule[] = [
           { x: coords.x, y: coords.y },
           { x: start.x, y: coords.y }
         ];
-        (window as any)._pcPoints = points;
+        toolState._pcPoints = points;
       } else if (dragIdx < 4) {
         // Dragging a corner
         points[dragIdx] = { ...coords };
@@ -196,7 +197,7 @@ export const transformTools: ToolModule[] = [
           const dx = coords.x - startPoint.x;
           const dy = coords.y - startPoint.y;
           points = origPoints.map((p: any) => ({ x: p.x + dx, y: p.y + dy }));
-          (window as any)._pcPoints = points;
+          toolState._pcPoints = points;
         }
       } else {
         // Dragging a midpoint
@@ -226,12 +227,12 @@ export const transformTools: ToolModule[] = [
       setLassoPaths([points]);
     },
     end: ({ setLassoPaths }) => {
-      (window as any)._pcIsInitialDrag = false;
-      const points = (window as any)._pcPoints;
+      toolState._pcIsInitialDrag = false;
+      const points = toolState._pcPoints;
       if (points) setLassoPaths([points]);
     },
     doubleClick: ({ canvas, ctx, setLassoPaths, recordHistory, setDocumentSize, setIsInteracting, activeLayerId, updateLayer }) => {
-      const points = (window as any)._pcPoints;
+      const points = toolState._pcPoints;
       if (points && points.length === 4 && canvas && ctx) {
         // Calculate target dimensions based on top and left edge lengths
         const w = Math.round(Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y));
@@ -247,7 +248,7 @@ export const transformTools: ToolModule[] = [
           recordHistory('Perspective Crop');
         }
       }
-      delete (window as any)._pcPoints;
+      delete toolState._pcPoints;
       setLassoPaths([]);
       setIsInteracting(false);
     }
@@ -284,19 +285,19 @@ export const transformTools: ToolModule[] = [
         coords.y >= s.rect.y && coords.y <= s.rect.y + s.rect.h
       );
       if (idx !== -1) {
-        (window as any)._sliceDragIdx = idx;
-        (window as any)._sliceLastClickedIdx = idx;
-        (window as any)._sliceStartRect = { ...slices[idx].rect };
-        (window as any)._sliceStartCoords = { ...coords };
+        toolState._sliceDragIdx = idx;
+        toolState._sliceLastClickedIdx = idx;
+        toolState._sliceStartRect = { ...slices[idx].rect };
+        toolState._sliceStartCoords = { ...coords };
         setIsInteracting(true);
       } else {
-        delete (window as any)._sliceLastClickedIdx;
+        delete toolState._sliceLastClickedIdx;
       }
     },
     move: ({ coords, slices, setSlices }) => {
-      const idx = (window as any)._sliceDragIdx;
-      const startRect = (window as any)._sliceStartRect;
-      const startCoords = (window as any)._sliceStartCoords;
+      const idx = toolState._sliceDragIdx;
+      const startRect = toolState._sliceStartRect;
+      const startCoords = toolState._sliceStartCoords;
       if (idx !== undefined && startRect && startCoords) {
         const dx = coords.x - startCoords.x;
         const dy = coords.y - startCoords.y;
@@ -309,12 +310,12 @@ export const transformTools: ToolModule[] = [
       }
     },
     end: ({ recordHistory, setIsInteracting }) => {
-      if ((window as any)._sliceDragIdx !== undefined) {
+      if (toolState._sliceDragIdx !== undefined) {
         recordHistory('Move Slice');
       }
-      delete (window as any)._sliceDragIdx;
-      delete (window as any)._sliceStartRect;
-      delete (window as any)._sliceStartCoords;
+      delete toolState._sliceDragIdx;
+      delete toolState._sliceStartRect;
+      delete toolState._sliceStartCoords;
       setIsInteracting(false);
     }
   }

@@ -1,4 +1,5 @@
 import type { ToolModule } from '../types';
+import { toolState } from '../toolState';
 
 export const paintingTools: ToolModule[] = [
   {
@@ -153,10 +154,10 @@ export const paintingTools: ToolModule[] = [
       setIsInteracting(true);
       // Sample the target color to erase
       const data = ctx.getImageData(Math.round(coords.x), Math.round(coords.y), 1, 1).data;
-      (window as any)._bgEraserTarget = { r: data[0], g: data[1], b: data[2], a: data[3] };
+      toolState._bgEraserTarget = { r: data[0], g: data[1], b: data[2], a: data[3] };
     },
     move: ({ coords, ctx, canvas, brushSize, selectionTolerance }) => {
-      const target = (window as any)._bgEraserTarget;
+      const target = toolState._bgEraserTarget;
       if (!ctx || !canvas || !target) return;
       
       const radius = brushSize / 2;
@@ -177,17 +178,17 @@ export const paintingTools: ToolModule[] = [
       ctx.putImageData(area, x - radius, y - radius);
     },
     end: () => {
-      delete (window as any)._bgEraserTarget;
+      delete toolState._bgEraserTarget;
     }
   },
   {
     id: 'magic_eraser',
     start: ({ coords, setIsInteracting }) => {
-      (window as any)._magicEraserStart = { ...coords };
+      toolState._magicEraserStart = { ...coords };
       setIsInteracting(true);
     },
     move: ({ coords }) => {
-      const start = (window as any)._magicEraserStart;
+      const start = toolState._magicEraserStart;
       if (start) {
         // Draw a preview rectangle using a global helper or custom logic
         // For simplicity, we can dispatch a custom event to show it on Canvas
@@ -202,7 +203,7 @@ export const paintingTools: ToolModule[] = [
       }
     },
     end: ({ coords, canvas, ctx, activeLayerId, selectionTolerance, updateLayer, recordHistory, setIsInteracting }) => {
-      const start = (window as any)._magicEraserStart;
+      const start = toolState._magicEraserStart;
       if (!ctx || !canvas || !activeLayerId || !start) {
         setIsInteracting(false);
         return;
@@ -276,7 +277,7 @@ export const paintingTools: ToolModule[] = [
       updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
       setIsInteracting(false);
       window.dispatchEvent(new CustomEvent('clear-draft-rect'));
-      delete (window as any)._magicEraserStart;
+      delete toolState._magicEraserStart;
     }
   },
   {
@@ -308,8 +309,8 @@ export const paintingTools: ToolModule[] = [
         if (sCtx && source) {
           sCtx.drawImage(source, 0, 0);
         }
-        (window as any)._historySnapshot = snapshot;
-        (window as any)._historyOpacity = primaryOpacity;
+        toolState._historySnapshot = snapshot;
+        toolState._historyOpacity = primaryOpacity;
         setIsInteracting(true);
       };
 
@@ -322,7 +323,7 @@ export const paintingTools: ToolModule[] = [
       }
     },
     move: ({ coords, lastPoint, ctx, brushSize }) => {
-      const snapshot = (window as any)._historySnapshot;
+      const snapshot = toolState._historySnapshot;
       if (!snapshot || !ctx || !lastPoint) return;
       
       const dist = Math.hypot(coords.x - lastPoint.x, coords.y - lastPoint.y);
@@ -340,14 +341,14 @@ export const paintingTools: ToolModule[] = [
         ctx.clearRect(x - brushSize / 2, y - brushSize / 2, brushSize, brushSize);
 
         const prevAlpha = ctx.globalAlpha;
-        ctx.globalAlpha = (window as any)._historyOpacity || 1.0;
+        ctx.globalAlpha = toolState._historyOpacity || 1.0;
         ctx.drawImage(snapshot, 0, 0);
         ctx.globalAlpha = prevAlpha;
         ctx.restore();
       }
     },
     end: () => {
-      delete (window as any)._historySnapshot;
+      delete toolState._historySnapshot;
     }
   },
   {
@@ -377,8 +378,8 @@ export const paintingTools: ToolModule[] = [
         if (sCtx && source) {
           sCtx.drawImage(source, 0, 0);
         }
-        (window as any)._artHistorySnapshot = snapshot;
-        (window as any)._artHistoryOpacity = primaryOpacity;
+        toolState._artHistorySnapshot = snapshot;
+        toolState._artHistoryOpacity = primaryOpacity;
         setIsInteracting(true);
       };
 
@@ -391,7 +392,7 @@ export const paintingTools: ToolModule[] = [
       }
     },
     move: ({ coords, lastPoint, ctx, brushSize }) => {
-      const snapshot = (window as any)._artHistorySnapshot;
+      const snapshot = toolState._artHistorySnapshot;
       if (!snapshot || !ctx || !lastPoint) return;
 
       const sCtx = snapshot.getContext('2d');
@@ -418,7 +419,7 @@ export const paintingTools: ToolModule[] = [
           ).data;
 
           if (pixel[3] > 0) {
-            const opacity = (pixel[3] / 255) * ((window as any)._artHistoryOpacity || 1.0);
+            const opacity = (pixel[3] / 255) * (toolState._artHistoryOpacity || 1.0);
             ctx.save();
             ctx.translate(x, y);
             ctx.rotate(Math.random() * Math.PI);
@@ -453,7 +454,7 @@ export const paintingTools: ToolModule[] = [
       }
     },
     end: () => {
-      delete (window as any)._artHistorySnapshot;
+      delete toolState._artHistorySnapshot;
     }
   },
   {
@@ -470,19 +471,19 @@ export const paintingTools: ToolModule[] = [
         const sCtx = snapshot.getContext('2d');
         if (sCtx) {
           sCtx.drawImage(canvas, 0, 0);
-          (window as any)._cloneSnapshot = snapshot;
+          toolState._cloneSnapshot = snapshot;
         }
       }
     },
     move: ({ coords, lastPoint, ctx, brushSize, cloneSource }) => {
-      const snapshot = (window as any)._cloneSnapshot;
+      const snapshot = toolState._cloneSnapshot;
       if (!ctx || !snapshot || !cloneSource || !lastPoint) return;
       
-      const offset = (window as any)._cloneOffset || { 
+      const offset = toolState._cloneOffset || {
         x: cloneSource.x - lastPoint.x, 
         y: cloneSource.y - lastPoint.y 
       };
-      (window as any)._cloneOffset = offset;
+      toolState._cloneOffset = offset;
 
       const dist = Math.hypot(coords.x - lastPoint.x, coords.y - lastPoint.y);
       const steps = Math.max(1, Math.ceil(dist / (brushSize / 8))); // 8 steps for extra smoothness
@@ -504,8 +505,8 @@ export const paintingTools: ToolModule[] = [
       }
     },
     end: () => {
-      delete (window as any)._cloneOffset;
-      delete (window as any)._cloneSnapshot;
+      delete toolState._cloneOffset;
+      delete toolState._cloneSnapshot;
     }
   },
   {
@@ -515,7 +516,7 @@ export const paintingTools: ToolModule[] = [
         const img = new Image();
         img.src = customPattern;
         img.onload = () => {
-          (window as any)._currentPattern = ctx.createPattern(img, 'repeat');
+          toolState._currentPattern = ctx.createPattern(img, 'repeat');
         };
       } else {
         const pCanvas = document.createElement('canvas');
@@ -529,19 +530,19 @@ export const paintingTools: ToolModule[] = [
           pCtx.fillStyle = secondaryColor;
           pCtx.fillRect(10, 0, 10, 10);
           pCtx.fillRect(0, 10, 10, 10);
-          (window as any)._currentPattern = ctx.createPattern(pCanvas, 'repeat');
+          toolState._currentPattern = ctx.createPattern(pCanvas, 'repeat');
         }
       }
       setIsInteracting(true);
     },
-    move: ({ coords, lastPoint, ctx, brushSize }) => {
+    move: ({ coords, lastPoint, ctx, brushSize, primaryOpacity }) => {
       if (!ctx || !lastPoint) return;
       
-      const pattern = (window as any)._currentPattern;
+      const pattern = toolState._currentPattern;
       if (!pattern) return;
 
       ctx.save();
-      const opacity = (window as any)._primaryOpacity || 1.0;
+      const opacity = primaryOpacity || 1.0;
       ctx.globalAlpha = opacity;
       ctx.beginPath();
       ctx.moveTo(lastPoint.x, lastPoint.y);
@@ -556,11 +557,11 @@ export const paintingTools: ToolModule[] = [
   {
     id: 'rectangle_eraser',
     start: ({ coords, setIsInteracting }) => {
-      (window as any)._rectEraserStart = { ...coords };
+      toolState._rectEraserStart = { ...coords };
       setIsInteracting(true);
     },
     move: ({ coords }) => {
-      const start = (window as any)._rectEraserStart;
+      const start = toolState._rectEraserStart;
       if (start) {
         window.dispatchEvent(new CustomEvent('draw-draft-rect', { 
           detail: { 
@@ -573,7 +574,7 @@ export const paintingTools: ToolModule[] = [
       }
     },
     end: ({ coords, canvas, ctx, activeLayerId, updateLayer, recordHistory, setIsInteracting }) => {
-      const start = (window as any)._rectEraserStart;
+      const start = toolState._rectEraserStart;
       if (start && ctx && canvas && activeLayerId) {
         const x = Math.min(start.x, coords.x);
         const y = Math.min(start.y, coords.y);
@@ -587,24 +588,24 @@ export const paintingTools: ToolModule[] = [
       }
       setIsInteracting(false);
       window.dispatchEvent(new CustomEvent('clear-draft-rect'));
-      delete (window as any)._rectEraserStart;
+      delete toolState._rectEraserStart;
     }
   },
   {
     id: 'lasso_eraser',
     start: ({ coords, setIsInteracting }) => {
-      (window as any)._lassoEraserPath = [{ ...coords }];
+      toolState._lassoEraserPath = [{ ...coords }];
       setIsInteracting(true);
     },
     move: ({ coords }) => {
-      const path = (window as any)._lassoEraserPath;
+      const path = toolState._lassoEraserPath;
       if (path) {
         path.push({ ...coords });
         window.dispatchEvent(new CustomEvent('draw-draft-lasso', { detail: path }));
       }
     },
     end: ({ canvas, ctx, activeLayerId, updateLayer, recordHistory, setIsInteracting }) => {
-      const path = (window as any)._lassoEraserPath;
+      const path = toolState._lassoEraserPath;
       if (path && path.length > 2 && ctx && canvas && activeLayerId) {
         ctx.save();
         ctx.beginPath();
@@ -620,7 +621,7 @@ export const paintingTools: ToolModule[] = [
       }
       setIsInteracting(false);
       window.dispatchEvent(new CustomEvent('clear-draft-lasso'));
-      delete (window as any)._lassoEraserPath;
+      delete toolState._lassoEraserPath;
     }
   }
 ];
