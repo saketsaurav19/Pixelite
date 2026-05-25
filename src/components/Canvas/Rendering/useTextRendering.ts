@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { toolState } from '../../../tools/toolState';
 
 /**
  * Options for the useTextRendering hook.
@@ -56,7 +57,7 @@ export const useTextRendering = (
       ctx.strokeRect(textEditor.x - padding, textEditor.y, maxWidth + padding * 2 + 10, lines.length * fs + padding);
       ctx.setLineDash([]);
 
-      const isVertical = (window as any)._lastTextTool === 'vertical_text';
+      const isVertical = toolState._lastTextTool === 'vertical_text';
       lines.forEach((line, i) => {
         if (isVertical) {
           const chars = line.split('');

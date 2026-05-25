@@ -1,4 +1,5 @@
 import type { ToolModule } from '../types';
+import { toolState } from '../toolState';
 
 export const utilityTools: ToolModule[] = [
   {
@@ -103,7 +104,7 @@ export const utilityTools: ToolModule[] = [
     },
     end: ({ coords, ctx, canvas, activeLayerId, updateLayer, recordHistory, setIsInteracting, brushColor, secondaryColor, primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip }) => {
       setIsInteracting(false);
-      const start = (window as any)._gradientStart;
+      const start = toolState._gradientStart;
       if (!start || !ctx || !canvas || !activeLayerId) {
         window.dispatchEvent(new CustomEvent('clear-gradient'));
         return;
