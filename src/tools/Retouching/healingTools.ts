@@ -1,4 +1,5 @@
 import type { ToolModule } from '../types';
+import { toolState } from '../toolState';
 
 export const healingTools: ToolModule[] = [
   {
@@ -31,22 +32,22 @@ export const healingTools: ToolModule[] = [
     id: 'healing_brush',
     start: ({ coords, isAlt, setIsInteracting }) => {
       if (isAlt) {
-        (window as any)._healingSource = { ...coords };
-      } else if ((window as any)._healingSource) {
-        (window as any)._healingCurrentSource = { ...(window as any)._healingSource };
+        toolState._healingSource = { ...coords };
+      } else if (toolState._healingSource) {
+        toolState._healingCurrentSource = { ...toolState._healingSource };
         setIsInteracting(true);
       }
     },
     move: ({ coords, ctx, canvas, lastPoint, brushSize, activeLayerId }) => {
-      if (!(window as any)._healingCurrentSource || !ctx || !canvas || !activeLayerId || !lastPoint) return;
+      if (!toolState._healingCurrentSource || !ctx || !canvas || !activeLayerId || !lastPoint) return;
 
       const dx = coords.x - lastPoint.x;
       const dy = coords.y - lastPoint.y;
 
-      (window as any)._healingCurrentSource.x += dx;
-      (window as any)._healingCurrentSource.y += dy;
+      toolState._healingCurrentSource.x += dx;
+      toolState._healingCurrentSource.y += dy;
 
-      const currentSource = (window as any)._healingCurrentSource;
+      const currentSource = toolState._healingCurrentSource;
 
       ctx.save();
       ctx.beginPath();
@@ -65,21 +66,21 @@ export const healingTools: ToolModule[] = [
     id: 'patch',
     start: ({ coords, lassoPaths, setIsInteracting }) => {
       if (lassoPaths.length > 0) {
-        (window as any)._patchStartCoords = { ...coords };
-        (window as any)._patchOffset = { x: 0, y: 0 };
+        toolState._patchStartCoords = { ...coords };
+        toolState._patchOffset = { x: 0, y: 0 };
         setIsInteracting(true);
       }
     },
     move: ({ coords }) => {
-      const start = (window as any)._patchStartCoords;
+      const start = toolState._patchStartCoords;
       if (start) {
-        (window as any)._patchOffset = { x: coords.x - start.x, y: coords.y - start.y };
+        toolState._patchOffset = { x: coords.x - start.x, y: coords.y - start.y };
       }
     },
     end: ({ ctx, canvas, lassoPaths, activeLayerId, layers, setIsInteracting }) => {
       try {
-        const start = (window as any)._patchStartCoords;
-        const offset = (window as any)._patchOffset;
+        const start = toolState._patchStartCoords;
+        const offset = toolState._patchOffset;
 
         if (start && offset && lassoPaths.length > 0 && ctx && canvas && activeLayerId) {
           const layer = layers.find(l => l.id === activeLayerId);
@@ -118,8 +119,8 @@ export const healingTools: ToolModule[] = [
         console.error('Patch tool failed:', e);
       } finally {
         setIsInteracting(false);
-        delete (window as any)._patchStartCoords;
-        delete (window as any)._patchOffset;
+        delete toolState._patchStartCoords;
+        delete toolState._patchOffset;
       }
     }
   },
@@ -127,20 +128,20 @@ export const healingTools: ToolModule[] = [
     id: 'content_aware_move',
     start: ({ coords, lassoPaths, setIsInteracting }) => {
       if (lassoPaths.length > 0) {
-        (window as any)._caStartCoords = { ...coords };
-        (window as any)._caOffset = { x: 0, y: 0 };
+        toolState._caStartCoords = { ...coords };
+        toolState._caOffset = { x: 0, y: 0 };
         setIsInteracting(true);
       }
     },
     move: ({ coords }) => {
-      const start = (window as any)._caStartCoords;
+      const start = toolState._caStartCoords;
       if (start) {
-        (window as any)._caOffset = { x: coords.x - start.x, y: coords.y - start.y };
+        toolState._caOffset = { x: coords.x - start.x, y: coords.y - start.y };
       }
     },
     end: ({ ctx, canvas, lassoPaths, activeLayerId, layers, updateLayer, recordHistory, setIsInteracting }) => {
-      const start = (window as any)._caStartCoords;
-      const offset = (window as any)._caOffset;
+      const start = toolState._caStartCoords;
+      const offset = toolState._caOffset;
       if (start && offset && lassoPaths.length > 0 && ctx && canvas && activeLayerId) {
         const layer = layers.find(l => l.id === activeLayerId);
         const lpx = layer?.position.x || 0;
@@ -188,8 +189,8 @@ export const healingTools: ToolModule[] = [
       setIsInteracting(false);
       updateLayer(activeLayerId!, { dataUrl: canvas?.toDataURL() });
       recordHistory('Content-Aware Move');
-      delete (window as any)._caStartCoords;
-      delete (window as any)._caOffset;
+      delete toolState._caStartCoords;
+      delete toolState._caOffset;
     }
   },
   {

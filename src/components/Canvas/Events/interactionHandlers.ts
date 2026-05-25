@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import type { CanvasContext, Point, Rect, CanvasRefs } from '../types';
 import { getToolModule } from '../../../tools';
 import { useStore } from '../../../store/useStore';
+import { toolState } from '../../../tools/toolState';
 
 export const startAction = (
   clientX: number,
@@ -49,10 +50,10 @@ export const startAction = (
       }
     }
     if (isInsideQuad) {
-      (window as any)._pcPoints = quad.map(point => ({ ...point }));
-      (window as any)._pcDragIdx = 8;
-      (window as any)._pcStartPoint = { ...coords };
-      (window as any)._pcOrigPoints = quad.map(point => ({ ...point }));
+      toolState._pcPoints = quad.map(point => ({ ...point }));
+      toolState._pcDragIdx = 8;
+      toolState._pcStartPoint = { ...coords };
+      toolState._pcOrigPoints = quad.map(point => ({ ...point }));
       handlers.setIsInteracting(true);
       refs.lastPointRef.current = coords;
       refs.startMouseRef.current = { x: clientX, y: clientY };
@@ -60,8 +61,6 @@ export const startAction = (
       return;
     }
   }
-
-  (window as any)._primaryOpacity = primaryOpacity;
 
   const activeToolModule = getToolModule(currentTool);
   // Allow start without ctx for tools that don't need it (crop, hand, etc)
@@ -84,7 +83,7 @@ export const startAction = (
     flushSync(() => {
       handlers.setTextEditor({ ...coords, value: '' });
     });
-    (window as any)._lastTextTool = activeTool;
+    toolState._lastTextTool = activeTool;
     const input = refs.hiddenTextInputRef.current;
     if (input) {
       input.focus();

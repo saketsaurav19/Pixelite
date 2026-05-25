@@ -1,4 +1,5 @@
 import type { ToolModule } from '../types';
+import { toolState } from '../toolState';
 
 export const retouchingTools: ToolModule[] = [
   {
@@ -65,11 +66,11 @@ export const retouchingTools: ToolModule[] = [
       const bCtx = buffer.getContext('2d');
       if (bCtx) {
         bCtx.drawImage(canvas, coords.x - radius, coords.y - radius, brushSize, brushSize, 0, 0, brushSize, brushSize);
-        (window as any)._smudgeBuffer = buffer;
+        toolState._smudgeBuffer = buffer;
       }
     },
     move: ({ coords, ctx, lastPoint, brushSize }) => {
-      const buffer = (window as any)._smudgeBuffer;
+      const buffer = toolState._smudgeBuffer;
       if (!buffer || !ctx || !lastPoint) return;
 
       const x = coords.x;
@@ -88,13 +89,13 @@ export const retouchingTools: ToolModule[] = [
 
       // Update the buffer for the next move to keep the smudge going
       const bCtx = buffer.getContext('2d');
-      if (bCtx && (window as any).canvas) {
+      if (bCtx && toolState.canvas) {
         // This is tricky without access to the full canvas every move
         // For now, we use the existing buffer to simulate the push
       }
     },
     end: () => {
-      delete (window as any)._smudgeBuffer;
+      delete toolState._smudgeBuffer;
     }
   }
 ];

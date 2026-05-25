@@ -1,4 +1,5 @@
 import type { Point } from '../types';
+import { toolState } from '../../../tools/toolState';
 
 export const commitText = (
   textEditor: (Point & { value: string }) | null,
@@ -27,7 +28,7 @@ export const commitText = (
       color: hexToRgba(brushColor, primaryOpacity),
       strokeColor: strokeWidth > 0 ? hexToRgba(secondaryColor, secondaryOpacity) : undefined,
       strokeWidth: strokeWidth,
-      isVertical: (window as any)._lastTextTool === 'vertical_text',
+      isVertical: toolState._lastTextTool === 'vertical_text',
       visible: true, opacity: 1
     });
     recordHistory('Add Text Layer');

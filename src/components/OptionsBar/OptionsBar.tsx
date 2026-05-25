@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStore } from '../../store/useStore';
 import { hexToRgba } from '../../utils/canvasUtils';
+import { toolState } from '../../tools/toolState';
 import ColorPicker from '../shared/ColorPicker';
 import * as LucideIcons from 'lucide-react';
 
@@ -361,15 +362,15 @@ const OptionsBar: React.FC = () => {
             >
               Clear Slices
             </button>
-            {activeTool === 'slice_select' && (window as any)._sliceLastClickedIdx !== undefined && (
+            {activeTool === 'slice_select' && toolState._sliceLastClickedIdx !== undefined && (
               <button
                 className="premium-btn-sm"
                 onClick={() => {
-                  const idx = (window as any)._sliceLastClickedIdx;
+                  const idx = toolState._sliceLastClickedIdx;
                   const slices = [...useStore.getState().slices];
                   slices.splice(idx, 1);
                   useStore.getState().setSlices(slices);
-                  delete (window as any)._sliceLastClickedIdx;
+                  delete toolState._sliceLastClickedIdx;
                   recordHistory('Delete Slice');
                 }}
                 style={{ padding: '4px 12px', fontSize: '11px', background: '#444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '8px' }}
