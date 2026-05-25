@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import type { CanvasContext, Point, Rect, CanvasRefs } from '../types';
 import { getToolModule } from '../../../tools';
 import { useStore } from '../../../store/useStore';
+import { formatToolName } from '../../../utils/stringUtils';
 
 export const startAction = (
   clientX: number,
@@ -197,8 +198,7 @@ export const endAction = (
     const canvas = refs.canvasRefs.current[id];
     if (canvas) {
       handlers.updateLayer(id, { dataUrl: canvas.toDataURL() });
-      const historyLabel = activeTool.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-      handlers.recordHistory(historyLabel);
+      handlers.recordHistory(formatToolName(activeTool));
     }
   }
 
