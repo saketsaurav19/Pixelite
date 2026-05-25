@@ -899,21 +899,16 @@ const App: React.FC = () => {
 
             </div>
           </div>
-                    <div className={`menu-item-container ${activeMobileSubmenu === 'edit' ? 'active' : ''}`}
+                              <div className={`menu-item-container ${activeMobileSubmenu === 'edit' ? 'active' : ''}`}
             onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'edit' ? null : 'edit')}>
             <span>Edit</span>
             <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
 
-              {/* Undo / Redo - As placeholder since user wanted it but logic isn't easily toggleable without confusing existing undo/redo */}
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); alert('Not implemented'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Undo / Redo</span>
-              </div>
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); redo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>
-                <span>Step Forward</span> <span className="shortcut">Shift+Ctrl+Z</span>
-              </div>
               <div className="menu-option" onClick={(e) => { e.stopPropagation(); undo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex <= 0 ? 0.5 : 1 }}>
-                <span>Step Backward</span> <span className="shortcut">Ctrl+Z</span>
+                <span>Undo</span> <span className="shortcut">Ctrl+Z</span>
+              </div>
+              <div className="menu-option" onClick={(e) => { e.stopPropagation(); redo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>
+                <span>Redo</span> <span className="shortcut">Shift+Ctrl+Z / Ctrl+Y</span>
               </div>
 
               <div className="menu-divider" />
