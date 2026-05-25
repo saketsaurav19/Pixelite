@@ -28,7 +28,7 @@ export const startAction = (
     hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>;
   }
 ) => {
-  const { coords, activeTool, canvasOffset, lassoPaths, primaryOpacity } = context;
+  const { coords, activeTool, canvasOffset, lassoPaths } = context;
 
   const isAltPressedLocal = (e as any).altKey || context.isAlt;
   const isCtrlPressedLocal = (e as any).ctrlKey || (e as any).metaKey || context.isCtrl;
