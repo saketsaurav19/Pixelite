@@ -1,8 +1,22 @@
 export const hexToRgba = (hex: string, opacity: number) => {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  let normalizedHex = hex.startsWith('#') ? hex.slice(1) : hex;
+
+  if (normalizedHex.length === 3) {
+    normalizedHex = normalizedHex
+      .split('')
+      .map((char) => char + char)
+      .join('');
+  }
+
+  if (normalizedHex.length !== 6) {
+    return `rgba(0, 0, 0, ${opacity})`;
+  }
+
+  const r = parseInt(normalizedHex.slice(0, 2), 16);
+  const g = parseInt(normalizedHex.slice(2, 4), 16);
+  const b = parseInt(normalizedHex.slice(4, 6), 16);
+
+  return `rgba(${isNaN(r) ? 0 : r}, ${isNaN(g) ? 0 : g}, ${isNaN(b) ? 0 : b}, ${opacity})`;
 };
 
 export const findContour = (
