@@ -8,7 +8,10 @@ import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
-import { writePsdUint8Array } from "ag-psd";
+import { MenuBar } from './components/MenuSystem/MenuBar';
+import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
+import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
+import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
 import { removeBackground } from '@imgly/background-removal';
 import './App.css';
 
@@ -44,87 +47,6 @@ const App: React.FC = () => {
     setIsTyping,
     setLayers
   } = useStore();
-
-  const handleSavePSD = (asNew: boolean = false) => {
-    const { w, h } = documentSize;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const psdChildren: any[] = [];
-    // PSD layers are stored from bottom to top in ag-psd typically, but let's reverse to match display order if needed.
-    // In ag-psd, children array is top-to-bottom or bottom-to-top depending on version, let's test the standard canvas order.
-    // we will match the order in useStore which is bottom-to-top, let's keep it as is, or we might need to reverse.
-    // Actually, PS layers are typically top-to-bottom in UI, ag-psd children[0] is the top-most layer.
-    // Let's map `layers` (where index 0 is bottom) to `psdChildren` (where index 0 is top).
-
-    [...layers].reverse().forEach(layer => {
-      const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-      if (layerCanvas) {
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = w;
-        tempCanvas.height = h;
-        const ctx = tempCanvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
-        }
-
-        // Map canvas blend mode to PSD blend mode
-        let psdBlendMode = "normal";
-        const blendMap: Record<string, string> = {
-          "source-over": "normal",
-          "multiply": "multiply",
-          "screen": "screen",
-          "overlay": "overlay",
-          "darken": "darken",
-          "lighten": "lighten",
-          "color-dodge": "color dodge",
-          "color-burn": "color burn",
-          "hard-light": "hard light",
-          "soft-light": "soft light",
-          "difference": "difference",
-          "exclusion": "exclusion",
-          "hue": "hue",
-          "saturation": "saturation",
-          "color": "color",
-          "luminosity": "luminosity"
-        };
-        if (layer.blendMode && blendMap[layer.blendMode]) {
-          psdBlendMode = blendMap[layer.blendMode];
-        }
-
-        psdChildren.push({
-          name: layer.name,
-          opacity: Math.round((layer.opacity !== undefined ? layer.opacity : 1) * 255),
-          hidden: !layer.visible,
-          blendMode: psdBlendMode,
-          canvas: tempCanvas
-        });
-      }
-    });
-
-    const psd = {
-      width: w,
-      height: h,
-      children: psdChildren
-    };
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const buffer = writePsdUint8Array(psd as any);
-      const blob = new Blob([buffer as any], { type: "application/octet-stream" });
-
-      const filename = asNew ? prompt("Save as...", "photoshop_clone_project.psd") : "photoshop_clone_project.psd";
-      if (!filename) return;
-
-      const link = document.createElement("a");
-      link.download = filename;
-      link.href = URL.createObjectURL(blob);
-      link.click();
-      URL.revokeObjectURL(link.href);
-    } catch (e) {
-      console.error("Error saving PSD:", e);
-      alert("Failed to save PSD file.");
-    }
-  };
 
   const handleSave = (asNew: boolean = false) => {
     const { w, h } = documentSize;
@@ -176,10 +98,10 @@ const App: React.FC = () => {
   const [processingText, setProcessingText] = React.useState('');
 
   // Mobile UI state
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
   const [isToolsOpen, setIsToolsOpen] = React.useState(false);
   const [isPanelsOpen, setIsPanelsOpen] = React.useState(false);
-  const [activeMobileSubmenu, setActiveMobileSubmenu] = React.useState<string | null>(null);
+
   const [isFillPickerOpen, setIsFillPickerOpen] = React.useState(false);
   const [fillColor, setFillColor] = React.useState('#ffffff');
   const [fillOpacity, setFillOpacity] = React.useState(1);
@@ -200,7 +122,7 @@ const App: React.FC = () => {
       // New Document
       if (isCtrl && e.altKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        handleNew();
+        useStore.getState().setIsNewDocumentDialogOpen(true);
       }
       if (isCtrl && e.key === 'o') {
         e.preventDefault();
@@ -208,7 +130,7 @@ const App: React.FC = () => {
       }
       if (isCtrl && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        handleSave(e.shiftKey);
+        console.log('Save handled via menu');
       }
 
       // Undo/Redo
@@ -383,72 +305,6 @@ const App: React.FC = () => {
     recordHistory,
     activeTool
   ]);
-
-  const handleFile = (file: File | Blob, name?: string) => {
-    if (!file.type.startsWith('image/')) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const isDefaultBackground = layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
-        if (layers.length === 0 || isDefaultBackground) {
-          setDocumentSize({ w: img.width, h: img.height });
-        }
-        addLayer({
-          name: name || (file as File).name || 'Pasted Image',
-          type: 'image',
-          dataUrl,
-          position: (layers.length === 0 || isDefaultBackground) ? { x: 0, y: 0 } : { x: (documentSize.w - img.width) / 2, y: (documentSize.h - img.height) / 2 }
-        });
-        recordHistory(`Import ${name || 'Image'}`);
-      };
-      img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  };
-
-  React.useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const blob = items[i].getAsFile();
-          if (blob) handleFile(blob, 'Pasted Image');
-        }
-      }
-    };
-
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-          handleFile(files[i]);
-        }
-      }
-    };
-
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
-    };
-
-    window.addEventListener('paste', handlePaste);
-    window.addEventListener('drop', handleDrop);
-    window.addEventListener('dragover', handleDragOver);
-    return () => {
-      window.removeEventListener('paste', handlePaste);
-      window.removeEventListener('drop', handleDrop);
-      window.removeEventListener('dragover', handleDragOver);
-    };
-  }, [layers, documentSize, addLayer, recordHistory, setDocumentSize]);
 
   const setClipboardDataUrl = useStore(state => state.setClipboardDataUrl);
   const clipboardDataUrl = useStore(state => state.clipboardDataUrl);
@@ -849,257 +705,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <nav className={`main-nav ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
-          {isMobileMenuOpen && (
-            <div className="mobile-menu-header">
-              <span>Menu</span>
-              <button onClick={() => setIsMobileMenuOpen(false)}><LucideIcons.X size={20} /></button>
-            </div>
-          )}
-          <div className={`menu-item-container ${activeMobileSubmenu === 'file' ? 'active' : ''}`}
-            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'file' ? null : 'file')}>
-            <span>File</span>
-            <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleNew(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>New...</span> <span className="shortcut">Alt+Ctrl+N</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); document.getElementById('global-file-input')?.click(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Open...</span> <span className="shortcut">Ctrl+O</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); document.getElementById('global-file-input')?.click(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Open & Place...</span>
-              </div>
-
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Open More</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>Placeholder</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Share</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>Placeholder</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleSave(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Save</span> <span className="shortcut">Ctrl+S</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleSavePSD(false); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Save as PSD</span>
-              </div>
-
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Save More</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>Placeholder</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Export as</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>PNG (Placeholder)</span>
-                  </div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>JPG (Placeholder)</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.print(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Print...</span> <span className="shortcut">Ctrl+P</span>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Export Layers... (Placeholder)</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Export Color Lookup... (Placeholder)</span>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>File Info... (Placeholder)</span>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Automate</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>Placeholder</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Script... (Placeholder)</span>
-              </div>
-
-            </div>
-          </div>
-                              <div className={`menu-item-container ${activeMobileSubmenu === 'edit' ? 'active' : ''}`}
-            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'edit' ? null : 'edit')}>
-            <span>Edit</span>
-            <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); undo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex <= 0 ? 0.5 : 1 }}>
-                <span>Undo</span> <span className="shortcut">Ctrl+Z</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); redo(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }} style={{ opacity: historyIndex >= history.length - 1 ? 0.5 : 1 }}>
-                <span>Redo</span> <span className="shortcut">Shift+Ctrl+Z</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleFade(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Fade... (Placeholder)</span> <span className="shortcut">Shift+Ctrl+F</span>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleCut(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Cut</span> <span className="shortcut">Ctrl+X</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleCopy(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy</span> <span className="shortcut">Ctrl+C</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleCopyMerged(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Copy Merged (Placeholder)</span> <span className="shortcut">Shift+Ctrl+C</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePasteApp(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Paste</span> <span className="shortcut">Ctrl+V</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleClear(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Clear</span> <span className="shortcut">Delete</span></div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Fill...</span> <span className="shortcut">Shift+F5</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleStroke(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Stroke... (Placeholder)</span>
-              </div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleContentAwareScale(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Content-Aware Scale (Placeholder)</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePuppetWarp(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Puppet Warp (Placeholder)</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePerspectiveWarp(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Perspective Warp (Placeholder)</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeTransform(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Free Transform (Placeholder)</span> <span className="shortcut">Alt+Ctrl+T</span></div>
-
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Transform</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('scale'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Scale (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('rotate'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Rotate (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('skew'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Skew (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('distort'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Distort (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('perspective'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Perspective (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('warp'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Warp (Placeholder)</span></div>
-                  <div className="menu-divider" />
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('flip_horizontal'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Flip Horizontal (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('flip_vertical'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Flip Vertical (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('rotate_90'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Rotate 90° (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleTransform('rotate_180'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Rotate 180° (Placeholder)</span></div>
-                </div>
-              </div>
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleAutoAlign(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Align (Placeholder)</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleAutoBlend(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Auto-Blend (Placeholder)</span></div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleAssignProfile(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Assign Profile... (Placeholder)</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleConvertToProfile(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Convert to Profile... (Placeholder)</span></div>
-
-              <div className="menu-divider" />
-
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Define New</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDefineNew('brush'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Brush... (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDefineNew('pattern'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Pattern... (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDefineNew('shape'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Shape... (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDefineNew('gradient'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Gradient... (Placeholder)</span></div>
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDefineNew('preset'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Custom Preset... (Placeholder)</span></div>
-                </div>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePresetManager(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preset Manager... (Placeholder)</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handlePreferences(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Preferences... (Placeholder)</span> <span className="shortcut">Ctrl+K</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleLocalStorage(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}><span>Local Storage... (Placeholder)</span></div>
-
-            </div>
-          </div>
-          <div className={`menu-item-container ${activeMobileSubmenu === 'image' ? 'active' : ''}`}
-            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'image' ? null : 'image')}>
-            <span>Image</span>
-            <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option submenu-parent">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>Adjustments</span>
-                <LucideIcons.ChevronRight size={12} />
-                <div className="menu-submenu">
-                  <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleInvert(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                    <span>Invert</span> <span className="shortcut">Ctrl+I</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className={`menu-item-container ${activeMobileSubmenu === 'layer' ? 'active' : ''}`}
-            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'layer' ? null : 'layer')}>
-            <span>Layer</span>
-            <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); setIsFillPickerOpen(true); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Fill Layer...</span>
-              </div>
-              <div className="menu-divider" />
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); activeLayerId && duplicateLayer(activeLayerId); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Duplicate Layer</span> <span className="shortcut">Ctrl+J</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); activeLayerId && removeLayer(activeLayerId); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Delete Layer</span> <span className="shortcut">Del</span>
-              </div>
-            </div>
-          </div>
-          <div className={`menu-item-container ${activeMobileSubmenu === 'select' ? 'active' : ''}`}
-            onClick={() => setActiveMobileSubmenu(activeMobileSubmenu === 'select' ? null : 'select')}>
-            <span>Select</span>
-            <div className="menu-dropdown" onClick={(e) => e.stopPropagation()}>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleSelectSubject(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Select Subject</span> <span className="shortcut">Ctrl+Alt+S</span>
-              </div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleRemoveBackground(); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Remove Bg</span>
-              </div>
-              <div className="menu-divider" />
-              <div className="menu-option"><span>All</span> <span className="shortcut">Ctrl+A</span></div>
-              <div className="menu-option"><span>Deselect</span> <span className="shortcut">Ctrl+D</span></div>
-              <div className="menu-option" onClick={(e) => { e.stopPropagation(); e.preventDefault(); inverseSelection(); recordHistory('Inverse Selection'); setIsMobileMenuOpen(false); setActiveMobileSubmenu(null); }}>
-                <span>Inverse Selection</span> <span className="shortcut">Shift+Ctrl+I</span>
-              </div>
-            </div>
-          </div>
-          <div className="menu-item-container"><span>Filter</span></div>
-          <div className="menu-item-container"><span>View</span></div>
-          <div className="menu-item-container"><span>Window</span></div>
-        </nav>
+        <MenuBar />
 
         <div className="header-right">
           {/* Mobile toggle buttons */}
@@ -1338,7 +944,11 @@ const App: React.FC = () => {
       {layers.length === 0 && (
         <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
       )}
-    </div>
+
+      <NewDocumentDialog />
+      <ExportAsDialog />
+      <FileInfoDialog />
+</div>
   );
 };
 
