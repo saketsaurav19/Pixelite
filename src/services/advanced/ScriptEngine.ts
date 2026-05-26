@@ -3,11 +3,11 @@
  * Executes sandboxed JS macros/plugins.
  */
 export class ScriptEngine {
-  async executeMacro(macroCode: string) {
+  async executeMacro(_macroCode: string) {
     // Implementation pending
   }
 
-  registerPlugin(pluginDefinition: any) {
+  registerPlugin(_pluginDefinition: any) {
     // Implementation pending
   }
 }

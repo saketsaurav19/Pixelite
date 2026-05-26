@@ -55,6 +55,8 @@ useStore.setState({
   ],
   historyIndex: 0,
   isNewDocumentDialogOpen: false,
+  isMobileMenuOpen: false,
+  activeMobileSubmenu: null,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
 });

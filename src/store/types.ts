@@ -118,6 +118,10 @@ export interface EditorState {
   isNewDocumentDialogOpen: boolean;
   isExportDialogOpen: boolean;
   isFileInfoDialogOpen: boolean;
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: (isOpen: boolean) => void;
+  activeMobileSubmenu: string | null;
+  setActiveMobileSubmenu: (menu: string | null) => void;
   // Document State
   zoom: number;
   canvasOffset: { x: number; y: number };
