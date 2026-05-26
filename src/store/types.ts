@@ -114,6 +114,10 @@ export interface EditorState {
   activeLayerId: string | null;
 
   clipboardDataUrl: string | null;
+  // UI State
+  isNewDocumentDialogOpen: boolean;
+  isExportDialogOpen: boolean;
+  isFileInfoDialogOpen: boolean;
   // Document State
   zoom: number;
   canvasOffset: { x: number; y: number };
@@ -135,3 +139,5 @@ export interface EditorState {
   // Actions - These will be defined in slices
   [key: string]: any;
 }
+
+// Add to EditorState interfaces manually since sed might be messy for types
