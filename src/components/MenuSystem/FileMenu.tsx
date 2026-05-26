@@ -18,11 +18,17 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     setLayers,
     documentSize,
     setDocumentSize,
-    recordHistory
+    recordHistory,
+    setIsMobileMenuOpen
   } = useStore();
 
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const closeMenus = () => {
+    onClose();
+    setIsMobileMenuOpen(false);
+  };
 
   const handleOpen = async (e: React.ChangeEvent<HTMLInputElement>, isPlace: boolean = false) => {
     const file = e.target.files?.[0];
@@ -33,7 +39,6 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
 
       if (result.type === 'psd') {
         const psdData = await workerExportBridge.parsePSD(result.psdData);
-        // Scaffolding: In a real app, we map PSD layers back to our state.
         console.log("Parsed PSD in worker:", psdData);
         alert("PSD Parsing successful (see console). Rendering integration pending.");
       } else if (result.type === 'image' && result.dataUrl) {
@@ -74,17 +79,18 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     }
   };
 
-  const triggerFileInput = (isPlace: boolean) => {
+  const triggerFileInput = (e: React.MouseEvent, isPlace: boolean) => {
+      e.stopPropagation();
       if (fileInputRef.current) {
-          // hack to pass state to the change handler
           fileInputRef.current.dataset.isPlace = isPlace.toString();
           fileInputRef.current.click();
       }
-      onClose();
+      closeMenus();
   };
 
-  const handleSavePSD = async () => {
-      onClose();
+  const handleSavePSD = async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      closeMenus();
       try {
         const buffer = await workerExportBridge.generatePSD(layers, documentSize.w, documentSize.h);
         const blob = new Blob([buffer as unknown as BlobPart], { type: 'application/x-photoshop' });
@@ -100,6 +106,25 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       }
   };
 
+  const handleToggleSubmenu = (e: React.MouseEvent, submenuName: string) => {
+    e.stopPropagation();
+    if (window.innerWidth <= 768) {
+      setActiveSubmenu(activeSubmenu === submenuName ? null : submenuName);
+    }
+  };
+
+  const handleMouseEnterSubmenu = (submenuName: string) => {
+    if (window.innerWidth > 768) {
+      setActiveSubmenu(submenuName);
+    }
+  };
+
+  const handleMouseLeaveSubmenu = () => {
+    if (window.innerWidth > 768) {
+      setActiveSubmenu(null);
+    }
+  };
+
   return (
     <div className="menu-dropdown file-menu">
       <input
@@ -108,41 +133,41 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         style={{ display: 'none' }}
         accept="image/*,.psd"
         onChange={(e) => handleOpen(e, fileInputRef.current?.dataset.isPlace === 'true')}
+        onClick={(e) => e.stopPropagation()}
       />
 
-      <div className="menu-item" onClick={() => { setIsNewDocumentDialogOpen(true); onClose(); }}>
+      <div className="menu-item" onClick={(e) => { e.stopPropagation(); setIsNewDocumentDialogOpen(true); closeMenus(); }}>
         <span className="menu-label">New...</span>
         <span className="menu-shortcut">Alt+Ctrl+N</span>
       </div>
 
-      <div className="menu-item" onClick={() => triggerFileInput(false)}>
+      <div className="menu-item" onClick={(e) => triggerFileInput(e, false)}>
         <span className="menu-label">Open...</span>
         <span className="menu-shortcut">Ctrl+O</span>
       </div>
 
-      <div className="menu-item" onClick={() => triggerFileInput(true)}>
+      <div className="menu-item" onClick={(e) => triggerFileInput(e, true)}>
         <span className="menu-label">Open & Place...</span>
       </div>
 
       <div
-        className="menu-item has-submenu"
-        onMouseEnter={() => setActiveSubmenu('openMore')}
-        onMouseLeave={() => setActiveSubmenu(null)}
+        className={`menu-item has-submenu ${activeSubmenu === 'openMore' ? 'submenu-active' : ''}`}
+        onClick={(e) => handleToggleSubmenu(e, 'openMore')}
+        onMouseEnter={() => handleMouseEnterSubmenu('openMore')}
+        onMouseLeave={handleMouseLeaveSubmenu}
       >
         <span className="menu-label">Open More</span>
-        <LucideIcons.ChevronRight size={14} className="submenu-icon" />
-        {activeSubmenu === 'openMore' && (
-            <div className="submenu">
-                <div className="menu-item disabled">Open Recent</div>
-                <div className="menu-item disabled">Open from Cloud</div>
-                <div className="menu-item disabled">Recover Autosave</div>
-            </div>
-        )}
+        <LucideIcons.ChevronRight size={14} className={`submenu-icon ${activeSubmenu === 'openMore' ? 'rotated' : ''}`} />
+        <div className={`submenu ${activeSubmenu === 'openMore' ? 'active' : ''}`}>
+            <div className="menu-item disabled">Open Recent</div>
+            <div className="menu-item disabled">Open from Cloud</div>
+            <div className="menu-item disabled">Recover Autosave</div>
+        </div>
       </div>
 
       <div className="menu-divider" />
 
-      <div className="menu-item disabled">
+      <div className="menu-item disabled" onClick={(e) => e.stopPropagation()}>
         <span className="menu-label">Save</span>
         <span className="menu-shortcut">Ctrl+S</span>
       </div>
@@ -153,38 +178,37 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
 
       <div className="menu-divider" />
 
-      <div className="menu-item" onClick={() => { setIsExportDialogOpen(true); onClose(); }}>
+      <div className="menu-item" onClick={(e) => { e.stopPropagation(); setIsExportDialogOpen(true); closeMenus(); }}>
         <span className="menu-label">Export As...</span>
       </div>
 
-      <div className="menu-item disabled">
+      <div className="menu-item disabled" onClick={(e) => e.stopPropagation()}>
         <span className="menu-label">Export Layers...</span>
       </div>
 
       <div className="menu-divider" />
 
-      <div className="menu-item" onClick={() => { setIsFileInfoDialogOpen(true); onClose(); }}>
+      <div className="menu-item" onClick={(e) => { e.stopPropagation(); setIsFileInfoDialogOpen(true); closeMenus(); }}>
         <span className="menu-label">File Info...</span>
       </div>
 
        <div className="menu-divider" />
 
        <div
-        className="menu-item has-submenu"
-        onMouseEnter={() => setActiveSubmenu('automate')}
-        onMouseLeave={() => setActiveSubmenu(null)}
+        className={`menu-item has-submenu ${activeSubmenu === 'automate' ? 'submenu-active' : ''}`}
+        onClick={(e) => handleToggleSubmenu(e, 'automate')}
+        onMouseEnter={() => handleMouseEnterSubmenu('automate')}
+        onMouseLeave={handleMouseLeaveSubmenu}
       >
         <span className="menu-label">Automate</span>
-        <LucideIcons.ChevronRight size={14} className="submenu-icon" />
-        {activeSubmenu === 'automate' && (
-            <div className="submenu">
-                <div className="menu-item disabled">Batch Processing</div>
-                <div className="menu-item disabled">Watermarking</div>
-            </div>
-        )}
+        <LucideIcons.ChevronRight size={14} className={`submenu-icon ${activeSubmenu === 'automate' ? 'rotated' : ''}`} />
+        <div className={`submenu ${activeSubmenu === 'automate' ? 'active' : ''}`}>
+            <div className="menu-item disabled">Batch Processing</div>
+            <div className="menu-item disabled">Watermarking</div>
+        </div>
       </div>
 
-      <div className="menu-item disabled">
+      <div className="menu-item disabled" onClick={(e) => e.stopPropagation()}>
         <span className="menu-label">Scripts...</span>
       </div>
 
