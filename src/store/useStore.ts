@@ -5,6 +5,7 @@ import { createSelectionSlice } from './slices/selectionSlice';
 import { createToolSlice } from './slices/toolSlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createDocumentSlice } from './slices/documentSlice';
+import { createUISlice } from './slices/uiSlice';
 
 export type { EditorState, Layer, Tool } from './types';
 
@@ -14,6 +15,7 @@ export const useStore = create<EditorState>()((...a) => ({
   ...createToolSlice(...a),
   ...createHistorySlice(...a),
   ...createDocumentSlice(...a),
+  ...createUISlice(...a),
 }));
 
 // Initialize history with initial state
@@ -52,4 +54,7 @@ useStore.setState({
     },
   ],
   historyIndex: 0,
+  isNewDocumentDialogOpen: false,
+  isExportDialogOpen: false,
+  isFileInfoDialogOpen: false,
 });
