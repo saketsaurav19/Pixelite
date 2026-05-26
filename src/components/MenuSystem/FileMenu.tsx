@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { ImportEngine } from '../../services/import/ImportEngine';
@@ -87,7 +87,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       onClose();
       try {
         const buffer = await workerExportBridge.generatePSD(layers, documentSize.w, documentSize.h);
-        const blob = new Blob([buffer], { type: 'application/x-photoshop' });
+        const blob = new Blob([buffer.buffer], { type: 'application/x-photoshop' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
