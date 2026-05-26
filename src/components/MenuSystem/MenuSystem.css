@@ -1,40 +1,18 @@
-.main-menu-bar {
-  display: flex;
-  align-items: center;
-  background: #1a1a1a;
-  height: 32px;
-  padding: 0 8px;
-  font-size: 13px;
-  user-select: none;
-  position: relative;
-  z-index: 1000;
-}
-
-.menu-bar-item {
-  padding: 4px 12px;
-  color: #ccc;
-  cursor: pointer;
-  border-radius: 4px;
-  position: relative;
-}
-
-.menu-bar-item:hover, .menu-bar-item.active {
-  background: #333;
-  color: #fff;
-}
-
 .menu-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
-  background: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 4px;
+  background: var(--bg-header);
+  border: 1px solid var(--border-color);
   min-width: 240px;
-  padding: 6px 0;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-  display: flex;
+  display: none;
   flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  z-index: 2000;
+}
+
+.menu-item-container.active .menu-dropdown {
+  display: flex;
 }
 
 .menu-item {
@@ -45,6 +23,7 @@
   color: #eee;
   cursor: pointer;
   position: relative;
+  min-height: 32px;
 }
 
 .menu-item:hover:not(.disabled) {
@@ -75,6 +54,11 @@
 .submenu-icon {
   margin-left: auto;
   color: #888;
+  transition: transform 0.2s ease;
+}
+
+.submenu-icon.rotated {
+  transform: rotate(90deg);
 }
 
 .menu-item:hover:not(.disabled) .submenu-icon {
@@ -91,4 +75,61 @@
   min-width: 200px;
   padding: 6px 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  display: none;
+  z-index: 2001;
+}
+
+.submenu.active, .menu-item.has-submenu:hover .submenu {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .menu-item.has-submenu:hover .submenu {
+    display: none; /* Override hover on mobile, use active class */
+  }
+
+  .submenu.active {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    top: 0;
+    left: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding-left: 20px;
+    width: 100%;
+  }
+
+  .menu-dropdown {
+    position: static;
+    display: flex;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding-left: 10px;
+    width: 100%;
+    max-height: 0;
+    overflow-y: auto;
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, margin 0.3s ease;
+    flex-direction: column;
+    gap: 4px;
+    opacity: 0;
+    pointer-events: none; /* Disable interaction when hidden */
+    margin: 0;
+  }
+
+  .menu-item-container.active .menu-dropdown {
+    max-height: 50vh; /* Better than 500px, responsive to screen height */
+    opacity: 1;
+    margin-top: 10px;
+    margin-bottom: 5px;
+    pointer-events: auto; /* Re-enable interaction */
+  }
+
+  .menu-item {
+    min-height: 44px; /* Larger touch targets on mobile */
+  }
+
+  /* Only specific mobile style overrides here, core mobile styles in App.css */
 }
