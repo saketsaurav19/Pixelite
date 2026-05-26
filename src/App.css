@@ -69,22 +69,9 @@ body {
   color: var(--text-primary);
 }
 
-.menu-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  background: var(--bg-header);
-  border: 1px solid var(--border-color);
-  min-width: 200px;
-  display: none;
-  flex-direction: column;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  padding: 4px 0;
-}
 
-.menu-item-container:hover .menu-dropdown {
-  display: flex;
-}
+
+
 
 .menu-option {
   padding: 8px 16px;
@@ -1215,30 +1202,9 @@ body {
     justify-content: center;
   }
 
-  .menu-dropdown {
-    position: static;
-    display: flex;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    padding-left: 10px;
-    width: 100%;
-    max-height: 0;
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    flex-direction: column;
-    gap: 4px;
-    opacity: 0;
-  }
 
-  .menu-item-container.active .menu-dropdown {
-    max-height: 500px;
-    opacity: 1;
-    margin-top: 10px;
-    margin-bottom: 5px;
-  }
 
-  .options-bar {
+    .options-bar {
     padding: 8px 15px;
     overflow-x: auto;
     white-space: nowrap;
@@ -1381,11 +1347,7 @@ body {
     animation: simpleFadeIn 0.3s ease;
   }
 
-  .menu-item-container.active .menu-dropdown {
-    max-height: 500px;
-    display: flex;
   }
-}
 
 /* Hide desktop elements on mobile and vice versa */
 @media (min-width: 769px) {

@@ -98,515 +98,96 @@ const App: React.FC = () => {
         e.preventDefault();
         undo();
       }
-      if (isCtrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      if ((isCtrl && e.key === 'y') || (isCtrl && e.shiftKey && e.key === 'z')) {
         e.preventDefault();
         redo();
       }
 
-
-
-      // Additional edit menu shortcuts
-      if (isCtrl && e.key.toLowerCase() === 'x') {
-        e.preventDefault();
-        handleCut();
-      }
-      if (isCtrl && e.key.toLowerCase() === 'c' && !e.shiftKey) {
-        e.preventDefault();
-        handleCopy();
-      }
-      if (isCtrl && e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        handlePasteApp();
-      }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-          // Check if we aren't in a tool where delete means something else (like lasso paths)
-          // The canvas intercepts delete/backspace for lasso, so here we can just clear if we reach this point
-          // Actually canvas also listens to keydown, but we have global too.
-          if (!useStore.getState().isInteracting) {
-             handleClear();
-          }
-      }
-
-      // Edit menu shortcuts
-      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        handleFade();
-      }
-      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        handleCopyMerged();
-      }
-      if (e.shiftKey && e.key === 'F5') {
+      // Edit operations
+      if (isCtrl && e.shiftKey && e.key === 'f') {
         e.preventDefault();
         setIsFillPickerOpen(true);
       }
-      if (isCtrl && e.altKey && e.key.toLowerCase() === 't') {
-        e.preventDefault();
-        handleFreeTransform();
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
+         e.preventDefault();
+         handleFade();
+      }
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'c') {
+         e.preventDefault();
+         handleCopyMerged();
+      }
+      if (isCtrl && e.key.toLowerCase() === 't') {
+          e.preventDefault();
+          handleFreeTransform();
       }
       if (isCtrl && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        handlePreferences();
-      }
-
-      // Tool selection & Cycling
-      if (!isCtrl) {
-        const key = e.key.toLowerCase();
-        const toolGroups: Record<string, { id: string; tools: string[] }> = {
-          'v': { id: 'move', tools: ['move', 'artboard'] },
-          'm': { id: 'marquee', tools: ['marquee', 'ellipse_marquee'] },
-          'l': { id: 'lasso', tools: ['lasso', 'polygonal_lasso', 'magnetic_lasso'] },
-          'w': { id: 'selection', tools: ['quick_selection', 'magic_wand', 'object_selection'] },
-          'c': { id: 'crop', tools: ['crop', 'perspective_crop', 'slice', 'slice_select'] },
-          'i': { id: 'eyedropper', tools: ['eyedropper', 'color_sampler', 'ruler'] },
-          'j': { id: 'healing', tools: ['healing', 'healing_brush', 'patch', 'content_aware_move', 'red_eye'] },
-          'b': { id: 'brush', tools: ['brush', 'pencil', 'color_replacement', 'mixer_brush'] },
-          'y': { id: 'history', tools: ['history_brush', 'art_history_brush'] },
-          's': { id: 'clone', tools: ['clone', 'pattern_stamp'] },
-          'e': { id: 'eraser', tools: ['eraser', 'background_eraser', 'magic_eraser'] },
-          'g': { id: 'gradient', tools: ['gradient', 'paint_bucket'] },
-          'o': { id: 'dodge', tools: ['dodge', 'burn', 'sponge'] },
-          't': { id: 'text', tools: ['text', 'vertical_text'] },
-          'p': { id: 'pen', tools: ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point'] },
-          'a': { id: 'path', tools: ['path_select', 'direct_select'] },
-          'u': { id: 'shape', tools: ['shape', 'ellipse_shape', 'triangle_shape', 'polygon_shape', 'line_shape', 'custom_shape'] },
-          'h': { id: 'hand', tools: ['hand', 'rotate_view'] },
-          'z': { id: 'zoom', tools: ['zoom_tool'] }
-        };
-
-        if (toolGroups[key]) {
-          const group = toolGroups[key];
-          const toolsInGroup = group.tools;
-          const currentTool = useStore.getState().activeTool;
-          const { setToolVariant } = useStore.getState();
-
-          let nextTool = toolsInGroup[0];
-          if (toolsInGroup.includes(currentTool)) {
-            const currentIndex = toolsInGroup.indexOf(currentTool);
-            nextTool = toolsInGroup[(currentIndex + 1) % toolsInGroup.length];
-          }
-
-          setToolVariant(group.id, nextTool as any);
-        }
-      }
-
-      // Layer Selection (Alt + [ and Alt + ])
-      if (e.altKey && !isCtrl) {
-        if (e.key === '[' || e.key === ']') {
           e.preventDefault();
-          const { layers, activeLayerId, setActiveLayer } = useStore.getState();
-          if (layers.length <= 1) return;
-
-          const currentIndex = layers.findIndex(l => l.id === activeLayerId);
-          let nextIndex = 0;
-
-          if (e.key === '[') {
-            // Select backward (visually down the list)
-            nextIndex = (currentIndex + 1) % layers.length;
-          } else if (e.key === ']') {
-            // Select forward (visually up the list)
-            nextIndex = (currentIndex - 1 + layers.length) % layers.length;
-          }
-
-          setActiveLayer(layers[nextIndex].id);
-        }
+          handlePreferences();
       }
 
-      // Zoom
-      if (isCtrl && (e.key === '=' || e.key === '+')) {
+      // Layer operations
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        setZoom(Math.min(32, zoom + 0.05));
+        addLayer({ name: `Layer ${useStore.getState().layers.length + 1}` });
       }
-      if (isCtrl && (e.key === '-' || e.key === '_')) {
-        e.preventDefault();
-        setZoom(Math.max(0.01, zoom - 0.05));
-      }
-      if (isCtrl && e.key === '0') {
-        e.preventDefault();
-        setZoom(1);
-      }
-
-      // Layer management
       if (isCtrl && e.key.toLowerCase() === 'j') {
         e.preventDefault();
-        if (activeLayerId) {
-          duplicateLayer(activeLayerId);
-          recordHistory('Duplicate Layer');
+        if (useStore.getState().activeLayerId) {
+            duplicateLayer(useStore.getState().activeLayerId!);
         }
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (e.shiftKey && activeLayerId) {
-          const layer = layers.find(l => l.id === activeLayerId);
-          if (layer && !layer.locked) {
-            removeLayer(activeLayerId);
-            recordHistory('Delete Layer');
-          }
-        } else if (activeTool === 'slice_select' && toolState._sliceLastClickedIdx !== undefined) {
-          const idx = toolState._sliceLastClickedIdx;
-          const { slices, setSlices } = useStore.getState();
-          const nextSlices = slices.filter((_, i) => i !== idx);
-          setSlices(nextSlices);
-          delete toolState._sliceLastClickedIdx;
-          recordHistory('Delete Slice');
-        } else {
-          window.dispatchEvent(new CustomEvent('delete-selection'));
-        }
+
+      // Selection operations
+      if (isCtrl && e.key === 'a') {
+        e.preventDefault();
+        setSelectionRect({ x: 0, y: 0, w: useStore.getState().documentSize.w, h: useStore.getState().documentSize.h });
+      }
+      if (isCtrl && e.key === 'd') {
+        e.preventDefault();
+        setSelectionRect(null);
+        setLassoPaths([]);
+        setCropRect(null);
+      }
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        setIsInverseSelection(!useStore.getState().isInverseSelection);
+      }
+
+      // Tools (single key press)
+      const keyMap: Record<string, [string, string]> = {
+        'v': ['move', 'move'],
+        'm': ['marquee', 'rectangle_marquee'],
+        'l': ['lasso', 'lasso'],
+        'w': ['selection', 'quick_selection'],
+        'c': ['crop', 'crop'],
+        'i': ['eyedropper', 'eyedropper'],
+        'j': ['healing', 'healing'],
+        'b': ['brush', 'brush'],
+        's': ['clone', 'clone'],
+        'y': ['history', 'history_brush'],
+        'e': ['eraser', 'eraser'],
+        'g': ['gradient', 'gradient'],
+        'o': ['dodge', 'dodge'],
+        'p': ['pen', 'pen'],
+        't': ['text', 'text'],
+        'a': ['path', 'path_select'],
+        'u': ['shape', 'shape'],
+        'h': ['hand', 'hand'],
+        'z': ['zoom', 'zoom_tool'],
+      };
+
+      if (!isCtrl && !e.altKey && !e.shiftKey && keyMap[e.key.toLowerCase()]) {
+        e.preventDefault();
+        const [groupId, defaultVariantId] = keyMap[e.key.toLowerCase()];
+        setActiveTool(defaultVariantId);
+        setToolVariant(groupId, defaultVariantId);
+        toolState.currentTool = defaultVariantId;
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    zoom, activeLayerId, layers, undo, redo,
-    setActiveTool,
-    setToolVariant,
-    setZoom,
-    duplicateLayer,
-    removeLayer,
-    recordHistory,
-    activeTool
-  ]);
-
-  const setClipboardDataUrl = useStore(state => state.setClipboardDataUrl);
-  const clipboardDataUrl = useStore(state => state.clipboardDataUrl);
-
-  const handleCopy = () => {
-    if (!activeLayerId) return;
-    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx) return;
-
-    const { selectionRect, lassoPaths, isInverseSelection } = useStore.getState();
-
-    let tempCanvas = document.createElement('canvas');
-    let tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return;
-
-    // If there is no selection, just copy the whole layer
-    if (!selectionRect && lassoPaths.length === 0) {
-        setClipboardDataUrl(canvas.toDataURL());
-        return;
-    }
-
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-
-    tempCtx.save();
-    tempCtx.beginPath();
-    let hasClip = false;
-
-    if (selectionRect) {
-      tempCtx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
-      hasClip = true;
-    } else if (lassoPaths.length > 0) {
-      lassoPaths.forEach(path => {
-        if (path.length > 0) {
-          tempCtx.moveTo(path[0].x, path[0].y);
-          for (let i = 1; i < path.length; i++) {
-            tempCtx.lineTo(path[i].x, path[i].y);
-          }
-        }
-      });
-      hasClip = true;
-    }
-
-    if (hasClip) {
-        if (isInverseSelection) {
-            let outerCanvas = document.createElement('canvas');
-            let outerCtx = outerCanvas.getContext('2d');
-            if(outerCtx) {
-                outerCanvas.width = canvas.width;
-                outerCanvas.height = canvas.height;
-                outerCtx.rect(0, 0, canvas.width, canvas.height);
-                outerCtx.clip();
-                outerCtx.beginPath();
-                if (selectionRect) {
-                  outerCtx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
-                } else if (lassoPaths.length > 0) {
-                  lassoPaths.forEach(path => {
-                    if (path.length > 0) {
-                      outerCtx.moveTo(path[0].x, path[0].y);
-                      for (let i = 1; i < path.length; i++) {
-                        outerCtx.lineTo(path[i].x, path[i].y);
-                      }
-                    }
-                  });
-                }
-                outerCtx.clip();
-
-                let reverseCanvas = document.createElement('canvas');
-                let reverseCtx = reverseCanvas.getContext('2d');
-                if(reverseCtx) {
-                    reverseCanvas.width = canvas.width;
-                    reverseCanvas.height = canvas.height;
-                    reverseCtx.drawImage(canvas, 0, 0);
-                    reverseCtx.globalCompositeOperation = 'destination-out';
-                    reverseCtx.drawImage(outerCanvas, 0, 0);
-                    tempCtx.drawImage(reverseCanvas, 0, 0);
-                }
-            }
-        } else {
-            tempCtx.clip();
-            tempCtx.drawImage(canvas, 0, 0);
-        }
-    } else {
-         tempCtx.drawImage(canvas, 0, 0);
-    }
-
-    tempCtx.restore();
-
-    // Now find the bounding box to crop the copied image
-    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-    const data = imageData.data;
-    let hasVisiblePixels = false;
-
-    for (let y = 0; y < canvas.height; y++) {
-      for (let x = 0; x < canvas.width; x++) {
-        const index = (y * canvas.width + x) * 4;
-        if (data[index + 3] > 0) {
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-          hasVisiblePixels = true;
-        }
-      }
-    }
-
-    if (hasVisiblePixels) {
-        let finalCanvas = document.createElement('canvas');
-        let finalCtx = finalCanvas.getContext('2d');
-        if (finalCtx) {
-            finalCanvas.width = maxX - minX + 1;
-            finalCanvas.height = maxY - minY + 1;
-            finalCtx.putImageData(tempCtx.getImageData(minX, minY, finalCanvas.width, finalCanvas.height), 0, 0);
-            setClipboardDataUrl(finalCanvas.toDataURL());
-        }
-    }
-  };
-
-  const handleClear = () => {
-    if (!activeLayerId) return;
-    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx) return;
-
-    const { selectionRect, lassoPaths, isInverseSelection } = useStore.getState();
-
-    ctx.save();
-    ctx.beginPath();
-    let hasClip = false;
-
-    if (selectionRect) {
-      ctx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
-      hasClip = true;
-    } else if (lassoPaths.length > 0) {
-      lassoPaths.forEach(path => {
-        if (path.length > 0) {
-          ctx.moveTo(path[0].x, path[0].y);
-          for (let i = 1; i < path.length; i++) {
-            ctx.lineTo(path[i].x, path[i].y);
-          }
-        }
-      });
-      hasClip = true;
-    }
-
-    if (hasClip) {
-        if (!isInverseSelection) {
-            ctx.clip();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        } else {
-             // to clear inverse, we clear everything EXCEPT the clip.
-             // a simple way is globalCompositeOperation
-             let tempCanvas = document.createElement('canvas');
-             let tempCtx = tempCanvas.getContext('2d');
-             if(tempCtx) {
-                 tempCanvas.width = canvas.width;
-                 tempCanvas.height = canvas.height;
-                 tempCtx.drawImage(canvas, 0, 0);
-                 tempCtx.globalCompositeOperation = 'destination-out';
-                 tempCtx.beginPath();
-                 if (selectionRect) {
-                     tempCtx.rect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
-                 } else if (lassoPaths.length > 0) {
-                     lassoPaths.forEach(path => {
-                        if (path.length > 0) {
-                          tempCtx.moveTo(path[0].x, path[0].y);
-                          for (let i = 1; i < path.length; i++) {
-                            tempCtx.lineTo(path[i].x, path[i].y);
-                          }
-                        }
-                      });
-                 }
-                 tempCtx.fill();
-
-                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                 ctx.drawImage(tempCanvas, 0, 0);
-             }
-        }
-    } else {
-         ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    ctx.restore();
-    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
-    recordHistory('Clear');
-  };
-
-  const handleCut = () => {
-      handleCopy();
-      handleClear();
-      recordHistory('Cut');
-  };
-
-  const handlePasteApp = () => {
-      if (clipboardDataUrl) {
-          addLayer({ dataUrl: clipboardDataUrl, position: { x: documentSize.w/2, y: documentSize.h/2 }});
-          recordHistory('Paste');
-      }
-  };
-
-  const handleInvert = () => {
-    if (!activeLayerId) return;
-    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx) return;
-
-    const { selectionRect, lassoPaths, isInverseSelection } = useStore.getState();
-
-    // Store the original state
-    ctx.save();
-
-    // Create a temporary canvas for the inverted result
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    if (!tempCtx) return;
-
-    // Apply clipping if selection exists
-    if (selectionRect) {
-      const layer = layers.find(l => l.id === activeLayerId);
-      const offX = layer?.position.x || 0;
-      const offY = layer?.position.y || 0;
-      ctx.beginPath();
-      if (isInverseSelection) {
-        ctx.rect(0, 0, canvas.width, canvas.height);
-      }
-      ctx.rect(selectionRect.x - offX, selectionRect.y - offY, selectionRect.w, selectionRect.h);
-      ctx.clip(isInverseSelection ? 'evenodd' : 'nonzero');
-    } else if (lassoPaths.length > 0) {
-      const layer = layers.find(l => l.id === activeLayerId);
-      const offX = layer?.position.x || 0;
-      const offY = layer?.position.y || 0;
-      ctx.beginPath();
-      if (isInverseSelection) {
-        ctx.rect(0, 0, canvas.width, canvas.height);
-      }
-      lassoPaths.forEach(path => {
-        if (path.length < 3) return;
-        ctx.moveTo(path[0].x - offX, path[0].y - offY);
-        path.forEach(p => ctx.lineTo(p.x - offX, p.y - offY));
-        ctx.closePath();
-      });
-      ctx.clip('evenodd');
-    }
-
-    // Get image data, invert it, and put it back
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = 255 - data[i];
-      data[i + 1] = 255 - data[i + 1];
-      data[i + 2] = 255 - data[i + 2];
-    }
-
-    // We need to only apply the inverted data to the clipped area
-    // A simple way is to use putImageData on the whole thing while clipped
-    // But putImageData ignores clipping! 
-    // So we put it on the temp canvas and then draw that back to the original with the clip active.
-    tempCtx.putImageData(imageData, 0, 0);
-
-    // Clear the clipped area first (optional but safer for some blend modes)
-    // Then draw the inverted version from the temp canvas
-    ctx.drawImage(tempCanvas, 0, 0);
-
-    ctx.restore();
-    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
-    recordHistory('Invert Colors');
-  };
-
-
-
-  React.useEffect(() => {
-    const onInvert = () => handleInvert();
-    const onSelectSubject = () => handleSelectSubject();
-    const onCropFitDoc = () => {
-      setCropRect({ x: 0, y: 0, w: documentSize.w, h: documentSize.h });
-    };
-    const onCropFitLayer = () => {
-      if (!activeLayerId) return;
-      const layer = layers.find(l => l.id === activeLayerId);
-      if (layer) {
-        setCropRect({ x: layer.position.x, y: layer.position.y, w: documentSize.w, h: documentSize.h });
-      }
-    };
-
-    window.addEventListener('invert-layer', onInvert);
-    window.addEventListener('select-subject', onSelectSubject);
-    window.addEventListener('crop-fit-doc', onCropFitDoc);
-    window.addEventListener('crop-fit-layer', onCropFitLayer);
-    return () => {
-      window.removeEventListener('invert-layer', onInvert);
-      window.removeEventListener('select-subject', onSelectSubject);
-      window.removeEventListener('crop-fit-doc', onCropFitDoc);
-      window.removeEventListener('crop-fit-layer', onCropFitLayer);
-    };
-  }, [activeLayerId, layers, updateLayer, recordHistory, documentSize]);
-
-
-  const handleSelectSubject = () => {
-    if (!activeLayerId) return;
-    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-
-    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-    let found = false;
-
-    // Fast scan
-    for (let y = 0; y < canvas.height; y += 2) {
-      for (let x = 0; x < canvas.width; x += 2) {
-        const alpha = data[(y * canvas.width + x) * 4 + 3];
-        if (alpha > 20) {
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-          found = true;
-        }
-      }
-    }
-
-    if (found) {
-      // Add a small 2px padding
-      setSelectionRect({
-        x: Math.max(0, minX - 2),
-        y: Math.max(0, minY - 2),
-        w: Math.min(canvas.width - minX, maxX - minX + 4),
-        h: Math.min(canvas.height - minY, maxY - minY + 4)
-      });
-      setIsInverseSelection(false);
-      setLassoPaths([]); // Clear lasso paths if using rect
-      recordHistory('Select Subject');
-    } else {
-      alert('No subject found on this layer.');
-    }
-  };
+  }, [undo, redo, addLayer, setSelectionRect, setLassoPaths, setCropRect, setIsInverseSelection, setActiveTool, setToolVariant, setIsFillPickerOpen, duplicateLayer]);
 
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -659,7 +240,9 @@ const App: React.FC = () => {
           </button>
         </div>
       </header>
+
       <OptionsBar />
+
       <div className="app-body">
         <div className={`toolbar-wrapper ${isToolsOpen ? 'mobile-open' : ''}`}>
           {isToolsOpen && (
