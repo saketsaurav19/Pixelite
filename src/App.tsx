@@ -12,7 +12,6 @@ import { MenuBar } from './components/MenuSystem/MenuBar';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
-import { removeBackground } from '@imgly/background-removal';
 import './App.css';
 
 const App: React.FC = () => {
@@ -38,13 +37,11 @@ const App: React.FC = () => {
     setIsInverseSelection,
     setCropRect,
     setLassoPaths,
-    setDocumentSize,
     moveLayer,
     reorderLayers,
     documentSize,
     activeTool,
     setIsTyping,
-    setLayers,
     isMobileMenuOpen,
     setIsMobileMenuOpen,
     setActiveMobileSubmenu
@@ -57,8 +54,8 @@ const App: React.FC = () => {
           const handleFreeTransform = () => { alert("Free Transform action triggered (Placeholder)"); };
                 const handlePreferences = () => { alert("Preferences action triggered (Placeholder)"); };
 
-  const [isProcessing, setIsProcessing] = React.useState(false);
-  const [processingText, setProcessingText] = React.useState('');
+  const [isProcessing] = React.useState(false);
+  const [processingText] = React.useState('');
 
   // Mobile UI state
 
