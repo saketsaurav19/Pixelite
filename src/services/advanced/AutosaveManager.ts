@@ -5,7 +5,7 @@
 export class AutosaveManager {
   private intervalId: number | null = null;
 
-  startAutosave(intervalMs: number = 60000) {
+  startAutosave(_intervalMs: number = 60000) {
     // Implementation pending
   }
 
