@@ -30,8 +30,7 @@ const App: React.FC = () => {
     undo,
     redo,
     recordHistory,
-    inverseSelection,
-    duplicateLayer,
+        duplicateLayer,
     setActiveTool,
     setToolVariant,
     setZoom,
@@ -45,54 +44,18 @@ const App: React.FC = () => {
     documentSize,
     activeTool,
     setIsTyping,
-    setLayers
+    setLayers,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen,
+    setActiveMobileSubmenu
   } = useStore();
 
-  const handleSave = (asNew: boolean = false) => {
-    const { w, h } = documentSize;
-    const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = w;
-    exportCanvas.height = h;
-    const ctx = exportCanvas.getContext('2d');
-    if (!ctx) return;
-
-    // Draw layers from bottom to top
-    [...layers].reverse().forEach(layer => {
-      if (!layer.visible) return;
-      const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-      if (layerCanvas) {
-        ctx.globalAlpha = layer.opacity || 1;
-        ctx.globalCompositeOperation = (layer.blendMode || 'source-over') as any;
-        ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
-      }
-    });
-
-    const filename = asNew ? prompt('Save as...', 'photoshop_clone_project.png') : 'photoshop_clone_project.png';
-    if (!filename) return;
-
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = exportCanvas.toDataURL('image/png');
-    link.click();
-  };
 
 
   const handleFade = () => { alert("Fade action triggered (Placeholder)"); };
   const handleCopyMerged = () => { alert("Copy Merged action triggered (Placeholder)"); };
-  const handleStroke = () => { alert("Stroke action triggered (Placeholder)"); };
-  const handleContentAwareScale = () => { alert("Content-Aware Scale action triggered (Placeholder)"); };
-  const handlePuppetWarp = () => { alert("Puppet Warp action triggered (Placeholder)"); };
-  const handlePerspectiveWarp = () => { alert("Perspective Warp action triggered (Placeholder)"); };
-  const handleFreeTransform = () => { alert("Free Transform action triggered (Placeholder)"); };
-  const handleTransform = (type: string) => { alert(`Transform ${type} action triggered (Placeholder)`); };
-  const handleAutoAlign = () => { alert("Auto-Align action triggered (Placeholder)"); };
-  const handleAutoBlend = () => { alert("Auto-Blend action triggered (Placeholder)"); };
-  const handleAssignProfile = () => { alert("Assign Profile action triggered (Placeholder)"); };
-  const handleConvertToProfile = () => { alert("Convert to Profile action triggered (Placeholder)"); };
-  const handleDefineNew = (type: string) => { alert(`Define New ${type} action triggered (Placeholder)`); };
-  const handlePresetManager = () => { alert("Preset Manager action triggered (Placeholder)"); };
-  const handlePreferences = () => { alert("Preferences action triggered (Placeholder)"); };
-  const handleLocalStorage = () => { alert("Local Storage action triggered (Placeholder)"); };
+          const handleFreeTransform = () => { alert("Free Transform action triggered (Placeholder)"); };
+                const handlePreferences = () => { alert("Preferences action triggered (Placeholder)"); };
 
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [processingText, setProcessingText] = React.useState('');
@@ -576,11 +539,6 @@ const App: React.FC = () => {
     updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
     recordHistory('Invert Colors');
   };
-  const handleNew = () => {
-    setLayers([]);
-    setDocumentSize({ w: 800, h: 600 });
-    recordHistory('New Document');
-  };
 
 
 
@@ -610,31 +568,6 @@ const App: React.FC = () => {
     };
   }, [activeLayerId, layers, updateLayer, recordHistory, documentSize]);
 
-  const handleRemoveBackground = async () => {
-    if (!activeLayerId) return;
-    const layer = layers.find(l => l.id === activeLayerId);
-    if (!layer || !layer.dataUrl) return;
-
-    try {
-      setIsProcessing(true);
-      setProcessingText('AI is removing background...');
-
-      const blob = await removeBackground(layer.dataUrl, { device: 'gpu' });
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        updateLayer(activeLayerId, { dataUrl: result });
-        recordHistory('Remove Background');
-        setIsProcessing(false);
-      };
-      reader.readAsDataURL(blob);
-    } catch (error) {
-      console.error('Failed to remove background:', error);
-      setIsProcessing(false);
-      alert('Failed to remove background. Please try again.');
-    }
-  };
 
   const handleSelectSubject = () => {
     if (!activeLayerId) return;
@@ -676,6 +609,12 @@ const App: React.FC = () => {
     } else {
       alert('No subject found on this layer.');
     }
+  };
+
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Implement image upload logic here
+    console.log('Image upload triggered', e);
   };
 
   return (
