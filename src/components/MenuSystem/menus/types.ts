@@ -11,7 +11,7 @@ export interface MenuLeafItem {
 
 export interface MenuGroupItem {
   label: string;
-  submenu: MenuLeafItem[];
+  submenu: MenuItem[];
 }
 
 export type MenuItem = MenuLeafItem | MenuGroupItem | { divider: true };
