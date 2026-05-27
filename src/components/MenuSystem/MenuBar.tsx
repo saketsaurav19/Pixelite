@@ -9,7 +9,6 @@ import './MenuSystem.css';
 export const MenuBar: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useStore();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [activeSubmenus, setActiveSubmenus] = useState<Record<string, boolean>>({});
   const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
