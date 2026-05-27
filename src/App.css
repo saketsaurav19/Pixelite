@@ -128,6 +128,10 @@ body {
   padding: 0 10px;
   gap: 15px;
   font-size: 11px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
 }
 
 .tool-indicator {
@@ -196,6 +200,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 /* Main Body */
@@ -1367,6 +1372,18 @@ body {
     font-size: 14px;
     color: var(--text-primary);
     margin-right: 15px;
+  }
+
+  .toolbar-wrapper,
+  .side-panels {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    height: auto;
+    width: auto;
+    border-radius: 0;
+    box-shadow: none;
+    transition: none;
   }
 }
 
