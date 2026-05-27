@@ -95,23 +95,17 @@
   }
 
   .menu-item.has-submenu {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    flex-wrap: wrap;
     align-items: center;
-    row-gap: 6px;
   }
 
   .menu-item.has-submenu > .menu-label {
-    min-width: 0;
-  }
-
-  .menu-item.has-submenu > .submenu-icon {
-    margin-left: 12px;
+    flex: 1 1 auto;
   }
 
   .menu-item.has-submenu > .submenu {
-    grid-column: 1 / -1;
-    margin-top: 0;
+    flex-basis: 100%;
+    margin-top: 6px;
   }
 
   .submenu.active {
