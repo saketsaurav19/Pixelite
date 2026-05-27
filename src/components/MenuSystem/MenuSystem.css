@@ -79,13 +79,33 @@
   z-index: 2001;
 }
 
-.submenu.active, .menu-item.has-submenu:hover .submenu {
+.submenu.active {
   display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menu-item.has-submenu:hover .submenu {
+    display: block;
+  }
 }
 
 @media (max-width: 768px) {
   .menu-item.has-submenu:hover .submenu {
     display: none; /* Override hover on mobile, use active class */
+  }
+
+  .menu-item.has-submenu {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .menu-item.has-submenu > .menu-label {
+    flex: 1 1 auto;
+  }
+
+  .menu-item.has-submenu > .submenu {
+    flex-basis: 100%;
+    margin-top: 6px;
   }
 
   .submenu.active {
