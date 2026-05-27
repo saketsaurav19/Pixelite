@@ -9,6 +9,7 @@ import './MenuSystem.css';
 export const MenuBar: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useStore();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [activeSubmenus, setActiveSubmenus] = useState<Record<string, string | null>>({});
   const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,6 +37,14 @@ export const MenuBar: React.FC = () => {
     action(useStore.getState());
   };
 
+  const toggleSubmenu = (menuName: string, submenuLabel: string) => {
+    if (window.innerWidth > 768) return;
+    setActiveSubmenus((prev) => ({
+      ...prev,
+      [menuName]: prev[menuName] === submenuLabel ? null : submenuLabel,
+    }));
+  };
+
   const renderStaticMenu = (menuName: string) => {
     const menuItems = staticMenus[menuName] ?? [];
     return (
@@ -44,11 +53,19 @@ export const MenuBar: React.FC = () => {
           if ('divider' in item && item.divider) return <div key={`${menuName}-divider-${index}`} className="menu-divider" />;
 
           if (isGroupItem(item)) {
+            const isSubmenuActive = activeSubmenus[menuName] === item.label;
             return (
-              <div key={`${menuName}-${item.label}`} className="menu-item has-submenu">
+              <div
+                key={`${menuName}-${item.label}`}
+                className={`menu-item has-submenu ${isSubmenuActive ? 'submenu-active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSubmenu(menuName, item.label);
+                }}
+              >
                 <span className="menu-label">{item.label}</span>
-                <LucideIcons.ChevronRight size={14} className="submenu-icon" />
-                <div className="submenu">
+                <LucideIcons.ChevronRight size={14} className={`submenu-icon ${isSubmenuActive ? 'rotated' : ''}`} />
+                <div className={`submenu ${isSubmenuActive ? 'active' : ''}`}>
                   {item.submenu.map((subItem) => {
                     const enabled = subItem.isEnabled ? subItem.isEnabled(useStore.getState()) : true;
                     return (
