@@ -12,6 +12,7 @@ import { MenuBar } from './components/MenuSystem/MenuBar';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
+import { ImportEngine } from './services/import/ImportEngine';
 import './App.css';
 
 const App: React.FC = () => {
@@ -187,9 +188,60 @@ const App: React.FC = () => {
   }, [undo, redo, addLayer, setSelectionRect, setLassoPaths, setCropRect, setIsInverseSelection, setActiveTool, setToolVariant, setIsFillPickerOpen, duplicateLayer]);
 
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Implement image upload logic here
-    console.log('Image upload triggered', e);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await ImportEngine.importFile(file);
+      if (result.type !== 'image' || !result.dataUrl) return;
+
+      const currentState = useStore.getState();
+      const isDefaultBackground =
+        currentState.layers.length === 1 &&
+        currentState.layers[0].name === 'Background' &&
+        currentState.layers[0].type === 'paint';
+
+      if (currentState.layers.length === 0 || isDefaultBackground) {
+        currentState.setDocumentSize({ w: result.width, h: result.height });
+        currentState.setLayers([{
+          id: Math.random().toString(36).substring(7),
+          name: result.name,
+          type: 'image',
+          dataUrl: result.dataUrl,
+          position: { x: 0, y: 0 },
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'source-over'
+        }]);
+      } else {
+        currentState.setLayers([...
+          currentState.layers,
+          {
+            id: Math.random().toString(36).substring(7),
+            name: result.name,
+            type: 'image',
+            dataUrl: result.dataUrl,
+            position: {
+              x: (currentState.documentSize.w - result.width) / 2,
+              y: (currentState.documentSize.h - result.height) / 2
+            },
+            visible: true,
+            locked: false,
+            opacity: 1,
+            blendMode: 'source-over'
+          }
+        ]);
+      }
+
+      currentState.recordHistory(`Open ${result.name}`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to open image.');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   return (
