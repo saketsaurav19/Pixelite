@@ -33,25 +33,6 @@ export const MenuBar: React.FC = () => {
     setActiveMenu(activeMenu === menuName ? null : menuName);
   };
 
-  const isMobileViewport = () => window.innerWidth <= 768;
-
-  const toggleSubmenu = (submenuKey: string) => {
-    if (!isMobileViewport()) return;
-    setActiveSubmenus((prev) => ({ ...prev, [submenuKey]: !prev[submenuKey] }));
-  };
-
-  const handleSubmenuMouseEnter = (submenuKey: string) => {
-    if (!isMobileViewport()) {
-      setActiveSubmenus((prev) => ({ ...prev, [submenuKey]: true }));
-    }
-  };
-
-  const handleSubmenuMouseLeave = (submenuKey: string) => {
-    if (!isMobileViewport()) {
-      setActiveSubmenus((prev) => ({ ...prev, [submenuKey]: false }));
-    }
-  };
-
   const runAction = (action: (state: ReturnType<typeof useStore.getState>) => void) => {
     action(useStore.getState());
   };
@@ -64,22 +45,11 @@ export const MenuBar: React.FC = () => {
           if ('divider' in item && item.divider) return <div key={`${menuName}-divider-${index}`} className="menu-divider" />;
 
           if (isGroupItem(item)) {
-            const submenuKey = `${menuName}-${item.label}`;
-            const isSubmenuActive = Boolean(activeSubmenus[submenuKey]);
             return (
-              <div
-                key={submenuKey}
-                className={`menu-item has-submenu ${isSubmenuActive ? 'submenu-active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleSubmenu(submenuKey);
-                }}
-                onMouseEnter={() => handleSubmenuMouseEnter(submenuKey)}
-                onMouseLeave={() => handleSubmenuMouseLeave(submenuKey)}
-              >
+              <div key={`${menuName}-${item.label}`} className="menu-item has-submenu">
                 <span className="menu-label">{item.label}</span>
-                <LucideIcons.ChevronRight size={14} className={`submenu-icon ${isSubmenuActive ? 'rotated' : ''}`} />
-                <div className={`submenu ${isSubmenuActive ? 'active' : ''}`}>
+                <LucideIcons.ChevronRight size={14} className="submenu-icon" />
+                <div className="submenu">
                   {item.submenu.map((subItem) => {
                     const enabled = subItem.isEnabled ? subItem.isEnabled(useStore.getState()) : true;
                     return (
