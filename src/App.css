@@ -1354,7 +1354,8 @@ body {
 
   .mobile-menu-btn,
   .header-right,
-  .mobile-panel-header {
+  .mobile-panel-header,
+  .mobile-menu-header {
     display: none;
   }
 
