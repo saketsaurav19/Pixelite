@@ -3,13 +3,13 @@ import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { FileMenu } from './FileMenu';
 import { staticMenus } from './menus';
-import { isGroupItem, isLeafItem } from './menus/types';
+import { isGroupItem, isLeafItem, type MenuItem } from './menus/types';
 import './MenuSystem.css';
 
 export const MenuBar: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useStore();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [activeSubmenus, setActiveSubmenus] = useState<Record<string, string | null>>({});
+  const [activeSubmenus, setActiveSubmenus] = useState<Record<string, boolean>>({});
   const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,77 +37,60 @@ export const MenuBar: React.FC = () => {
     action(useStore.getState());
   };
 
-  const toggleSubmenu = (menuName: string, submenuLabel: string) => {
+  const toggleSubmenu = (key: string) => {
     if (window.innerWidth > 768) return;
-    setActiveSubmenus((prev) => ({
-      ...prev,
-      [menuName]: prev[menuName] === submenuLabel ? null : submenuLabel,
-    }));
+    setActiveSubmenus((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const renderMenuItems = (menuName: string, items: MenuItem[], path: string[] = []) => (
+    <>
+      {items.map((item, index) => {
+        if ('divider' in item && item.divider) return <div key={`${menuName}-divider-${path.join('-')}-${index}`} className="menu-divider" />;
+
+        if (isGroupItem(item)) {
+          const submenuKey = `${menuName}:${[...path, item.label].join('>')}`;
+          const isSubmenuActive = Boolean(activeSubmenus[submenuKey]);
+          return (
+            <div
+              key={`${menuName}-${submenuKey}`}
+              className={`menu-item has-submenu ${isSubmenuActive ? 'submenu-active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSubmenu(submenuKey);
+              }}
+            >
+              <span className="menu-label">{item.label}</span>
+              <LucideIcons.ChevronRight size={14} className={`submenu-icon ${isSubmenuActive ? 'rotated' : ''}`} />
+              <div className={`submenu ${isSubmenuActive ? 'active' : ''}`}>{renderMenuItems(menuName, item.submenu, [...path, item.label])}</div>
+            </div>
+          );
+        }
+
+        if (isLeafItem(item)) {
+          const enabled = item.isEnabled ? item.isEnabled(useStore.getState()) : true;
+          return (
+            <div
+              key={`${menuName}-${[...path, item.label].join('>')}`}
+              className={`menu-item ${enabled ? '' : 'disabled'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (enabled) runAction(item.action);
+              }}
+            >
+              <span className="menu-label">{item.label}</span>
+              {item.shortcut && <span className="menu-shortcut">{item.shortcut}</span>}
+            </div>
+          );
+        }
+
+        return null;
+      })}
+    </>
+  );
 
   const renderStaticMenu = (menuName: string) => {
     const menuItems = staticMenus[menuName] ?? [];
-    return (
-      <div className={`menu-dropdown ${menuName}-menu`}>
-        {menuItems.map((item, index) => {
-          if ('divider' in item && item.divider) return <div key={`${menuName}-divider-${index}`} className="menu-divider" />;
-
-          if (isGroupItem(item)) {
-            const isSubmenuActive = activeSubmenus[menuName] === item.label;
-            return (
-              <div
-                key={`${menuName}-${item.label}`}
-                className={`menu-item has-submenu ${isSubmenuActive ? 'submenu-active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleSubmenu(menuName, item.label);
-                }}
-              >
-                <span className="menu-label">{item.label}</span>
-                <LucideIcons.ChevronRight size={14} className={`submenu-icon ${isSubmenuActive ? 'rotated' : ''}`} />
-                <div className={`submenu ${isSubmenuActive ? 'active' : ''}`}>
-                  {item.submenu.map((subItem) => {
-                    const enabled = subItem.isEnabled ? subItem.isEnabled(useStore.getState()) : true;
-                    return (
-                      <div
-                        key={`${menuName}-${item.label}-${subItem.label}`}
-                        className={`menu-item ${enabled ? '' : 'disabled'}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (enabled) runAction(subItem.action);
-                        }}
-                      >
-                        <span className="menu-label">{subItem.label}</span>
-                        {subItem.shortcut && <span className="menu-shortcut">{subItem.shortcut}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          }
-
-          if (isLeafItem(item)) {
-            const enabled = item.isEnabled ? item.isEnabled(useStore.getState()) : true;
-            return (
-              <div
-                key={`${menuName}-${item.label}`}
-                className={`menu-item ${enabled ? '' : 'disabled'}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (enabled) runAction(item.action);
-                }}
-              >
-                <span className="menu-label">{item.label}</span>
-                {item.shortcut && <span className="menu-shortcut">{item.shortcut}</span>}
-              </div>
-            );
-          }
-
-          return null;
-        })}
-      </div>
-    );
+    return <div className={`menu-dropdown ${menuName}-menu`}>{renderMenuItems(menuName, menuItems)}</div>;
   };
 
   const menus: { key: string; label: string; component?: React.ReactNode }[] = [
