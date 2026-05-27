@@ -32,7 +32,10 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
 
   const handleOpen = async (e: React.ChangeEvent<HTMLInputElement>, isPlace: boolean = false) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      closeMenus();
+      return;
+    }
 
     try {
       const result = await ImportEngine.importFile(file);
@@ -75,7 +78,8 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       console.error(err);
       alert("Failed to open file.");
     } finally {
-        if (fileInputRef.current) fileInputRef.current.value = '';
+      closeMenus();
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -85,7 +89,6 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           fileInputRef.current.dataset.isPlace = isPlace.toString();
           fileInputRef.current.click();
       }
-      closeMenus();
   };
 
   const handleSavePSD = async (e: React.MouseEvent) => {
