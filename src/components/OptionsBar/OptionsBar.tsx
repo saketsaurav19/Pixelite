@@ -105,6 +105,12 @@ const OptionsBar: React.FC = () => {
     recordHistory('Deselect');
   };
 
+  const brushLikeTools = ['brush', 'pencil', 'color_replacement', 'mixer_brush', 'clone', 'pattern_stamp', 'eraser', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush'];
+  const textTools = ['text', 'vertical_text'];
+  const shapeTools = ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'];
+  const penTools = ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'];
+  const detailTools = ['blur', 'sharpen', 'smudge', 'dodge', 'burn', 'sponge', 'healing', 'healing_brush', 'patch', 'red_eye'];
+
   return (
     <div className="options-bar">
       <div className="tool-indicator">{activeTool.toUpperCase()}</div>
@@ -701,7 +707,7 @@ const OptionsBar: React.FC = () => {
         </>
       )}
 
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || activeTool === 'clone' || activeTool === 'pattern_stamp' || activeTool === 'eraser' || activeTool === 'background_eraser' || activeTool === 'magic_eraser' || activeTool === 'history_brush' || activeTool === 'art_history_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || activeTool === 'quick_selection' || activeTool === 'blur' || activeTool === 'sharpen' || activeTool === 'smudge' || activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sponge' || activeTool === 'healing' || activeTool === 'healing_brush' || activeTool === 'patch' || activeTool === 'red_eye' || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(brushLikeTools.includes(activeTool) || textTools.includes(activeTool) || shapeTools.includes(activeTool) || activeTool === 'quick_selection' || detailTools.includes(activeTool) || penTools.includes(activeTool)) && (
         <>
           <div className="option-control">
             <label>
@@ -772,7 +778,7 @@ const OptionsBar: React.FC = () => {
         </>
       )}
 
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(shapeTools.includes(activeTool) || penTools.includes(activeTool)) && (
         <div className="option-control">
           <label>Stroke Width</label>
           <input
@@ -786,7 +792,7 @@ const OptionsBar: React.FC = () => {
         </div>
       )}
 
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || activeTool === 'clone' || activeTool === 'pattern_stamp' || activeTool === 'history_brush' || activeTool === 'art_history_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || activeTool === 'eyedropper' || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(brushLikeTools.includes(activeTool) || textTools.includes(activeTool) || shapeTools.includes(activeTool) || activeTool === 'eyedropper' || penTools.includes(activeTool)) && (
         <ColorPicker
           label={['shape', 'ellipse_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool as string) ? 'Fill' : (activeTool === 'eyedropper' ? 'Sampled' : 'Color')}
           color={brushColor}
@@ -796,7 +802,7 @@ const OptionsBar: React.FC = () => {
         />
       )}
 
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(shapeTools.includes(activeTool) || penTools.includes(activeTool)) && (
         <ColorPicker
           label={['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool) ? 'Stroke' : 'Secondary'}
           color={secondaryColor}
