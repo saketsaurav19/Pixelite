@@ -79,8 +79,14 @@
   z-index: 2001;
 }
 
-.submenu.active, .menu-item.has-submenu:hover .submenu {
+.submenu.active {
   display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menu-item.has-submenu:hover .submenu {
+    display: block;
+  }
 }
 
 @media (max-width: 768px) {
