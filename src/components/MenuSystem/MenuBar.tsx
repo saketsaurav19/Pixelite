@@ -45,16 +45,6 @@ export const MenuBar: React.FC = () => {
     }));
   };
 
-  const openSubmenuOnHover = (menuName: string, submenuLabel: string) => {
-    if (window.innerWidth <= 768) return;
-    setActiveSubmenus((prev) => ({ ...prev, [menuName]: submenuLabel }));
-  };
-
-  const closeSubmenuOnHoverEnd = (menuName: string, submenuLabel: string) => {
-    if (window.innerWidth <= 768) return;
-    setActiveSubmenus((prev) => (prev[menuName] === submenuLabel ? { ...prev, [menuName]: null } : prev));
-  };
-
   const renderStaticMenu = (menuName: string) => {
     const menuItems = staticMenus[menuName] ?? [];
     return (
@@ -72,8 +62,6 @@ export const MenuBar: React.FC = () => {
                   e.stopPropagation();
                   toggleSubmenu(menuName, item.label);
                 }}
-                onMouseEnter={() => openSubmenuOnHover(menuName, item.label)}
-                onMouseLeave={() => closeSubmenuOnHoverEnd(menuName, item.label)}
               >
                 <span className="menu-label">{item.label}</span>
                 <LucideIcons.ChevronRight size={14} className={`submenu-icon ${isSubmenuActive ? 'rotated' : ''}`} />
