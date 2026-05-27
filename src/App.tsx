@@ -13,6 +13,7 @@ import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
 import { ImportEngine } from './services/import/ImportEngine';
+import { removeBackground } from '@imgly/background-removal';
 import './App.css';
 
 const App: React.FC = () => {
@@ -52,8 +53,8 @@ const App: React.FC = () => {
           const handleFreeTransform = () => { alert("Free Transform action triggered (Placeholder)"); };
                 const handlePreferences = () => { alert("Preferences action triggered (Placeholder)"); };
 
-  const [isProcessing] = React.useState(false);
-  const [processingText] = React.useState('');
+  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [processingText, setProcessingText] = React.useState('');
 
   // Mobile UI state
 
@@ -66,6 +67,58 @@ const App: React.FC = () => {
   const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null);
   const [isEditingOpacity, setIsEditingOpacity] = React.useState(false);
   const [tempOpacityValue, setTempOpacityValue] = React.useState('');
+
+
+
+  const blobToDataUrl = React.useCallback((blob: Blob) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Failed to convert blob to data URL.'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read blob.'));
+    reader.readAsDataURL(blob);
+  }), []);
+
+  React.useEffect(() => {
+    const handleRemoveBackground = async () => {
+      const state = useStore.getState();
+      const layerId = state.activeLayerId;
+      if (!layerId) return;
+
+      const activeLayer = state.layers.find((layer) => layer.id === layerId);
+      if (!activeLayer?.dataUrl) {
+        alert('Please select an image layer first.');
+        return;
+      }
+
+      try {
+        setIsProcessing(true);
+        setProcessingText('Removing background...');
+
+        const inputResponse = await fetch(activeLayer.dataUrl);
+        const inputBlob = await inputResponse.blob();
+
+        const outputBlob = await removeBackground(inputBlob, {
+          publicPath: '/models/',
+          output: { format: 'image/png', quality: 0.92 },
+        });
+
+        const outputDataUrl = await blobToDataUrl(outputBlob);
+        state.updateLayer(layerId, { dataUrl: outputDataUrl, type: 'image' });
+        state.recordHistory('Remove Background');
+      } catch (error) {
+        console.error('Background removal failed:', error);
+        alert('Background removal failed. Please try again.');
+      } finally {
+        setIsProcessing(false);
+        setProcessingText('');
+      }
+    };
+
+    window.addEventListener('remove-background', handleRemoveBackground);
+    return () => window.removeEventListener('remove-background', handleRemoveBackground);
+  }, [blobToDataUrl]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
