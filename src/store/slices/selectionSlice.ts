@@ -21,6 +21,8 @@ export interface SelectionSlice {
   setSelectionMode: (mode: 'new' | 'add' | 'subtract' | 'intersect') => void;
   setSelectionFeather: (val: number) => void;
   setSelectionAntiAlias: (val: boolean) => void;
+  reselect: () => void;
+  modifySelection: (type: 'expand' | 'contract' | 'border' | 'smooth', amount: number) => void;
 }
 
 export const createSelectionSlice: StateCreator<EditorState, [], [], SelectionSlice> = (set, get) => ({
@@ -67,4 +69,10 @@ export const createSelectionSlice: StateCreator<EditorState, [], [], SelectionSl
   setSelectionMode: (selectionMode) => set({ selectionMode }),
   setSelectionFeather: (val) => set({ selectionFeather: val }),
   setSelectionAntiAlias: (val) => set({ selectionAntiAlias: val }),
+  reselect: () => set((state) => {
+    return state;
+  }),
+  modifySelection: (type, amount) => set((state) => {
+    return state;
+  }),
 });
