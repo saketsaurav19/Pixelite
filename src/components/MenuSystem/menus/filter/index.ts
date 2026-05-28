@@ -1,14 +1,39 @@
 import type { MenuItem } from '../types';
-import { placeholder } from '../types';
 
 export const filterMenu: MenuItem[] = [
-  { label: 'Filter Gallery...', action: placeholder() },
-  { label: 'Camera Raw Filter...', action: placeholder() },
+  { label: 'Filter Gallery...', action: (s) => console.log('Filter Gallery') },
+  { label: 'Camera Raw Filter...', action: (s) => console.log('Camera Raw Filter') },
   { divider: true },
-  { label: 'Blur', submenu: [{ label: 'Average', action: placeholder() }, { label: 'Blur', action: placeholder() }, { label: 'Gaussian Blur...', action: placeholder() }, { label: 'Motion Blur...', action: placeholder() }] },
-  { label: 'Distort', submenu: [{ label: 'Displace...', action: placeholder() }, { label: 'Pinch...', action: placeholder() }, { label: 'Ripple...', action: placeholder() }, { label: 'Wave...', action: placeholder() }] },
-  { label: 'Noise', submenu: [{ label: 'Add Noise...', action: placeholder() }, { label: 'Dust & Scratches...', action: placeholder() }, { label: 'Median...', action: placeholder() }] },
-  { label: 'Sharpen', submenu: [{ label: 'Sharpen', action: placeholder() }, { label: 'Sharpen More', action: placeholder() }, { label: 'Unsharp Mask...', action: placeholder() }] },
-  { label: 'Stylize', submenu: [{ label: 'Emboss...', action: placeholder() }, { label: 'Find Edges', action: placeholder() }, { label: 'Oil Paint...', action: placeholder() }] },
-  { label: 'Other', submenu: [{ label: 'High Pass...', action: placeholder() }, { label: 'Maximum...', action: placeholder() }, { label: 'Minimum...', action: placeholder() }] },
+  { label: 'Blur', submenu: [
+    { label: 'Average', action: (s) => console.log('Apply Average Blur') },
+    { label: 'Blur', action: (s) => console.log('Apply Blur') },
+    { label: 'Gaussian Blur...', action: (s) => console.log('Gaussian Blur dialog') },
+    { label: 'Motion Blur...', action: (s) => console.log('Motion Blur dialog') }
+  ] },
+  { label: 'Distort', submenu: [
+    { label: 'Displace...', action: (s) => console.log('Displace dialog') },
+    { label: 'Pinch...', action: (s) => console.log('Pinch dialog') },
+    { label: 'Ripple...', action: (s) => console.log('Ripple dialog') },
+    { label: 'Wave...', action: (s) => console.log('Wave dialog') }
+  ] },
+  { label: 'Noise', submenu: [
+    { label: 'Add Noise...', action: (s) => console.log('Add Noise dialog') },
+    { label: 'Dust & Scratches...', action: (s) => console.log('Dust & Scratches dialog') },
+    { label: 'Median...', action: (s) => console.log('Median dialog') }
+  ] },
+  { label: 'Sharpen', submenu: [
+    { label: 'Sharpen', action: (s) => console.log('Apply Sharpen') },
+    { label: 'Sharpen More', action: (s) => console.log('Apply Sharpen More') },
+    { label: 'Unsharp Mask...', action: (s) => console.log('Unsharp Mask dialog') }
+  ] },
+  { label: 'Stylize', submenu: [
+    { label: 'Emboss...', action: (s) => console.log('Emboss dialog') },
+    { label: 'Find Edges', action: (s) => console.log('Apply Find Edges') },
+    { label: 'Oil Paint...', action: (s) => console.log('Oil Paint dialog') }
+  ] },
+  { label: 'Other', submenu: [
+    { label: 'High Pass...', action: (s) => console.log('High Pass dialog') },
+    { label: 'Maximum...', action: (s) => console.log('Maximum dialog') },
+    { label: 'Minimum...', action: (s) => console.log('Minimum dialog') }
+  ] },
 ];

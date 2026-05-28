@@ -5,26 +5,84 @@ export interface UISlice {
   isNewDocumentDialogOpen: boolean;
   isExportDialogOpen: boolean;
   isFileInfoDialogOpen: boolean;
+  isHelpDialogOpen: boolean;
+  isAboutDialogOpen: boolean;
+  isKeyboardShortcutsDialogOpen: boolean;
+  isSystemInfoDialogOpen: boolean;
   isMobileMenuOpen: boolean;
   activeMobileSubmenu: string | null;
+  screenMode: 'standard' | 'full-menu' | 'full';
+  visiblePanels: {
+    layers: boolean;
+    history: boolean;
+    properties: boolean;
+    adjustments: boolean;
+    navigator: boolean;
+    extras: boolean;
+    rulers: boolean;
+    guides: boolean;
+  };
+  snapSettings: {
+    guides: boolean;
+    layers: boolean;
+    documentBounds: boolean;
+  };
 
   setIsNewDocumentDialogOpen: (isOpen: boolean) => void;
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
+  setIsHelpDialogOpen: (isOpen: boolean) => void;
+  setIsAboutDialogOpen: (isOpen: boolean) => void;
+  setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
+  setIsSystemInfoDialogOpen: (isOpen: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
   setActiveMobileSubmenu: (menu: string | null) => void;
+  setScreenMode: (mode: 'standard' | 'full-menu' | 'full') => void;
+  togglePanel: (panel: keyof UISlice['visiblePanels']) => void;
+  setSnapSetting: (setting: keyof UISlice['snapSettings'], value: boolean) => void;
 }
 
 export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set) => ({
   isNewDocumentDialogOpen: false,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
+  isHelpDialogOpen: false,
+  isAboutDialogOpen: false,
+  isKeyboardShortcutsDialogOpen: false,
+  isSystemInfoDialogOpen: false,
   isMobileMenuOpen: false,
   activeMobileSubmenu: null,
+  screenMode: 'standard',
+  visiblePanels: {
+    layers: true,
+    history: true,
+    properties: true,
+    adjustments: true,
+    navigator: true,
+    extras: true,
+    rulers: false,
+    guides: true,
+  },
+  snapSettings: {
+    guides: true,
+    layers: true,
+    documentBounds: true,
+  },
 
-  setIsNewDocumentDialogOpen: (isOpen: boolean) => set({ isNewDocumentDialogOpen: isOpen }),
-  setIsExportDialogOpen: (isOpen: boolean) => set({ isExportDialogOpen: isOpen }),
-  setIsFileInfoDialogOpen: (isOpen: boolean) => set({ isFileInfoDialogOpen: isOpen }),
-  setIsMobileMenuOpen: (isOpen: boolean) => set({ isMobileMenuOpen: isOpen }),
-  setActiveMobileSubmenu: (menu: string | null) => set({ activeMobileSubmenu: menu }),
+  setIsNewDocumentDialogOpen: (isOpen) => set({ isNewDocumentDialogOpen: isOpen }),
+  setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
+  setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
+  setIsHelpDialogOpen: (isOpen) => set({ isHelpDialogOpen: isOpen }),
+  setIsAboutDialogOpen: (isOpen) => set({ isAboutDialogOpen: isOpen }),
+  setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
+  setIsSystemInfoDialogOpen: (isOpen) => set({ isSystemInfoDialogOpen: isOpen }),
+  setIsMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
+  setActiveMobileSubmenu: (menu) => set({ activeMobileSubmenu: menu }),
+  setScreenMode: (screenMode) => set({ screenMode }),
+  togglePanel: (panel) => set((state) => ({
+    visiblePanels: { ...state.visiblePanels, [panel]: !state.visiblePanels[panel] }
+  })),
+  setSnapSetting: (setting, value) => set((state) => ({
+    snapSettings: { ...state.snapSettings, [setting]: value }
+  })),
 });
