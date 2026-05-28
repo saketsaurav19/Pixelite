@@ -1,16 +1,15 @@
 import type { MenuItem } from '../types';
-import { placeholder } from '../types';
 
 export const imageCanvasMenu: MenuItem[] = [
   { divider: true },
-  { label: 'Image Size...', action: placeholder() },
-  { label: 'Canvas Size...', action: placeholder() },
+  { label: 'Image Size...', action: (_s) => console.log('Image Size dialog') },
+  { label: 'Canvas Size...', action: (_s) => console.log('Canvas Size dialog') },
   { label: 'Image Rotation', submenu: [
-    { label: '180°', action: placeholder() },
-    { label: '90° CW', action: placeholder() },
-    { label: '90° CCW', action: placeholder() },
-    { label: 'Flip Canvas Horizontal', action: placeholder() },
-    { label: 'Flip Canvas Vertical', action: placeholder() },
+    { label: '180°', action: (s) => s.setCanvasRotation?.(180) },
+    { label: '90° CW', action: (s) => s.setCanvasRotation?.(90) },
+    { label: '90° CCW', action: (s) => s.setCanvasRotation?.(-90) },
+    { label: 'Flip Canvas Horizontal', action: (_s) => console.log('Flip Horizontal') },
+    { label: 'Flip Canvas Vertical', action: (_s) => console.log('Flip Vertical') },
   ] },
-  { label: 'Trim...', action: placeholder() },
+  { label: 'Trim...', action: (_s) => console.log('Trim dialog') },
 ];
