@@ -90,8 +90,8 @@
 }
 
 @media (max-width: 768px) {
-  .menu-item.has-submenu:hover .submenu {
-    display: none; /* Override hover on mobile, use active class */
+  .submenu-icon {
+    display: none;
   }
 
   .menu-item.has-submenu {
@@ -125,8 +125,8 @@
     margin: 0;
   }
 
-  .submenu.active {
-    max-height: 50vh;
+  .submenu.active, .menu-item.has-submenu:hover .submenu.active {
+    max-height: 100vh;
     opacity: 1;
     margin-top: 6px;
     pointer-events: auto;
@@ -151,7 +151,7 @@
   }
 
   .menu-item-container.active .menu-dropdown {
-    max-height: 50vh; /* Better than 500px, responsive to screen height */
+    max-height: 100vh;
     opacity: 1;
     margin-top: 10px;
     margin-bottom: 5px;
