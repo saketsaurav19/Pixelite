@@ -7,6 +7,7 @@ export interface MenuLeafItem {
   shortcut?: string;
   action: MenuAction;
   isEnabled?: (state: EditorState) => boolean;
+  isChecked?: (state: EditorState) => boolean;
 }
 
 export interface MenuGroupItem {

@@ -11,7 +11,7 @@ export const viewMenu: MenuItem[] = [
   { divider: true },
   { label: 'Screen Mode', submenu: [{ label: 'Standard Screen Mode', action: placeholder() }, { label: 'Full Screen Mode with Menu Bar', action: placeholder() }, { label: 'Full Screen Mode', action: placeholder() }] },
   { label: 'Extras', shortcut: 'Ctrl+H', action: placeholder() },
-  { label: 'Rulers', shortcut: 'Ctrl+R', action: placeholder() },
+  { label: 'Rulers', shortcut: 'Ctrl+R', action: (s) => s.setShowRulers?.(!s.showRulers), isChecked: (s) => s.showRulers },
   { label: 'Guides', shortcut: 'Ctrl+;', action: placeholder() },
   { label: 'Snap To', submenu: [{ label: 'Guides', action: placeholder() }, { label: 'Layers', action: placeholder() }, { label: 'Document Bounds', action: placeholder() }, { label: 'All', action: placeholder() }] },
 ];
