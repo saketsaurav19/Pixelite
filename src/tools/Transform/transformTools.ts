@@ -69,7 +69,7 @@ export const transformTools: ToolModule[] = [
           return;
         }
 
-        let nr = { ...cropRect };
+        const nr = { ...cropRect };
         if (activeCropHandle === 'tl') { nr.x = coords.x; nr.y = coords.y; nr.w = w + (x - coords.x); nr.h = h + (y - coords.y); }
         else if (activeCropHandle === 'tr') { nr.y = coords.y; nr.w = coords.x - x; nr.h = h + (y - coords.y); }
         else if (activeCropHandle === 'bl') { nr.x = coords.x; nr.w = w + (x - coords.x); nr.h = coords.y - y; }
