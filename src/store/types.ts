@@ -123,6 +123,10 @@ export interface EditorState {
   isKeyboardShortcutsDialogOpen: boolean;
   isSystemInfoDialogOpen: boolean;
   isMobileMenuOpen: boolean;
+  showRulers: boolean;
+  setShowRulers: (show: boolean) => void;
+  rulerUnit: 'px' | 'in' | 'cm';
+  setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
   activeMobileSubmenu: string | null;
   setActiveMobileSubmenu: (menu: string | null) => void;
