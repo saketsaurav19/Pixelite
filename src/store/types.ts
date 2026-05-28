@@ -118,6 +118,10 @@ export interface EditorState {
   isNewDocumentDialogOpen: boolean;
   isExportDialogOpen: boolean;
   isFileInfoDialogOpen: boolean;
+  isHelpDialogOpen: boolean;
+  isAboutDialogOpen: boolean;
+  isKeyboardShortcutsDialogOpen: boolean;
+  isSystemInfoDialogOpen: boolean;
   isMobileMenuOpen: boolean;
   showRulers: boolean;
   setShowRulers: (show: boolean) => void;
@@ -126,6 +130,22 @@ export interface EditorState {
   setIsMobileMenuOpen: (isOpen: boolean) => void;
   activeMobileSubmenu: string | null;
   setActiveMobileSubmenu: (menu: string | null) => void;
+  screenMode: 'standard' | 'full-menu' | 'full';
+  visiblePanels: {
+    layers: boolean;
+    history: boolean;
+    properties: boolean;
+    adjustments: boolean;
+    navigator: boolean;
+    extras: boolean;
+    rulers: boolean;
+    guides: boolean;
+  };
+  snapSettings: {
+    guides: boolean;
+    layers: boolean;
+    documentBounds: boolean;
+  };
   // Document State
   zoom: number;
   canvasOffset: { x: number; y: number };
