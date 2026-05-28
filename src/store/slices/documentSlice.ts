@@ -3,6 +3,8 @@ import type { EditorState } from '../types';
 
 export interface DocumentSlice {
   clipboardDataUrl: string | null;
+  clipboardDataRect: { x: number; y: number; w: number; h: number } | null;
+  setClipboardDataRect: (rect: { x: number; y: number; w: number; h: number } | null) => void;
   setClipboardDataUrl: (url: string | null) => void;
   zoom: number;
   canvasOffset: { x: number; y: number };
@@ -39,7 +41,9 @@ export interface DocumentSlice {
 
 export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlice> = (set) => ({
   clipboardDataUrl: null,
+  clipboardDataRect: null,
   setClipboardDataUrl: (url) => set({ clipboardDataUrl: url }),
+  setClipboardDataRect: (rect) => set({ clipboardDataRect: rect }),
   zoom: 1,
   canvasOffset: { x: 0, y: 0 },
   canvasRotation: 0,

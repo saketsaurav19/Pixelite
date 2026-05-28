@@ -1,5 +1,5 @@
 export type Tool = 
-  | 'move' | 'artboard' | 'marquee' | 'ellipse_marquee' | 'lasso' | 'polygonal_lasso' | 'magnetic_lasso' 
+  | 'move' | 'transform' | 'puppet_warp' | 'artboard' | 'marquee' | 'ellipse_marquee' | 'lasso' | 'polygonal_lasso' | 'magnetic_lasso'
   | 'quick_selection' | 'magic_wand' | 'object_selection' | 'crop' | 'perspective_crop' | 'slice' | 'slice_select' 
   | 'eyedropper' | 'color_sampler' | 'ruler' | 'healing' | 'healing_brush' | 'patch' | 'content_aware_move' | 'red_eye' 
   | 'brush' | 'pencil' | 'color_replacement' | 'mixer_brush' | 'history_brush' | 'art_history_brush' | 'clone' | 'pattern_stamp' 
@@ -114,6 +114,7 @@ export interface EditorState {
   activeLayerId: string | null;
 
   clipboardDataUrl: string | null;
+  clipboardDataRect: { x: number; y: number; w: number; h: number } | null;
   // UI State
   isNewDocumentDialogOpen: boolean;
   isExportDialogOpen: boolean;
