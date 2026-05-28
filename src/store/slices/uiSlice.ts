@@ -10,6 +10,8 @@ export interface UISlice {
   isKeyboardShortcutsDialogOpen: boolean;
   isSystemInfoDialogOpen: boolean;
   isMobileMenuOpen: boolean;
+  showRulers: boolean;
+  rulerUnit: 'px' | 'in' | 'cm';
   activeMobileSubmenu: string | null;
   screenMode: 'standard' | 'full-menu' | 'full';
   visiblePanels: {
@@ -36,6 +38,8 @@ export interface UISlice {
   setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
   setIsSystemInfoDialogOpen: (isOpen: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
+  setShowRulers: (show: boolean) => void;
+  setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
   setActiveMobileSubmenu: (menu: string | null) => void;
   setScreenMode: (mode: 'standard' | 'full-menu' | 'full') => void;
   togglePanel: (panel: keyof UISlice['visiblePanels']) => void;
@@ -51,6 +55,8 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set) =
   isKeyboardShortcutsDialogOpen: false,
   isSystemInfoDialogOpen: false,
   isMobileMenuOpen: false,
+  showRulers: false,
+  rulerUnit: 'px',
   activeMobileSubmenu: null,
   screenMode: 'standard',
   visiblePanels: {

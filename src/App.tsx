@@ -4,6 +4,7 @@ import { useStore } from './store/useStore';
 import { toolState } from './tools/toolState';
 import { hexToRgba } from './utils/canvasUtils';
 import Canvas from './components/Canvas/Canvas';
+import { GlobalRulers } from './components/Canvas/UI/GlobalRulers';
 import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
@@ -357,7 +358,8 @@ const App: React.FC = () => {
         </div>
 
         <main className="workspace">
-          <div className="canvas-viewport">
+          <div className="canvas-viewport" style={{ position: "relative" }}>
+            <GlobalRulers />
             <Canvas />
           </div>
 

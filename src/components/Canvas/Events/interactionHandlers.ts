@@ -206,7 +206,7 @@ export const endAction = (
     const w = Math.abs(state.draftShape.w);
     const h = Math.abs(state.draftShape.h);
     if (w > 1 || h > 1) {
-      let shapeType: any = activeTool === 'ellipse_shape' ? 'ellipse' : (activeTool === 'line_shape' ? 'path' : (activeTool === 'shape' ? 'rect' : 'path'));
+      const shapeType: any = activeTool === 'ellipse_shape' ? 'ellipse' : (activeTool === 'line_shape' ? 'path' : (activeTool === 'shape' ? 'rect' : 'path'));
       let points: any[] = [];
       let name = 'Shape';
 
