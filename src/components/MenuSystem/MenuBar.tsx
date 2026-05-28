@@ -37,6 +37,10 @@ export const MenuBar: React.FC = () => {
     action(useStore.getState());
   };
 
+  /**
+   * Mobile only: toggle a specific submenu open/closed.
+   * On desktop, submenus are controlled purely by CSS :hover — no JS needed.
+   */
   const toggleSubmenu = (key: string) => {
     if (window.innerWidth > 768) return;
     setActiveSubmenus((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -45,23 +49,31 @@ export const MenuBar: React.FC = () => {
   const renderMenuItems = (menuName: string, items: MenuItem[], path: string[] = []) => (
     <>
       {items.map((item, index) => {
-        if ('divider' in item && item.divider) return <div key={`${menuName}-divider-${path.join('-')}-${index}`} className="menu-divider" />;
+        if ('divider' in item && item.divider) {
+          return <div key={`${menuName}-divider-${path.join('-')}-${index}`} className="menu-divider" />;
+        }
 
         if (isGroupItem(item)) {
           const submenuKey = `${menuName}:${[...path, item.label].join('>')}`;
-          const isSubmenuActive = Boolean(activeSubmenus[submenuKey]);
+          const isOpen = Boolean(activeSubmenus[submenuKey]);
+
           return (
             <div
               key={`${menuName}-${submenuKey}`}
-              className={`menu-item has-submenu ${isSubmenuActive ? 'submenu-active' : ''}`}
+              className={`menu-item has-submenu ${isOpen ? 'submenu-active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleSubmenu(submenuKey);
               }}
             >
               <span className="menu-label">{item.label}</span>
-              <LucideIcons.ChevronRight size={14} className={`submenu-icon ${isSubmenuActive ? 'rotated' : ''}`} />
-              <div className={`submenu ${isSubmenuActive ? 'active' : ''}`}>{renderMenuItems(menuName, item.submenu, [...path, item.label])}</div>
+              <LucideIcons.ChevronRight
+                size={14}
+                className={`submenu-icon ${isOpen ? 'rotated' : ''}`}
+              />
+              <div className={`submenu ${isOpen ? 'active' : ''}`}>
+                {renderMenuItems(menuName, item.submenu, [...path, item.label])}
+              </div>
             </div>
           );
         }
@@ -90,19 +102,23 @@ export const MenuBar: React.FC = () => {
 
   const renderStaticMenu = (menuName: string) => {
     const menuItems = staticMenus[menuName] ?? [];
-    return <div className={`menu-dropdown ${menuName}-menu`}>{renderMenuItems(menuName, menuItems)}</div>;
+    return (
+      <div className={`menu-dropdown ${menuName}-menu`}>
+        {renderMenuItems(menuName, menuItems)}
+      </div>
+    );
   };
 
   const menus: { key: string; label: string; component?: React.ReactNode }[] = [
-    { key: 'file', label: 'File', component: <FileMenu onClose={() => setActiveMenu(null)} /> },
-    { key: 'edit', label: 'Edit' },
-    { key: 'image', label: 'Image' },
-    { key: 'layer', label: 'Layer' },
+    { key: 'file',   label: 'File',   component: <FileMenu onClose={() => setActiveMenu(null)} /> },
+    { key: 'edit',   label: 'Edit'   },
+    { key: 'image',  label: 'Image'  },
+    { key: 'layer',  label: 'Layer'  },
     { key: 'select', label: 'Select' },
     { key: 'filter', label: 'Filter' },
-    { key: 'view', label: 'View' },
+    { key: 'view',   label: 'View'   },
     { key: 'window', label: 'Window' },
-    { key: 'help', label: 'Help' },
+    { key: 'help',   label: 'Help'   },
   ];
 
   return (

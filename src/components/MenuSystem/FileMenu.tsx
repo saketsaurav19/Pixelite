@@ -22,6 +22,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     setIsMobileMenuOpen
   } = useStore();
 
+  // Single active submenu key — null means all closed
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -109,20 +110,24 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       }
   };
 
-  const handleToggleSubmenu = (e: React.MouseEvent, submenuName: string) => {
+  /**
+   * Unified toggle: on mobile → accordion toggle; on desktop → hover is handled
+   * purely by CSS (:hover on .has-submenu), so clicks just close the whole menu.
+   */
+  const handleSubmenuToggle = (e: React.MouseEvent, submenuName: string) => {
     e.stopPropagation();
     if (window.innerWidth <= 768) {
-      setActiveSubmenu(activeSubmenu === submenuName ? null : submenuName);
+      setActiveSubmenu(prev => prev === submenuName ? null : submenuName);
     }
   };
 
-  const handleMouseEnterSubmenu = (submenuName: string) => {
+  const handleMouseEnter = (submenuName: string) => {
     if (window.innerWidth > 768) {
       setActiveSubmenu(submenuName);
     }
   };
 
-  const handleMouseLeaveSubmenu = () => {
+  const handleMouseLeave = () => {
     if (window.innerWidth > 768) {
       setActiveSubmenu(null);
     }
@@ -155,16 +160,16 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
 
       <div
         className={`menu-item has-submenu ${activeSubmenu === 'openMore' ? 'submenu-active' : ''}`}
-        onClick={(e) => handleToggleSubmenu(e, 'openMore')}
-        onMouseEnter={() => handleMouseEnterSubmenu('openMore')}
-        onMouseLeave={handleMouseLeaveSubmenu}
+        onClick={(e) => handleSubmenuToggle(e, 'openMore')}
+        onMouseEnter={() => handleMouseEnter('openMore')}
+        onMouseLeave={handleMouseLeave}
       >
         <span className="menu-label">Open More</span>
         <LucideIcons.ChevronRight size={14} className={`submenu-icon ${activeSubmenu === 'openMore' ? 'rotated' : ''}`} />
         <div className={`submenu ${activeSubmenu === 'openMore' ? 'active' : ''}`}>
-            <div className="menu-item disabled">Open Recent</div>
-            <div className="menu-item disabled">Open from Cloud</div>
-            <div className="menu-item disabled">Recover Autosave</div>
+          <div className="menu-item disabled">Open Recent</div>
+          <div className="menu-item disabled">Open from Cloud</div>
+          <div className="menu-item disabled">Recover Autosave</div>
         </div>
       </div>
 
@@ -195,19 +200,19 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         <span className="menu-label">File Info...</span>
       </div>
 
-       <div className="menu-divider" />
+      <div className="menu-divider" />
 
-       <div
+      <div
         className={`menu-item has-submenu ${activeSubmenu === 'automate' ? 'submenu-active' : ''}`}
-        onClick={(e) => handleToggleSubmenu(e, 'automate')}
-        onMouseEnter={() => handleMouseEnterSubmenu('automate')}
-        onMouseLeave={handleMouseLeaveSubmenu}
+        onClick={(e) => handleSubmenuToggle(e, 'automate')}
+        onMouseEnter={() => handleMouseEnter('automate')}
+        onMouseLeave={handleMouseLeave}
       >
         <span className="menu-label">Automate</span>
         <LucideIcons.ChevronRight size={14} className={`submenu-icon ${activeSubmenu === 'automate' ? 'rotated' : ''}`} />
         <div className={`submenu ${activeSubmenu === 'automate' ? 'active' : ''}`}>
-            <div className="menu-item disabled">Batch Processing</div>
-            <div className="menu-item disabled">Watermarking</div>
+          <div className="menu-item disabled">Batch Processing</div>
+          <div className="menu-item disabled">Watermarking</div>
         </div>
       </div>
 
