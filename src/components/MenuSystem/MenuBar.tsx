@@ -89,7 +89,7 @@ export const MenuBar: React.FC = () => {
                 if (enabled) runAction(item.action);
               }}
             >
-              <span className="menu-label">{item.label}</span>
+              <span className="menu-label">{item.isChecked && item.isChecked(useStore.getState()) ? "✓ " : ""}{item.label}</span>
               {item.shortcut && <span className="menu-shortcut">{item.shortcut}</span>}
             </div>
           );
