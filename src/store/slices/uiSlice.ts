@@ -83,6 +83,8 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set) =
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
   setIsSystemInfoDialogOpen: (isOpen) => set({ isSystemInfoDialogOpen: isOpen }),
   setIsMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
+  setShowRulers: (show) => set({ showRulers: show }),
+  setRulerUnit: (unit) => set({ rulerUnit: unit }),
   setActiveMobileSubmenu: (menu) => set({ activeMobileSubmenu: menu }),
   setScreenMode: (screenMode) => set({ screenMode }),
   togglePanel: (panel) => set((state) => ({
