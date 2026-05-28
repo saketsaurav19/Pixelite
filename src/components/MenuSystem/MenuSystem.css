@@ -61,7 +61,6 @@
   flex-shrink: 0;
 }
 
-/* On mobile the icon rotates 90° when open (points down) */
 .submenu-icon.rotated {
   transform: rotate(90deg);
 }
@@ -70,7 +69,9 @@
   color: #fff;
 }
 
-/* ─── Submenus: DESKTOP flyout (scoped to non-mobile) ─── */
+/* ═══════════════════════════════════════════
+   DESKTOP — flyout submenus (hover, absolute)
+   ═══════════════════════════════════════════ */
 @media (min-width: 769px) {
   .submenu {
     position: absolute;
@@ -86,23 +87,24 @@
     z-index: 2001;
   }
 
-  /* Show on hover (pointer devices) */
   .menu-item.has-submenu:hover > .submenu {
     display: block;
   }
 
-  /* Also honour JS-driven active class (e.g. FileMenu state) */
   .submenu.active {
     display: block;
   }
 }
 
-/* ─── Submenus: MOBILE accordion ─── */
+/* ═══════════════════════════════════════════
+   MOBILE — nested accordion (in-flow, push-down)
+   ═══════════════════════════════════════════ */
 @media (max-width: 768px) {
-  /* Whole nav becomes a full-screen slide-in drawer */
+
+  /* Top-level dropdown: in-flow, collapsed by default */
   .menu-dropdown {
     position: static;
-    display: flex;           /* always in flow — visibility via max-height */
+    display: flex;
     background: transparent;
     border: none;
     box-shadow: none;
@@ -114,14 +116,14 @@
                 opacity     0.3s ease,
                 margin      0.3s ease;
     flex-direction: column;
-    gap: 4px;
+    gap: 0;
     opacity: 0;
     pointer-events: none;
     margin: 0;
   }
 
   .menu-item-container.active .menu-dropdown {
-    max-height: 70vh;
+    max-height: 100vh;
     overflow-y: auto;
     opacity: 1;
     margin-top: 10px;
@@ -134,35 +136,53 @@
     min-height: 44px;
   }
 
-  /* has-submenu row: label + icon on one line, submenu expands below */
+  /* KEY FIX: has-submenu is a column flex container so the submenu
+     sits BELOW the label row and pushes everything down in normal flow */
   .menu-item.has-submenu {
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
+    padding-bottom: 0;
   }
 
+  /* The label + icon row stays on one line */
   .menu-item.has-submenu > .menu-label {
-    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 6px 0;
+    min-height: 32px;
   }
 
-  /* The nested submenu sits in normal flow, collapsed by default */
+  /* Move the chevron icon back to the right of the label row */
+  .menu-item.has-submenu > .submenu-icon {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    /* top centres on the label row; adjust when open */
+    transform: translateY(-50%);
+    transition: transform 0.2s ease;
+  }
+
+  .menu-item.has-submenu.submenu-active > .submenu-icon,
+  .menu-item.has-submenu > .submenu-icon.rotated {
+    transform: translateY(-50%) rotate(90deg);
+  }
+
+  /* Nested submenu: in-flow below the label row, collapsed by default */
   .submenu {
-    /* Reset any desktop absolute positioning */
     position: static !important;
     left: auto !important;
     top: auto !important;
-
-    display: flex;           /* always in flow */
-    flex-direction: column;
+    display: block !important; /* always in flow so height can animate */
     background: transparent;
     border: none;
     box-shadow: none;
-    border-left: 2px solid #444;  /* visual indent guide */
+    border-left: 2px solid #3a3a3a;
     padding-left: 16px;
     margin-left: 8px;
-    width: 100%;
-    flex-basis: 100%;        /* force onto its own line inside flex-wrap row */
+    width: auto;
 
-    /* Collapse animation */
+    /* Collapse */
     max-height: 0;
     overflow: hidden;
     opacity: 0;
@@ -171,21 +191,29 @@
                 opacity     0.25s ease,
                 margin      0.25s ease;
     margin-top: 0;
-    gap: 2px;
+    margin-bottom: 0;
   }
 
-  /* Expanded state (JS adds .active) */
+  /* Expanded */
   .submenu.active {
-    max-height: 50vh;
+    max-height: 500px;
     overflow-y: auto;
     opacity: 1;
-    margin-top: 6px;
-    margin-bottom: 4px;
+    margin-top: 4px;
+    margin-bottom: 6px;
     pointer-events: auto;
   }
 
-  /* Disable CSS hover-based opening on touch devices */
+  /* Disable CSS hover on touch */
   .menu-item.has-submenu:hover > .submenu {
-    /* do nothing — rely on .active class only */
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .menu-item.has-submenu:hover > .submenu.active {
+    max-height: 500px;
+    opacity: 1;
+    pointer-events: auto;
   }
 }
