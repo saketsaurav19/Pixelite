@@ -15,6 +15,9 @@ export interface LayerSlice {
   moveLayer: (id: string, direction: 'up' | 'down') => void;
   reorderLayers: (startIndex: number, endIndex: number) => void;
   setLayers: (layers: Layer[]) => void;
+  mergeLayers: (ids: string[]) => void;
+  flattenImage: () => void;
+  rasterizeLayer: (id: string) => void;
 }
 
 export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set) => ({
@@ -91,4 +94,22 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
   }),
 
   setLayers: (layers) => set({ layers }),
+  mergeLayers: (ids) => set((state) => {
+    const remainingLayers = state.layers.filter(l => !ids.slice(1).includes(l.id));
+    return { layers: remainingLayers, activeLayerId: ids[0] };
+  }),
+  flattenImage: () => set((state) => {
+    if (state.layers.length === 0) return state;
+    const backgroundLayer: Layer = {
+      ...state.layers[state.layers.length - 1],
+      id: nanoid(),
+      name: 'Background',
+      locked: true,
+      type: 'paint',
+    };
+    return { layers: [backgroundLayer], activeLayerId: backgroundLayer.id };
+  }),
+  rasterizeLayer: (id) => set((state) => ({
+    layers: state.layers.map(l => l.id === id ? { ...l, type: 'paint' } : l)
+  })),
 });
