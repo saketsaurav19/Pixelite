@@ -2,9 +2,9 @@ import type { MenuItem } from '../types';
 
 export const layerStylesMenu: MenuItem[] = [
   { label: 'Layer Style', submenu: [
-    { label: 'Blending Options...', action: (_s) => console.log('Blending options') },
-    { label: 'Drop Shadow', action: (_s) => console.log('Drop shadow') },
-    { label: 'Stroke', action: (_s) => console.log('Stroke') }
+    { label: 'Blending Options...', action: (s) => console.log('Blending options') },
+    { label: 'Drop Shadow', action: (s) => console.log('Drop shadow') },
+    { label: 'Stroke', action: (s) => console.log('Stroke') }
   ] },
   { label: 'Smart Objects', submenu: [
     { label: 'Convert to Smart Object', action: (s) => s.activeLayerId && s.updateLayer?.(s.activeLayerId, { type: 'image' }) },

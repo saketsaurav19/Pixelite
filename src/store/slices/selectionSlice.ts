@@ -72,7 +72,7 @@ export const createSelectionSlice: StateCreator<EditorState, [], [], SelectionSl
   reselect: () => set((state) => {
     return state;
   }),
-  modifySelection: (_type, _amount) => set((state) => {
+  modifySelection: (type, amount) => set((state) => {
     return state;
   }),
 });
