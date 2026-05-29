@@ -20,6 +20,7 @@ export const useStore = create<EditorState>()((...a) => ({
 
 // Initialize history with initial state
 useStore.setState({
+  alerts: [],
   layers: [],
   activeLayerId: null,
   history: [

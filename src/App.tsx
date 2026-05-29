@@ -15,9 +15,11 @@ import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
 import { ImportEngine } from './services/import/ImportEngine';
 import { removeBackground } from '@imgly/background-removal';
+import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 
 const App: React.FC = () => {
+  const addAlert = useStore(state => state.addAlert);
   const {
     layers,
     activeLayerId,
@@ -49,10 +51,10 @@ const App: React.FC = () => {
 
 
 
-  const handleFade = () => { alert("Fade action triggered (Placeholder)"); };
-  const handleCopyMerged = () => { alert("Copy Merged action triggered (Placeholder)"); };
-          const handleFreeTransform = () => { alert("Free Transform action triggered (Placeholder)"); };
-                const handlePreferences = () => { alert("Preferences action triggered (Placeholder)"); };
+  const handleFade = () => { addAlert({ type: 'info', message: 'Fade action triggered (Placeholder)' }); };
+  const handleCopyMerged = () => { addAlert({ type: 'info', message: 'Copy Merged action triggered (Placeholder)' }); };
+          const handleFreeTransform = () => { addAlert({ type: 'info', message: 'Free Transform action triggered (Placeholder)' }); };
+                const handlePreferences = () => { addAlert({ type: 'info', message: 'Preferences action triggered (Placeholder)' }); };
 
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [processingText, setProcessingText] = React.useState('');
@@ -89,7 +91,7 @@ const App: React.FC = () => {
 
       const activeLayer = state.layers.find((layer) => layer.id === layerId);
       if (!activeLayer?.dataUrl) {
-        alert('Please select an image layer first.');
+        addAlert({ type: 'warning', message: 'Please select an image layer first.' });
         return;
       }
 
@@ -120,7 +122,7 @@ const App: React.FC = () => {
         state.recordHistory('Remove Background');
       } catch (error) {
         console.error('Background removal failed:', error);
-        alert('Background removal failed. Please try again.');
+        addAlert({ type: 'error', message: 'Background removal failed. Please try again.' });
       } finally {
         setIsProcessing(false);
         setProcessingText('');
@@ -302,7 +304,7 @@ const App: React.FC = () => {
       currentState.recordHistory(`Open ${result.name}`);
     } catch (err) {
       console.error(err);
-      alert('Failed to open image.');
+      addAlert({ type: 'error', message: 'Failed to open image.' });
     } finally {
       e.target.value = '';
     }
@@ -335,6 +337,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        <AlertContainer />
         <MenuBar />
 
         <div className="header-right">
