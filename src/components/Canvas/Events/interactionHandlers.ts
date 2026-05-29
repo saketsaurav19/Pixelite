@@ -28,7 +28,14 @@ export const startAction = (
     hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>;
   }
 ) => {
-  const { coords, activeTool, canvasOffset, lassoPaths } = context;
+  const { coords, activeTool, canvasOffset, lassoPaths, activeLayerId, layers } = context;
+
+  // Check if tool requires active layer
+  const toolsRequiringLayer = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'patch', 'smudge', 'clone', 'pattern_stamp', 'mixer_brush', 'color_replacement', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush', 'marquee', 'ellipse_marquee', 'lasso', 'polygonal_lasso', 'magnetic_lasso', 'quick_selection', 'magic_wand', 'object_selection', 'paint_bucket', 'gradient'];
+  if (toolsRequiringLayer.includes(activeTool) && !activeLayerId && layers.length > 0) {
+    useStore.getState().addAlert({ type: 'error', message: 'Please select a layer first.' });
+    return;
+  }
 
   const isAltPressedLocal = (e as any).altKey || context.isAlt;
   const isCtrlPressedLocal = (e as any).ctrlKey || (e as any).metaKey || context.isCtrl;
