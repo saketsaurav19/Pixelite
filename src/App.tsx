@@ -100,10 +100,20 @@ const App: React.FC = () => {
         const inputResponse = await fetch(activeLayer.dataUrl);
         const inputBlob = await inputResponse.blob();
 
-        const outputBlob = await removeBackground(inputBlob, {
-          publicPath: '/models/',
-          output: { format: 'image/png', quality: 0.92 },
-        });
+        let outputBlob: Blob;
+        try {
+          outputBlob = await removeBackground(inputBlob, {
+            publicPath: '/models/',
+            output: { format: 'image/png', quality: 0.92 },
+            device: 'gpu'
+          });
+        } catch (localError) {
+          console.warn('Failed to load local background removal models, falling back to remote source:', localError);
+          outputBlob = await removeBackground(inputBlob, {
+            output: { format: 'image/png', quality: 0.92 },
+            device: 'gpu'
+          });
+        }
 
         const outputDataUrl = await blobToDataUrl(outputBlob);
         state.updateLayer(layerId, { dataUrl: outputDataUrl, type: 'image' });
