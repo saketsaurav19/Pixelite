@@ -1,3 +1,9 @@
+export interface Alert {
+  id: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  message: string;
+}
+
 export type Tool =  
    | 'move' | 'artboard' | 'marquee' | 'ellipse_marquee' | 'lasso' | 'polygonal_lasso' | 'magnetic_lasso'  
    | 'quick_selection' | 'magic_wand' | 'object_selection' | 'crop' | 'perspective_crop' | 'slice' | 'slice_select'  

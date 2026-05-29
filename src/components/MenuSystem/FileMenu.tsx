@@ -18,6 +18,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     setLayers,
     documentSize,
     setDocumentSize,
+    addAlert,
     recordHistory,
     setIsMobileMenuOpen
   } = useStore();
@@ -44,7 +45,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       if (result.type === 'psd') {
         const psdData = await workerExportBridge.parsePSD(result.psdData);
         console.log("Parsed PSD in worker:", psdData);
-        alert("PSD Parsing successful (see console). Rendering integration pending.");
+        addAlert({ type: 'success', message: 'PSD Parsing successful. Rendering integration pending.' });
       } else if (result.type === 'image' && result.dataUrl) {
          const isDefaultBackground = layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
          if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
@@ -77,7 +78,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to open file.");
+      addAlert({ type: 'error', message: 'Failed to open file.' });
     } finally {
       closeMenus();
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -106,7 +107,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         URL.revokeObjectURL(url);
       } catch (e) {
           console.error(e);
-          alert("Failed to generate PSD");
+          addAlert({ type: 'error', message: 'Failed to generate PSD.' });
       }
   };
 

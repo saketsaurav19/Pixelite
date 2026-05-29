@@ -1,7 +1,10 @@
 import type { StateCreator } from 'zustand';
-import type { EditorState } from '../types';
+import type { EditorState, Alert } from '../types';
 
 export interface UISlice {
+  alerts: Alert[];
+  addAlert: (alert: Omit<Alert, 'id'>) => void;
+  removeAlert: (id: string) => void;
   isNewDocumentDialogOpen: boolean;
   isExportDialogOpen: boolean;
   isFileInfoDialogOpen: boolean;
@@ -46,7 +49,8 @@ export interface UISlice {
   setSnapSetting: (setting: keyof UISlice['snapSettings'], value: boolean) => void;
 }
 
-export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set) => ({
+export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, get) => ({
+  alerts: [],
   isNewDocumentDialogOpen: false,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
@@ -90,6 +94,16 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set) =
   togglePanel: (panel) => set((state) => ({
     visiblePanels: { ...state.visiblePanels, [panel]: !state.visiblePanels[panel] }
   })),
+  addAlert: (alert) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setTimeout(() => {
+      get().removeAlert(id);
+    }, 3000);
+    set((state) => ({ alerts: [...state.alerts, { ...alert, id }] }));
+  },
+
+  removeAlert: (id) => set((state) => ({ alerts: state.alerts.filter((a: any) => a.id !== id) })),
+
   setSnapSetting: (setting, value) => set((state) => ({
     snapSettings: { ...state.snapSettings, [setting]: value }
   })),
