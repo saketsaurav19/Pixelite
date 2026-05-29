@@ -5,7 +5,7 @@ import { ExportEngine } from '../../services/export/ExportEngine';
 import './Dialogs.css';
 
 export const ExportAsDialog: React.FC = () => {
-  const { isExportDialogOpen, setIsExportDialogOpen, documentSize, layers } = useStore();
+  const { isExportDialogOpen, setIsExportDialogOpen, documentSize, layers, addAlert } = useStore();
   const [format, setFormat] = useState<'image/png' | 'image/jpeg' | 'image/webp'>('image/png');
   const [quality, setQuality] = useState(92);
   const [scale, setScale] = useState(100);
@@ -70,7 +70,7 @@ export const ExportAsDialog: React.FC = () => {
         setIsExportDialogOpen(false);
     } catch (error) {
         console.error("Export failed", error);
-        alert("Export failed. See console.");
+        addAlert({ type: 'error', message: 'Export failed. See console.' });
     } finally {
         setIsExporting(false);
     }
