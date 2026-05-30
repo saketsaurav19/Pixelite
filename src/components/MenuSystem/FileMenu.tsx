@@ -28,6 +28,8 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
   // Track which submenu is open by name (null = all closed)
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
   const closeMenus = () => {
     onClose();
     setIsMobileMenuOpen(false);
@@ -96,6 +98,27 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
+
+
+  const handleTakePicture = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    // Simple device detection
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // On mobile, trigger the hidden file input with capture="environment"
+      if (cameraInputRef.current) {
+        cameraInputRef.current.click();
+      }
+    } else {
+      // On desktop, fallback to custom CameraDialog
+      setIsCameraDialogOpen(true);
+    }
+
+    closeMenus();
+  };
+
   const triggerFileInput = (e: React.MouseEvent, isPlace: boolean) => {
     e.stopPropagation();
     if (fileInputRef.current) {
@@ -160,6 +183,26 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     <div className="menu-dropdown file-menu">
       <input
         type="file"
+        ref={cameraInputRef}
+        style={{ display: 'none' }}
+        accept="image/*"
+        capture="environment"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const dataUrl = event.target?.result as string;
+              useStore.getState().setMobileCapturedImage(dataUrl);
+            };
+            reader.readAsDataURL(file);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+
+      <input
+        type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
         onChange={(e) => handleOpen(e, fileInputRef.current?.dataset.isPlace === 'true')}
@@ -207,7 +250,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           >
             Open Recent
           </div>
-          <div className="menu-item" onClick={(e) => { e.stopPropagation(); setIsCameraDialogOpen(true); closeMenus(); }}>Take Picture</div>
+          <div className="menu-item" onClick={handleTakePicture}>Take Picture</div>
           <div
             className="menu-item"
             onClick={(e) => {
