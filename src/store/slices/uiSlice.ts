@@ -10,10 +10,12 @@ export interface UISlice {
   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
   isOpenRecentDialogOpen: boolean;
+  isOpenFromCloudDialogOpen: boolean;
   isHelpDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
   isSystemInfoDialogOpen: boolean;
+  isCameraDialogOpen: boolean;
   isMobileMenuOpen: boolean;
   showRulers: boolean;
   rulerUnit: 'px' | 'in' | 'cm';
@@ -39,10 +41,12 @@ export interface UISlice {
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
   setIsOpenRecentDialogOpen: (isOpen: boolean) => void;
+  setIsOpenFromCloudDialogOpen: (isOpen: boolean) => void;
   setIsHelpDialogOpen: (isOpen: boolean) => void;
   setIsAboutDialogOpen: (isOpen: boolean) => void;
   setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
   setIsSystemInfoDialogOpen: (isOpen: boolean) => void;
+  setIsCameraDialogOpen: (isOpen: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
   setShowRulers: (show: boolean) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
@@ -58,10 +62,12 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
   isOpenRecentDialogOpen: false,
+  isOpenFromCloudDialogOpen: false,
   isHelpDialogOpen: false,
   isAboutDialogOpen: false,
   isKeyboardShortcutsDialogOpen: false,
   isSystemInfoDialogOpen: false,
+  isCameraDialogOpen: false,
   isMobileMenuOpen: false,
   showRulers: false,
   rulerUnit: 'px',
@@ -87,10 +93,12 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
   setIsOpenRecentDialogOpen: (isOpen) => set({ isOpenRecentDialogOpen: isOpen }),
+  setIsOpenFromCloudDialogOpen: (isOpen) => set({ isOpenFromCloudDialogOpen: isOpen }),
   setIsHelpDialogOpen: (isOpen) => set({ isHelpDialogOpen: isOpen }),
   setIsAboutDialogOpen: (isOpen) => set({ isAboutDialogOpen: isOpen }),
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
   setIsSystemInfoDialogOpen: (isOpen) => set({ isSystemInfoDialogOpen: isOpen }),
+  setIsCameraDialogOpen: (isOpen) => set({ isCameraDialogOpen: isOpen }),
   setIsMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
   setShowRulers: (show) => set({ showRulers: show }),
   setRulerUnit: (unit) => set({ rulerUnit: unit }),

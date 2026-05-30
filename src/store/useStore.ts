@@ -59,6 +59,7 @@ useStore.setState({
   isNewDocumentDialogOpen: false,
   exportFormat: 'image/png',
   isMobileMenuOpen: false,
+  isCameraDialogOpen: false,
   activeMobileSubmenu: null,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,

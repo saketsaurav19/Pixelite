@@ -11,9 +11,11 @@ import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
 import { MenuBar } from './components/MenuSystem/MenuBar';
 import { OpenRecentDialog } from './components/Dialogs/OpenRecentDialog';
+import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
+import { CameraDialog } from "./components/Dialogs/CameraDialog";
 import { ImportEngine } from './services/import/ImportEngine';
 import { removeBackground } from '@imgly/background-removal';
 import { AlertContainer } from './components/UI/AlertContainer';
@@ -585,8 +587,10 @@ const App: React.FC = () => {
 
             <NewDocumentDialog />
       <OpenRecentDialog />
+      <OpenFromCloudDialog />
       <ExportAsDialog />
       <FileInfoDialog />
+      <CameraDialog />
 </div>
   );
 };
