@@ -53,6 +53,7 @@
 .dialog-body {
   padding: 20px;
   display: flex;
+flex-direction: column;
   gap: 24px;
 }
 
@@ -382,4 +383,8 @@
 
 .btn-more:hover {
     background: #5a5a5a;
+/* Camera Dialog Specifics */
+.camera-dialog .dialog-body {
+  display: flex;
+  flex-direction: column;
 }

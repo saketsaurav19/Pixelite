@@ -127,11 +127,13 @@ export type Tool =
    exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
    isFileInfoDialogOpen: boolean;
    isOpenRecentDialogOpen: boolean;
+   isOpenFromCloudDialogOpen: boolean;
    isHelpDialogOpen: boolean; 
    isAboutDialogOpen: boolean; 
    isKeyboardShortcutsDialogOpen: boolean; 
    isSystemInfoDialogOpen: boolean; 
    isMobileMenuOpen: boolean; 
+  isCameraDialogOpen: boolean;
    showRulers: boolean; 
    setShowRulers: (show: boolean) => void; 
    rulerUnit: 'px' | 'in' | 'cm'; 
