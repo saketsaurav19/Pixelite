@@ -1,3 +1,4 @@
+import heic2any from 'heic2any';
 export interface ImportResult {
   name: string;
   type: 'image' | 'psd';
@@ -14,17 +15,31 @@ export class ImportEngine {
    * Heavy parsing (PSD) should be routed to workers.
    */
   static async importFile(file: File): Promise<ImportResult> {
+    let fileToRead = file;
+
+    if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+      try {
+        const convertedBlob = await heic2any({ blob: file, toType: 'image/jpeg' });
+        // heic2any might return an array of blobs if it's an animation/sequence, we just take the first one
+        const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+        fileToRead = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
+      } catch (err) {
+        console.error('Failed to convert HEIC to JPEG:', err);
+        throw new Error('Failed to parse HEIC file');
+      }
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
 
       reader.onload = (event) => {
         const result = event.target?.result;
 
-        if (file.name.toLowerCase().endsWith('.psd')) {
+        if (fileToRead.name.toLowerCase().endsWith('.psd')) {
            // We will handle PSD parsing in a worker later.
            // For scaffolding, just return the ArrayBuffer.
            resolve({
-             name: file.name,
+             name: file.name, // Keep original name
              type: 'psd',
              psdData: result,
              width: 0,
@@ -38,7 +53,7 @@ export class ImportEngine {
           const img = new Image();
           img.onload = () => {
             resolve({
-              name: file.name,
+              name: file.name, // Keep original name
               type: 'image',
               dataUrl: result,
               width: img.width,
@@ -54,10 +69,10 @@ export class ImportEngine {
 
       reader.onerror = () => reject(reader.error);
 
-      if (file.name.toLowerCase().endsWith('.psd')) {
-        reader.readAsArrayBuffer(file);
+      if (fileToRead.name.toLowerCase().endsWith('.psd')) {
+        reader.readAsArrayBuffer(fileToRead);
       } else {
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(fileToRead);
       }
     });
   }
