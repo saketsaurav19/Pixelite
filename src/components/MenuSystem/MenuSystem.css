@@ -133,7 +133,7 @@
     max-height: 9999px;
     opacity: 1;
     pointer-events: auto;
-    overflow: visible;
+    overflow-y: scroll;
   }
 
   /* Every menu item is a full-width row */
