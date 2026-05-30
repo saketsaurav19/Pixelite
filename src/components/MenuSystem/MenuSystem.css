@@ -149,14 +149,13 @@
   /* ── has-submenu parent row ── */
   /* Keep it as a normal flex row (label + chevron) */
   .menu-item.has-submenu {
-    /* Do NOT change flex-direction — keep it row so label and icon sit side by side */
-    position: static;
-    flex-wrap: wrap;        /* allow the .submenu child to wrap onto its own line */
+    position: relative;
+    flex-wrap: wrap;
     align-items: center;
   }
 
   .menu-item.has-submenu > .menu-label {
-    flex: 1;                /* label takes all available width */
+    flex: 1;
     min-height: 48px;
     display: flex;
     align-items: center;
@@ -175,24 +174,19 @@
 
   /* ── The submenu itself ─────────────────────────────── */
   /*
-   * KEY FIX:
    * width: 100% + flex-basis: 100% forces the submenu onto its OWN line
-   * inside the wrapping has-submenu container, so it IS in the normal flow
-   * and physically pushes every sibling .menu-item BELOW it downward.
-   *
-   * position: static (not absolute!) keeps it in flow.
-   * max-height animation collapses/expands it smoothly.
+   * inside the wrapping has-submenu container
    */
   .submenu {
-    position: static !important;   /* must stay in flow */
-    display: block !important;     /* always rendered so max-height transition works */
+    position: static !important;
+    display: block !important;
     width: 100%;
-    flex-basis: 100%;              /* wrap onto its own line inside the parent flex row */
+    flex-basis: 100%;
     box-sizing: border-box;
 
     /* Accordion styling */
-    background: rgba(255, 255, 255, 0.03);
-    border-left: 2px solid #0066cc;
+    background: transparent;
+    border-left: 2px solid transparent;
     border-radius: 0;
     margin: 0;
     padding: 0;
@@ -215,29 +209,35 @@
     overflow: visible;
     opacity: 1;
     pointer-events: auto;
-    padding: 4px 0 8px 0;
+    padding: 0;
   }
 
-  /* Submenu items are indented */
+  /* Submenu items indentation for tree form */
+  /* 2nd stage */
   .submenu .menu-item {
     padding-left: 32px;
     font-size: 14px;
-    min-height: 42px;
     color: #bbb;
   }
 
-  .submenu .menu-item:hover:not(.disabled) {
-    background: rgba(0, 102, 204, 0.3);
-    color: #fff;
-  }
-
-  /* Nested submenus (submenu inside submenu) — extra indent */
+  /* 3rd stage */
   .submenu .submenu .menu-item {
     padding-left: 48px;
+    font-size: 13px;
+    color: #aaa;
   }
 
-  .submenu .submenu {
-    border-left-color: #555;
+  /* 4th stage */
+  .submenu .submenu .submenu .menu-item {
+    padding-left: 64px;
+    font-size: 13px;
+    color: #999;
+  }
+
+  /* Ensure hover isn't bright blue solid but consistent */
+  .submenu .menu-item:hover:not(.disabled) {
+    background: var(--bg-tertiary, #333);
+    color: #fff;
   }
 
   /* On mobile, desktop :hover must never show a submenu */
