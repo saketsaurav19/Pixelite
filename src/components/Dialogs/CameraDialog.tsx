@@ -3,8 +3,6 @@ import { useStore } from '../../store/useStore';
 import * as LucideIcons from 'lucide-react';
 import './Dialogs.css';
 
-type AspectRatio = 'free' | '1:1' | '4:3' | '16:9';
-
 export const CameraDialog: React.FC = () => {
   const {
     isCameraDialogOpen,
@@ -17,7 +15,6 @@ export const CameraDialog: React.FC = () => {
   } = useStore();
 
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('free');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [createNewProject, setCreateNewProject] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,47 +101,14 @@ export const CameraDialog: React.FC = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
 
-    // We want to capture exactly what is shown in the video element (which has object-fit: cover)
-    // To do this, we need to calculate the crop.
-
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let targetRatio = 0;
-    if (aspectRatio === '1:1') targetRatio = 1;
-    else if (aspectRatio === '4:3') targetRatio = 4 / 3;
-    else if (aspectRatio === '16:9') targetRatio = 16 / 9;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
-    const videoWidth = video.videoWidth;
-    const videoHeight = video.videoHeight;
-    const videoRatio = videoWidth / videoHeight;
-
-    let cropWidth = videoWidth;
-    let cropHeight = videoHeight;
-    let cropX = 0;
-    let cropY = 0;
-
-    if (targetRatio > 0) {
-      if (videoRatio > targetRatio) {
-        // Video is wider than target
-        cropWidth = videoHeight * targetRatio;
-        cropX = (videoWidth - cropWidth) / 2;
-      } else {
-        // Video is taller than target
-        cropHeight = videoWidth / targetRatio;
-        cropY = (videoHeight - cropHeight) / 2;
-      }
-    }
-
-    canvas.width = cropWidth;
-    canvas.height = cropHeight;
-
-    ctx.drawImage(
-      video,
-      cropX, cropY, cropWidth, cropHeight,
-      0, 0, cropWidth, cropHeight
-    );
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const dataUrl = canvas.toDataURL('image/png');
     setCapturedImage(dataUrl);
@@ -202,94 +166,73 @@ export const CameraDialog: React.FC = () => {
   const videoContainerStyle: React.CSSProperties = {
     position: 'relative',
     width: '100%',
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1a',
     overflow: 'hidden',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: '300px'
+    height: '400px',
+    borderRadius: '4px',
+    border: '1px solid #333'
   };
-
-  if (aspectRatio === '1:1') videoContainerStyle.aspectRatio = '1 / 1';
-  else if (aspectRatio === '4:3') videoContainerStyle.aspectRatio = '4 / 3';
-  else if (aspectRatio === '16:9') videoContainerStyle.aspectRatio = '16 / 9';
 
   return (
     <div className="dialog-overlay" onMouseDown={handleClose}>
-      <div className="dialog camera-dialog" onMouseDown={(e) => e.stopPropagation()} style={{ width: '500px', maxWidth: '90vw' }}>
+      <div className="dialog-content camera-dialog" onMouseDown={(e) => e.stopPropagation()} style={{ width: '600px', maxWidth: '90vw' }}>
         <div className="dialog-header">
-          <h3>Take Picture</h3>
+          <h2>Take Picture</h2>
           <button className="dialog-close" onClick={handleClose}>
             <LucideIcons.X size={18} />
           </button>
         </div>
 
-        <div className="dialog-body" style={{ padding: '16px' }}>
-          {error && <div className="error-message" style={{ color: 'red', marginBottom: '16px' }}>{error}</div>}
+        <div className="dialog-body" style={{ padding: '20px' }}>
+          {error && <div className="error-message" style={{ color: 'red' }}>{error}</div>}
 
           {!capturedImage ? (
-            <>
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label>Aspect Ratio</label>
-                <select
-                  className="dialog-input"
-                  value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value as AspectRatio)}
-                >
-                  <option value="free">Free (Original)</option>
-                  <option value="1:1">1:1 Square</option>
-                  <option value="4:3">4:3 Standard</option>
-                  <option value="16:9">16:9 Widescreen</option>
-                </select>
-              </div>
-
-              <div style={videoContainerStyle}>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: aspectRatio === 'free' ? 'contain' : 'cover',
-                    position: aspectRatio === 'free' ? 'static' : 'absolute',
-                    top: 0,
-                    left: 0
-                  }}
-                />
-              </div>
-            </>
+            <div style={videoContainerStyle}>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain'
+                }}
+              />
+            </div>
           ) : (
-            <>
-              <div style={{ ...videoContainerStyle, backgroundImage: `url(${capturedImage})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
-              </div>
-
-              <div className="form-group" style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  id="createNewProject"
-                  checked={createNewProject}
-                  onChange={(e) => setCreateNewProject(e.target.checked)}
-                />
-                <label htmlFor="createNewProject" style={{ margin: 0 }}>Create New Project</label>
-              </div>
-            </>
+            <div style={{ ...videoContainerStyle, backgroundImage: `url(${capturedImage})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
+            </div>
           )}
         </div>
 
-        <div className="dialog-footer">
-          {!capturedImage ? (
-            <>
-              <button className="dialog-button secondary" onClick={handleClose}>Cancel</button>
-              <button className="dialog-button primary" onClick={capturePhoto} disabled={!!error || !stream}>Capture</button>
-            </>
-          ) : (
-            <>
-              <button className="dialog-button secondary" onClick={retakePhoto}>Retake</button>
-              <button className="dialog-button primary" onClick={handleConfirm}>Confirm</button>
-            </>
-          )}
+        <div className="dialog-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={createNewProject}
+              onChange={(e) => setCreateNewProject(e.target.checked)}
+              style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#0066cc' }}
+            />
+            <span style={{ fontSize: '13px', color: '#ccc' }}>Create New Project</span>
+          </label>
+
+          <div style={{ display: 'flex', gap: '12px' }}>
+            {!capturedImage ? (
+              <>
+                <button className="btn-secondary" onClick={handleClose}>Cancel</button>
+                <button className="btn-primary" onClick={capturePhoto} disabled={!!error || !stream}>Capture</button>
+              </>
+            ) : (
+              <>
+                <button className="btn-secondary" onClick={retakePhoto}>Retake</button>
+                <button className="btn-primary" onClick={handleConfirm}>Confirm</button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

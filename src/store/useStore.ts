@@ -60,6 +60,7 @@ useStore.setState({
   exportFormat: 'image/png',
   isMobileMenuOpen: false,
   isCameraDialogOpen: false,
+  mobileCapturedImage: null,
   activeMobileSubmenu: null,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
