@@ -42,10 +42,54 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     }
     try {
       const result = await ImportEngine.importFile(file);
-      if (result.type === 'psd') {
+
+            if (result.type === 'psd') {
         const psdData = await workerExportBridge.parsePSD(result.psdData);
-        console.log('Parsed PSD in worker:', psdData);
-        alert('PSD Parsing successful (see console). Rendering integration pending.');
+        console.log('Parsed PSD:', psdData);
+
+        if (!isPlace) {
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          setDocumentSize({ w: psdData.width || 800, h: psdData.height || 600 });
+        }
+
+        const newLayers: any[] = [];
+        if (psdData.children) {
+            // Process layers (reverse order typically for PSD as top layer is first,
+            // but we want background first in our layer list)
+            const psdLayers = [...psdData.children].reverse();
+            for (const layer of psdLayers) {
+                if (layer.dataUrl) {
+                    newLayers.push({
+                        id: Math.random().toString(36).substring(7),
+                        name: layer.name || 'Layer',
+                        type: 'image',
+                        dataUrl: layer.dataUrl,
+                        position: { x: layer.left || 0, y: layer.top || 0 },
+                        visible: layer.hidden === false || layer.hidden === undefined,
+                        locked: false,
+                        opacity: layer.opacity !== undefined ? layer.opacity : 1,
+                        blendMode: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode || 'source-over')
+                    });
+                }
+            }
+        }
+
+        if (isPlace) {
+           setLayers([...layers, ...newLayers]);
+        } else {
+           setLayers(newLayers.length > 0 ? newLayers : [{
+                id: Math.random().toString(36).substring(7),
+                name: 'Background',
+                type: 'paint',
+                position: { x: 0, y: 0 },
+                visible: true,
+                locked: false,
+                opacity: 1,
+                blendMode: 'source-over'
+           }]);
+        }
+        recordHistory(isPlace ? `Place PSD` : `Open ${result.name}`);
       } else if (result.type === 'image' && result.dataUrl) {
         const isDefaultBackground =
           layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
