@@ -11,6 +11,7 @@ import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
 import { MenuBar } from './components/MenuSystem/MenuBar';
 import { OpenRecentDialog } from './components/Dialogs/OpenRecentDialog';
+import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
@@ -585,6 +586,7 @@ const App: React.FC = () => {
 
             <NewDocumentDialog />
       <OpenRecentDialog />
+      <OpenFromCloudDialog />
       <ExportAsDialog />
       <FileInfoDialog />
 </div>
