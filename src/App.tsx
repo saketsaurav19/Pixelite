@@ -10,6 +10,7 @@ import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
 import { MenuBar } from './components/MenuSystem/MenuBar';
+import { OpenRecentDialog } from './components/Dialogs/OpenRecentDialog';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
@@ -19,6 +20,7 @@ import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 
 const App: React.FC = () => {
+
   const addAlert = useStore(state => state.addAlert);
   const {
     layers,
@@ -581,7 +583,8 @@ const App: React.FC = () => {
         <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
       )}
 
-      <NewDocumentDialog />
+            <NewDocumentDialog />
+      <OpenRecentDialog />
       <ExportAsDialog />
       <FileInfoDialog />
 </div>

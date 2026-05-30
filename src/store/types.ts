@@ -123,7 +123,8 @@ export type Tool =
    // UI State 
    isNewDocumentDialogOpen: boolean; 
    isExportDialogOpen: boolean; 
-   isFileInfoDialogOpen: boolean; 
+   isFileInfoDialogOpen: boolean;
+   isOpenRecentDialogOpen: boolean;
    isHelpDialogOpen: boolean; 
    isAboutDialogOpen: boolean; 
    isKeyboardShortcutsDialogOpen: boolean; 
@@ -173,5 +174,3 @@ export type Tool =
    // Actions - These will be defined in slices 
    [key: string]: any; 
  } 
-  
- // Add to EditorState interfaces manually since sed might be messy for types
