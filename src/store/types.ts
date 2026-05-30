@@ -121,6 +121,8 @@ export type Tool =
    activeLayerId: string | null; 
   
    clipboardDataUrl: string | null; 
+   exifData: any;
+   iccProfile: string;
    // UI State 
    isNewDocumentDialogOpen: boolean; 
    isExportDialogOpen: boolean; 
@@ -134,6 +136,7 @@ export type Tool =
    isSystemInfoDialogOpen: boolean; 
    isMobileMenuOpen: boolean; 
   isCameraDialogOpen: boolean;
+  mobileCapturedImage: string | null;
    showRulers: boolean; 
    setShowRulers: (show: boolean) => void; 
    rulerUnit: 'px' | 'in' | 'cm'; 

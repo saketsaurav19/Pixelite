@@ -1,4 +1,5 @@
 import heic2any from 'heic2any';
+import piexif from 'piexifjs';
 export interface ImportResult {
   name: string;
   type: 'image' | 'psd';
@@ -7,6 +8,8 @@ export interface ImportResult {
   psdData?: any;
   width: number;
   height: number;
+  exifData?: any;
+  iccProfile?: string;
 }
 
 export class ImportEngine {
@@ -50,6 +53,15 @@ export class ImportEngine {
 
         // Standard Image
         if (typeof result === 'string') {
+          let exifData = null;
+          if (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
+            try {
+               exifData = piexif.load(result);
+            } catch (e) {
+               console.warn("Could not load EXIF data", e);
+            }
+          }
+
           const img = new Image();
           img.onload = () => {
             resolve({
@@ -57,7 +69,8 @@ export class ImportEngine {
               type: 'image',
               dataUrl: result,
               width: img.width,
-              height: img.height
+              height: img.height,
+              exifData
             });
           };
           img.onerror = () => reject(new Error('Failed to load image'));

@@ -4,11 +4,9 @@ import { useStore } from '../../store/useStore';
 import { ImportEngine } from '../../services/import/ImportEngine';
 import { workerExportBridge } from '../../services/export/WorkerExportBridge';
 import './MenuSystem.css';
-
 interface MenuProps {
   onClose: () => void;
 }
-
 export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
   const {
     setIsNewDocumentDialogOpen,
@@ -27,23 +25,21 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     setCurrentProjectId,
     setHistory
   } = useStore();
-
   // Track which submenu is open by name (null = all closed)
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const closeMenus = () => {
     onClose();
     setIsMobileMenuOpen(false);
   };
-
   const handleOpen = async (e: React.ChangeEvent<HTMLInputElement>, isPlace: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) {
       closeMenus();
       return;
     }
-
     try {
       const result = await ImportEngine.importFile(file);
 
@@ -100,8 +96,13 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         if (!isPlace) {
           setCurrentProjectId(null);
           setHistory([], 0);
+          if (result.exifData) {
+            (useStore.getState() as any).setExifData(result.exifData);
+          }
+          if (result.iccProfile) {
+            (useStore.getState() as any).setIccProfile(result.iccProfile);
+          }
         }
-
         if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
           setDocumentSize({ w: result.width, h: result.height });
           setLayers([{
@@ -142,6 +143,26 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     }
   };
 
+
+  const handleTakePicture = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    // Simple device detection
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // On mobile, trigger the hidden file input with capture="environment"
+      if (cameraInputRef.current) {
+        cameraInputRef.current.click();
+      }
+    } else {
+      // On desktop, fallback to custom CameraDialog
+      setIsCameraDialogOpen(true);
+    }
+
+    closeMenus();
+  };
+
   const triggerFileInput = (e: React.MouseEvent, isPlace: boolean) => {
     e.stopPropagation();
     if (fileInputRef.current) {
@@ -149,14 +170,12 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       fileInputRef.current.click();
     }
   };
-
   const handleSavePSD = async (e: React.MouseEvent) => {
     e.stopPropagation();
     closeMenus();
     try {
       const buffer = await workerExportBridge.generatePSD(layers, documentSize.w, documentSize.h);
       const blob = new Blob([buffer as unknown as BlobPart], { type: 'application/x-photoshop' });
-
       if ('showSaveFilePicker' in window) {
         try {
           const handle = await (window as any).showSaveFilePicker({
@@ -194,7 +213,6 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       alert('Failed to generate PSD');
     }
   };
-
   /**
    * Toggle a named submenu.
    * On mobile  → accordion toggle (open/close).
@@ -205,18 +223,35 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     if (window.innerWidth > 768) return; // desktop uses CSS hover
     setActiveSubmenu((prev) => (prev === submenuName ? null : submenuName));
   };
-
   return (
     <div className="menu-dropdown file-menu">
       <input
         type="file"
-        ref={fileInputRef}
+        ref={cameraInputRef}
         style={{ display: 'none' }}
-        accept="image/*,.psd,.heic,.heif"
-        onChange={(e) => handleOpen(e, fileInputRef.current?.dataset.isPlace === 'true')}
+        accept="image/*"
+        capture="environment"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const dataUrl = event.target?.result as string;
+              useStore.getState().setMobileCapturedImage(dataUrl);
+            };
+            reader.readAsDataURL(file);
+          }
+        }}
         onClick={(e) => e.stopPropagation()}
       />
 
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        onChange={(e) => handleOpen(e, fileInputRef.current?.dataset.isPlace === 'true')}
+        onClick={(e) => e.stopPropagation()}
+      />
       {/* ── New ── */}
       <div
         className="menu-item"
@@ -229,18 +264,15 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         <span className="menu-label">New...</span>
         <span className="menu-shortcut">Alt+Ctrl+N</span>
       </div>
-
       {/* ── Open ── */}
       <div className="menu-item" onClick={(e) => triggerFileInput(e, false)}>
         <span className="menu-label">Open...</span>
         <span className="menu-shortcut">Ctrl+O</span>
       </div>
-
       {/* ── Open & Place ── */}
       <div className="menu-item" onClick={(e) => triggerFileInput(e, true)}>
         <span className="menu-label">Open &amp; Place...</span>
       </div>
-
       {/* ── Open More (submenu) ── */}
       <div
         className={`menu-item has-submenu ${activeSubmenu === 'openMore' ? 'submenu-active' : ''}`}
@@ -262,7 +294,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           >
             Open Recent
           </div>
-          <div className="menu-item" onClick={(e) => { e.stopPropagation(); setIsCameraDialogOpen(true); closeMenus(); }}>Take Picture</div>
+          <div className="menu-item" onClick={handleTakePicture}>Take Picture</div>
           <div
             className="menu-item"
             onClick={(e) => {
@@ -275,22 +307,17 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           </div>
         </div>
       </div>
-
       <div className="menu-divider" />
-
       {/* ── Save (disabled) ── */}
       <div className="menu-item disabled" onClick={(e) => e.stopPropagation()}>
         <span className="menu-label">Save</span>
         <span className="menu-shortcut">Ctrl+S</span>
       </div>
-
       {/* ── Save As PSD ── */}
       <div className="menu-item" onClick={handleSavePSD}>
         <span className="menu-label">Save As PSD...</span>
       </div>
-
       <div className="menu-divider" />
-
       {/* ── Export As ── */}
       <div
         className={`menu-item has-submenu ${activeSubmenu === 'exportAs' ? 'submenu-active' : ''}`}
@@ -327,13 +354,10 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           <div className="menu-item disabled">More...</div>
         </div>
       </div>
-
       <div className="menu-item disabled" onClick={(e) => e.stopPropagation()}>
         <span className="menu-label">Export Layers...</span>
       </div>
-
       <div className="menu-divider" />
-
       {/* ── File Info ── */}
       <div
         className="menu-item"
@@ -345,9 +369,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       >
         <span className="menu-label">File Info...</span>
       </div>
-
       <div className="menu-divider" />
-
       {/* ── Automate (submenu) ── */}
       <div
         className={`menu-item has-submenu ${activeSubmenu === 'automate' ? 'submenu-active' : ''}`}
@@ -363,7 +385,6 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           <div className="menu-item disabled">Watermarking</div>
         </div>
       </div>
-
       {/* ── Scripts ── */}
       <div className="menu-item disabled" onClick={(e) => e.stopPropagation()}>
         <span className="menu-label">Scripts...</span>
