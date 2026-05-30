@@ -391,6 +391,111 @@ flex-direction: column;
   flex-direction: column;
 }
 
+/* EXIF Editor Styles */
+.dialog-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 10px 15px;
+    color: var(--text-color);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+
+.tab-btn:hover {
+    background-color: var(--hover-bg);
+}
+
+.tab-btn.active {
+    border-bottom-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.exif-toolbar {
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.exif-section {
+    margin-bottom: 20px;
+}
+
+.exif-section h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 5px;
+}
+
+.exif-table {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.exif-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.exif-label {
+    width: 150px;
+    font-size: 12px;
+    color: #999;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.exif-input {
+    flex: 1;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.exif-add-new {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.exif-add-new h4 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+}
+
+.add-tag-row {
+    display: flex;
+    gap: 10px;
+}
+
+.add-tag-row select, .add-tag-row input {
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 6px;
+    border-radius: 4px;
+}
+
+.add-tag-row input {
+    flex: 1;
+}
 /* Mobile responsiveness for Export Dialog */
 @media (max-width: 768px) {
     .export-body {
