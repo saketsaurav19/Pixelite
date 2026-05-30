@@ -383,6 +383,8 @@ flex-direction: column;
 
 .btn-more:hover {
     background: #5a5a5a;
+}
+
 /* Camera Dialog Specifics */
 .camera-dialog .dialog-body {
   display: flex;
