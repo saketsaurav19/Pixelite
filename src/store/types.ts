@@ -126,6 +126,7 @@ export type Tool =
    isExportDialogOpen: boolean; 
    isFileInfoDialogOpen: boolean;
    isOpenRecentDialogOpen: boolean;
+   isOpenFromCloudDialogOpen: boolean;
    isHelpDialogOpen: boolean; 
    isAboutDialogOpen: boolean; 
    isKeyboardShortcutsDialogOpen: boolean; 

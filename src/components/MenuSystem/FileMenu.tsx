@@ -13,6 +13,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
   const {
     setIsNewDocumentDialogOpen,
     setIsOpenRecentDialogOpen,
+    setIsOpenFromCloudDialogOpen,
     setIsExportDialogOpen,
     setIsFileInfoDialogOpen,
     layers,
@@ -189,7 +190,16 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           >
             Open Recent
           </div>
-          <div className="menu-item disabled">Open from Cloud</div>
+          <div
+            className="menu-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpenFromCloudDialogOpen(true);
+              closeMenus();
+            }}
+          >
+            Open from Cloud
+          </div>
           <div className="menu-item disabled">Recover Autosave</div>
         </div>
       </div>
