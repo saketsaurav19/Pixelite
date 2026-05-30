@@ -317,7 +317,7 @@ const App: React.FC = () => {
 
   return (
     <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''}`}>
-      <input type="file" id="global-file-input" accept="image/*" hidden onChange={handleImageUpload} />
+      <input type="file" id="global-file-input" hidden onChange={handleImageUpload} />
 
       {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
         <div
