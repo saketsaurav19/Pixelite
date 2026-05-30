@@ -5,7 +5,7 @@ import { ExportEngine } from '../../services/export/ExportEngine';
 import './Dialogs.css';
 
 export const ExportAsDialog: React.FC = () => {
-  const { isExportDialogOpen, setIsExportDialogOpen, documentSize, layers, addAlert, exportFormat } = useStore();
+  const { isExportDialogOpen, setIsExportDialogOpen, documentSize, layers, addAlert, exportFormat, exifData, iccProfile } = useStore();
   const [format, setFormat] = useState<'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf'>(exportFormat);
   const [quality, setQuality] = useState(100);
   const [name, setName] = useState('New Project');
@@ -98,6 +98,8 @@ export const ExportAsDialog: React.FC = () => {
         const actualFormat = (format === 'image/svg+xml' || format === 'image/gif' || format === 'application/pdf') ? 'image/png' : format;
 
         await ExportEngine.downloadExport(tempCanvas, {
+            exifData: attachMetadata ? exifData : undefined,
+            iccProfile: attachMetadata ? iccProfile : undefined,
             format: actualFormat as any,
             quality: quality / 100,
             filename: `${name || 'export'}.${actualFormat.split('/')[1]}`
