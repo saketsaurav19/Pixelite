@@ -9,6 +9,7 @@ import './MenuSystem.css';
 export const MenuBar: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useStore();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  // Tracks which submenu keys are open: key => true/false
   const [activeSubmenus, setActiveSubmenus] = useState<Record<string, boolean>>({});
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -38,12 +39,20 @@ export const MenuBar: React.FC = () => {
   };
 
   /**
-   * Mobile only: toggle a specific submenu open/closed.
-   * On desktop, submenus are controlled purely by CSS :hover — no JS needed.
+   * Toggle a submenu open/closed.
+   * On desktop, submenus are CSS :hover — no JS state needed.
+   * On mobile, we toggle the key in activeSubmenus.
    */
-  const toggleSubmenu = (key: string) => {
-    if (window.innerWidth > 768) return;
-    setActiveSubmenus((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleSubmenu = (e: React.MouseEvent, key: string) => {
+    // Always stop propagation so the parent menu-item-container click doesn't close the whole menu
+    e.stopPropagation();
+
+    if (window.innerWidth > 768) return; // desktop uses CSS :hover
+
+    setActiveSubmenus((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   const renderMenuItems = (menuName: string, items: MenuItem[], path: string[] = []) => (
@@ -61,16 +70,14 @@ export const MenuBar: React.FC = () => {
             <div
               key={`${menuName}-${submenuKey}`}
               className={`menu-item has-submenu ${isOpen ? 'submenu-active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSubmenu(submenuKey);
-              }}
+              onClick={(e) => toggleSubmenu(e, submenuKey)}
             >
               <span className="menu-label">{item.label}</span>
               <LucideIcons.ChevronRight
                 size={14}
                 className={`submenu-icon ${isOpen ? 'rotated' : ''}`}
               />
+              {/* Submenu is always rendered; CSS controls visibility */}
               <div className={`submenu ${isOpen ? 'active' : ''}`}>
                 {renderMenuItems(menuName, item.submenu, [...path, item.label])}
               </div>
@@ -86,10 +93,17 @@ export const MenuBar: React.FC = () => {
               className={`menu-item ${enabled ? '' : 'disabled'}`}
               onClick={(e) => {
                 e.stopPropagation();
-                if (enabled) runAction(item.action);
+                if (enabled) {
+                  runAction(item.action);
+                  // Close the whole menu after action
+                  setActiveMenu(null);
+                }
               }}
             >
-              <span className="menu-label">{item.isChecked && item.isChecked(useStore.getState()) ? "✓ " : ""}{item.label}</span>
+              <span className="menu-label">
+                {item.isChecked && item.isChecked(useStore.getState()) ? '✓ ' : ''}
+                {item.label}
+              </span>
               {item.shortcut && <span className="menu-shortcut">{item.shortcut}</span>}
             </div>
           );
