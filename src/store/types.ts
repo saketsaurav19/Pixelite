@@ -124,6 +124,7 @@ export type Tool =
    // UI State 
    isNewDocumentDialogOpen: boolean; 
    isExportDialogOpen: boolean; 
+   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
    isFileInfoDialogOpen: boolean;
    isOpenRecentDialogOpen: boolean;
    isOpenFromCloudDialogOpen: boolean;
