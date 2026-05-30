@@ -121,6 +121,8 @@ export type Tool =
    activeLayerId: string | null; 
   
    clipboardDataUrl: string | null; 
+   exifData: any;
+   iccProfile: string;
    // UI State 
    isNewDocumentDialogOpen: boolean; 
    isExportDialogOpen: boolean; 
