@@ -61,6 +61,7 @@ export interface UISlice {
 
 export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, get) => ({
   alerts: [],
+  exportFormat: 'image/png',
   isNewDocumentDialogOpen: false,
   isExportDialogOpen: false,
   exportFormat: 'image/png',

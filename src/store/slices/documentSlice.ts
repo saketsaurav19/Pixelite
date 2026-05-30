@@ -21,6 +21,11 @@ export interface DocumentSlice {
   cloneSource: { x: number; y: number } | null;
   customPattern: string | null;
   cropRect: { x: number; y: number; w: number; h: number } | null;
+  exifData: any;
+  iccProfile: string;
+
+  setExifData: (data: any) => void;
+  setIccProfile: (profile: string) => void;
 
   setZoom: (zoom: number) => void;
   setCanvasOffset: (offset: { x: number; y: number }) => void;
@@ -61,6 +66,8 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   cloneSource: null,
   customPattern: null,
   cropRect: null,
+  exifData: null,
+  iccProfile: 'sRGB IEC61966-2.1',
 
   setZoom: (zoom) => set({ zoom }),
   setCanvasOffset: (offset) => set({ canvasOffset: offset }),
@@ -89,4 +96,6 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   setCropRect: (updater) => set((state) => ({ 
     cropRect: typeof updater === 'function' ? updater(state.cropRect) : updater 
   })),
+  setExifData: (exifData) => set({ exifData }),
+  setIccProfile: (iccProfile) => set({ iccProfile }),
 });
