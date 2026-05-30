@@ -112,7 +112,6 @@
     width: 100%;
     /* No max-height clipping here — let content flow naturally */
     max-height: 0;
-    height: auto;
     overflow: hidden;
     transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 0.3s ease,
@@ -121,7 +120,6 @@
     opacity: 0;
     pointer-events: none;
     margin: 0;
-    flex-shrink: 0;
   }
 
   .menu-item-container.active .menu-dropdown {
@@ -137,16 +135,14 @@
   /* Larger touch targets */
   .menu-item {
     min-height: 44px;
-    position: static;
   }
 
   /* has-submenu: column layout so submenu renders BELOW the row */
   .menu-item.has-submenu {
     flex-direction: column;
     align-items: stretch;
-    /* Remove relative to ensure normal flow */
-    position: static;
-    height: auto;
+    position: relative;
+    /* No overflow:hidden here — that would clip the submenu */
   }
 
   /* Label row: full width, with padding-right for chevron */
@@ -168,7 +164,6 @@
     position: static !important;
     left: auto !important;
     top: auto !important;
-    transform: none !important;
 
     /* Always rendered in flow so height animates correctly */
     display: block !important;
@@ -191,7 +186,6 @@
                 margin 0.25s ease;
     margin-top: 0;
     margin-bottom: 0;
-    flex-shrink: 0;
   }
 
   /* Expanded state — JS adds .active */
