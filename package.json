@@ -23,6 +23,7 @@
     "lucide-react": "^1.11.0",
     "nanoid": "^5.1.9",
     "onnxruntime-web": "^1.21.0",
+    "piexifjs": "^1.0.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "vite": "^7.3.3",
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.2",
+    "@types/piexifjs": "^1.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "eslint": "^10.2.1",
