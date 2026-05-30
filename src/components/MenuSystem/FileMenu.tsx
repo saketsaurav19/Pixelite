@@ -45,51 +45,46 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
 
             if (result.type === 'psd') {
         const psdData = await workerExportBridge.parsePSD(result.psdData);
-        console.log('Parsed PSD:', psdData);
 
         if (!isPlace) {
           setCurrentProjectId(null);
           setHistory([], 0);
-          setDocumentSize({ w: psdData.width || 800, h: psdData.height || 600 });
+          setDocumentSize({ w: psdData.width, h: psdData.height });
         }
 
         const newLayers: any[] = [];
+
+        const processPsdLayer = (child: any) => {
+          if (child.children) {
+             child.children.forEach(processPsdLayer);
+          } else if (child.dataUrl) {
+            newLayers.push({
+              id: Math.random().toString(36).substring(7),
+              name: child.name || "Layer",
+              type: "image",
+              dataUrl: child.dataUrl,
+              position: {
+                x: child.left || 0,
+                y: child.top || 0
+              },
+              visible: child.hidden !== true,
+              locked: false,
+              opacity: typeof child.opacity === "number" ? child.opacity / 255 : 1,
+              blendMode: child.blendMode === "pass through" || !child.blendMode ? "source-over" : child.blendMode
+            });
+          }
+        };
+
         if (psdData.children) {
-            // Process layers (reverse order typically for PSD as top layer is first,
-            // but we want background first in our layer list)
-            const psdLayers = [...psdData.children].reverse();
-            for (const layer of psdLayers) {
-                if (layer.dataUrl) {
-                    newLayers.push({
-                        id: Math.random().toString(36).substring(7),
-                        name: layer.name || 'Layer',
-                        type: 'image',
-                        dataUrl: layer.dataUrl,
-                        position: { x: layer.left || 0, y: layer.top || 0 },
-                        visible: layer.hidden === false || layer.hidden === undefined,
-                        locked: false,
-                        opacity: layer.opacity !== undefined ? layer.opacity : 1,
-                        blendMode: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode || 'source-over')
-                    });
-                }
-            }
+          psdData.children.forEach(processPsdLayer);
         }
 
-        if (isPlace) {
-           setLayers([...layers, ...newLayers]);
+        if (!isPlace) {
+          setLayers(newLayers.reverse());
         } else {
-           setLayers(newLayers.length > 0 ? newLayers : [{
-                id: Math.random().toString(36).substring(7),
-                name: 'Background',
-                type: 'paint',
-                position: { x: 0, y: 0 },
-                visible: true,
-                locked: false,
-                opacity: 1,
-                blendMode: 'source-over'
-           }]);
+          setLayers([...layers, ...newLayers.reverse()]);
         }
-        recordHistory(isPlace ? `Place PSD` : `Open ${result.name}`);
+        recordHistory(isPlace ? `Place PSD ${file.name}` : `Open PSD ${file.name}`);
       } else if (result.type === 'image' && result.dataUrl) {
         const isDefaultBackground =
           layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';

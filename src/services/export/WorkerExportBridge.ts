@@ -90,8 +90,27 @@ export class WorkerExportBridge {
 
     const id = Math.random().toString(36).substring(7);
 
-    const parsedPsd: any = await new Promise((resolve, reject) => {
-      this.messageCallbacks.set(id, { resolve: (res) => resolve(res.psd), reject });
+    return new Promise((resolve, reject) => {
+      this.messageCallbacks.set(id, {
+        resolve: (res) => {
+          // Convert blobs to Object URLs in the main thread
+          const processLayer = (layer: any) => {
+            if (layer.blob) {
+              layer.dataUrl = URL.createObjectURL(layer.blob);
+              delete layer.blob;
+            }
+            if (layer.children) {
+              layer.children.forEach(processLayer);
+            }
+          };
+          if (res.psd && res.psd.children) {
+            res.psd.children.forEach(processLayer);
+          }
+
+          resolve(res.psd);
+        },
+        reject
+      });
       this.worker!.postMessage({ type: 'PARSE_PSD', buffer, id }, [buffer]);
     });
 
