@@ -8,6 +8,7 @@ export interface UISlice {
   isNewDocumentDialogOpen: boolean;
   isExportDialogOpen: boolean;
   isFileInfoDialogOpen: boolean;
+  isOpenRecentDialogOpen: boolean;
   isHelpDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
@@ -36,6 +37,7 @@ export interface UISlice {
   setIsNewDocumentDialogOpen: (isOpen: boolean) => void;
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
+  setIsOpenRecentDialogOpen: (isOpen: boolean) => void;
   setIsHelpDialogOpen: (isOpen: boolean) => void;
   setIsAboutDialogOpen: (isOpen: boolean) => void;
   setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
@@ -54,6 +56,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isNewDocumentDialogOpen: false,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
+  isOpenRecentDialogOpen: false,
   isHelpDialogOpen: false,
   isAboutDialogOpen: false,
   isKeyboardShortcutsDialogOpen: false,
@@ -82,6 +85,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsNewDocumentDialogOpen: (isOpen) => set({ isNewDocumentDialogOpen: isOpen }),
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
+  setIsOpenRecentDialogOpen: (isOpen) => set({ isOpenRecentDialogOpen: isOpen }),
   setIsHelpDialogOpen: (isOpen) => set({ isHelpDialogOpen: isOpen }),
   setIsAboutDialogOpen: (isOpen) => set({ isAboutDialogOpen: isOpen }),
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
