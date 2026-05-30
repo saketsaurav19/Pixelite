@@ -223,3 +223,9 @@ flex-direction: column;
     margin-top: 20px;
     font-style: italic;
 }
+
+/* Camera Dialog Specifics */
+.camera-dialog .dialog-body {
+  display: flex;
+  flex-direction: column;
+}
