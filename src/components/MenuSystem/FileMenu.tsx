@@ -12,6 +12,7 @@ interface MenuProps {
 export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
   const {
     setIsNewDocumentDialogOpen,
+    setIsOpenRecentDialogOpen,
     setIsExportDialogOpen,
     setIsFileInfoDialogOpen,
     layers,
@@ -171,7 +172,16 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           className={`submenu-icon ${activeSubmenu === 'openMore' ? 'rotated' : ''}`}
         />
         <div className={`submenu ${activeSubmenu === 'openMore' ? 'active' : ''}`}>
-          <div className="menu-item disabled">Open Recent</div>
+          <div
+            className="menu-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpenRecentDialogOpen(true);
+              closeMenus();
+            }}
+          >
+            Open Recent
+          </div>
           <div className="menu-item disabled">Open from Cloud</div>
           <div className="menu-item disabled">Recover Autosave</div>
         </div>
