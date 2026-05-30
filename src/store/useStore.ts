@@ -57,9 +57,15 @@ useStore.setState({
   historyIndex: 0,
   currentProjectId: null,
   isNewDocumentDialogOpen: false,
+  exportFormat: 'image/png',
   isMobileMenuOpen: false,
   isCameraDialogOpen: false,
   activeMobileSubmenu: null,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
 });
+
+// Expose for E2E testing
+if (typeof window !== 'undefined') {
+  (window as any)._useStore = useStore;
+}

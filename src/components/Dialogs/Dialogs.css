@@ -224,6 +224,165 @@ flex-direction: column;
     font-style: italic;
 }
 
+/* New Export Dialog Styles */
+.export-preview-container {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.export-preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAADFJREFUOE9jZCASMDKgCHb29v5HgAEYjUaDYTRgMBoMBoMhwIABnQ3AwE4YTYNBNBgAAGe9CRB2a1/uAAAAAElFTkSuQmCC") repeat;
+}
+
+.export-preview canvas {
+    max-width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+.export-preview-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #111;
+    color: #aaa;
+    font-size: 12px;
+}
+
+.export-settings {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.export-row-2 {
+    display: flex;
+    gap: 12px;
+}
+
+.export-row-dims {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.export-row-dims .setting-group {
+    flex: 1;
+}
+
+.link-button-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    padding-bottom: 2px;
+}
+
+.link-button {
+    background: #333;
+    border: 1px solid #444;
+    color: #888;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.link-button.active {
+    background: #444;
+    color: #fff;
+    border-color: #555;
+}
+
+.link-button:hover {
+    background: #555;
+    color: #fff;
+}
+
+.unit-select {
+    width: 60px;
+}
+
+.quality-group {
+    margin-top: 8px;
+}
+
+.quality-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 4px;
+}
+
+.export-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #ccc;
+    cursor: pointer;
+}
+
+.export-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.btn-save {
+    flex: 1;
+    background: #4a4a4a;
+    color: white;
+    border: 1px solid #5a5a5a;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn-save:hover {
+    background: #5a5a5a;
+}
+
+.btn-more {
+    width: 36px;
+    background: #4a4a4a;
+    color: white;
+    border: 1px solid #5a5a5a;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.btn-more:hover {
+    background: #5a5a5a;
 /* Camera Dialog Specifics */
 .camera-dialog .dialog-body {
   display: flex;
