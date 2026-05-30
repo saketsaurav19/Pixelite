@@ -5,7 +5,7 @@ import { ExportEngine } from '../../services/export/ExportEngine';
 import './Dialogs.css';
 
 export const ExportAsDialog: React.FC = () => {
-  const { isExportDialogOpen, setIsExportDialogOpen, documentSize, layers, addAlert, exportFormat } = useStore();
+  const { isExportDialogOpen, setIsExportDialogOpen, documentSize, layers, addAlert, exportFormat, exifData, iccProfile } = useStore();
   const [format, setFormat] = useState<'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf'>(exportFormat);
   const [quality, setQuality] = useState(100);
   const [name, setName] = useState('New Project');
@@ -63,8 +63,6 @@ export const ExportAsDialog: React.FC = () => {
     }
   };
 
-  if (!isExportDialogOpen) return null;
-
   const handleExport = async () => {
     setIsExporting(true);
     try {
@@ -98,6 +96,8 @@ export const ExportAsDialog: React.FC = () => {
         const actualFormat = (format === 'image/svg+xml' || format === 'image/gif' || format === 'application/pdf') ? 'image/png' : format;
 
         await ExportEngine.downloadExport(tempCanvas, {
+            exifData: attachMetadata ? exifData : undefined,
+            iccProfile: attachMetadata ? iccProfile : undefined,
             format: actualFormat as any,
             quality: quality / 100,
             filename: `${name || 'export'}.${actualFormat.split('/')[1]}`
@@ -111,20 +111,75 @@ export const ExportAsDialog: React.FC = () => {
     }
   };
 
-  // Estimate file size
-  const estimateSize = () => {
-     let bytes = width * height * 4; // Uncompressed size roughly
-     if (format === 'image/jpeg' || format === 'image/webp') {
-         bytes = bytes * (quality / 100) * 0.1;
-     } else if (format === 'image/png') {
-         bytes = bytes * 0.5;
-     }
+  const [actualSize, setActualSize] = useState<{ kb: number, bytes: number } | null>(null);
+  const [isCalculatingSize, setIsCalculatingSize] = useState(false);
 
-     const kb = Math.round(bytes / 1024);
-     return { kb, bytes: Math.round(bytes) };
-  };
+  useEffect(() => {
+    if (!isExportDialogOpen) return;
 
-  const estimatedSize = estimateSize();
+    let timeoutId: NodeJS.Timeout;
+    let isCancelled = false;
+
+    const calculateSize = async () => {
+        setIsCalculatingSize(true);
+        const tempCanvas = document.createElement('canvas');
+        const targetWidth = width || 1;
+        const targetHeight = height || 1;
+
+        tempCanvas.width = targetWidth;
+        tempCanvas.height = targetHeight;
+
+        const scaleX = targetWidth / documentSize.w;
+        const scaleY = targetHeight / documentSize.h;
+
+        const ctx = tempCanvas.getContext('2d');
+        if (ctx) {
+             if (format === 'image/jpeg') {
+                 ctx.fillStyle = '#ffffff';
+                 ctx.fillRect(0,0, targetWidth, targetHeight);
+             }
+             [...layers].reverse().forEach(layer => {
+                if (layer.visible) {
+                    const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+                    if (layerCanvas) {
+                        ctx.drawImage(layerCanvas, layer.position.x * scaleX, layer.position.y * scaleY, layerCanvas.width * scaleX, layerCanvas.height * scaleY);
+                    }
+                }
+             });
+        }
+
+        const actualFormat = (format === 'image/svg+xml' || format === 'image/gif' || format === 'application/pdf') ? 'image/png' : format;
+
+        try {
+            const blob = await new Promise<Blob | null>((resolve) => {
+                tempCanvas.toBlob(resolve, actualFormat, quality / 100);
+            });
+
+            if (!isCancelled && blob) {
+                const bytes = blob.size;
+                const kb = (bytes / 1024);
+                setActualSize({ kb: parseFloat(kb.toFixed(2)), bytes });
+            }
+        } catch (e) {
+            console.error("Failed to estimate size", e);
+        } finally {
+            if (!isCancelled) {
+                setIsCalculatingSize(false);
+            }
+        }
+    };
+
+    timeoutId = setTimeout(() => {
+        calculateSize();
+    }, 300);
+
+    return () => {
+        isCancelled = true;
+        clearTimeout(timeoutId);
+    };
+  }, [isExportDialogOpen, format, quality, width, height, documentSize, layers]);
+
+  if (!isExportDialogOpen) return null;
 
   return (
     <div className="dialog-overlay" onClick={() => setIsExportDialogOpen(false)}>
@@ -143,7 +198,9 @@ export const ExportAsDialog: React.FC = () => {
                 </div>
                 <div className="export-preview-footer">
                     <span className="export-zoom">100%</span>
-                    <span className="export-size">{estimatedSize.kb.toLocaleString()} KB  {estimatedSize.bytes.toLocaleString()} B</span>
+                    <span className="export-size">
+                        {isCalculatingSize ? 'Calculating...' : (actualSize ? `${actualSize.kb.toLocaleString()} KB  ${actualSize.bytes.toLocaleString()} B` : '---')}
+                    </span>
                 </div>
             </div>
 
