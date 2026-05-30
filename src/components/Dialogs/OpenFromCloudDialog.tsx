@@ -32,11 +32,28 @@ export const OpenFromCloudDialog: React.FC = () => {
 
     try {
       // Fetch the image to convert it to a blob and then data URL
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      let response: Response;
+      let blob: Blob;
+
+      try {
+        // Try direct fetch first
+        response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        blob = await response.blob();
+      } catch (directError) {
+        // Fallback to CORS proxy if direct fetch fails (e.g., due to CORS)
+        console.warn('Direct fetch failed, falling back to CORS proxy:', directError);
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        response = await fetch(proxyUrl);
+        if (!response.ok) {
+          const proxyError = new Error(`HTTP error via proxy! status: ${response.status}`);
+          proxyError.cause = directError;
+          throw proxyError;
+        }
+        blob = await response.blob();
       }
-      const blob = await response.blob();
 
       // Convert blob to file so we can reuse ImportEngine
       const fileName = url.split('/').pop() || 'cloud-image.png';
@@ -89,8 +106,8 @@ export const OpenFromCloudDialog: React.FC = () => {
       }
 
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to load image from URL. It may be restricted by CORS.');
+      console.error('Failed to load image from cloud:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load image from URL. It may be restricted by CORS.');
     } finally {
       setIsLoading(false);
     }
