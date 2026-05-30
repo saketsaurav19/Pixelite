@@ -468,6 +468,7 @@ body {
 
 .layers-panel {
   flex: 2;
+  overflow-y: scroll;
 }
 
 .panel-tab {
@@ -1326,6 +1327,7 @@ body {
 
   .layers-panel {
     flex: 1;
+    overflow-y: scroll;
   }
 
   .status-bar {
