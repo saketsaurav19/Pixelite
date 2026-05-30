@@ -55,6 +55,7 @@ useStore.setState({
     },
   ],
   historyIndex: 0,
+  currentProjectId: null,
   isNewDocumentDialogOpen: false,
   isMobileMenuOpen: false,
   activeMobileSubmenu: null,

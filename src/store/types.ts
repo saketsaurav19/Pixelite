@@ -74,6 +74,7 @@ export type Tool =
  } 
   
  export interface EditorState { 
+   currentProjectId: string | null;
    // Tool State 
    activeTool: Tool; 
    activeToolVariants: Record<string, Tool>; 

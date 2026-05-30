@@ -2,6 +2,8 @@ import type { StateCreator } from 'zustand';
 import type { EditorState } from '../types';
 
 export interface DocumentSlice {
+  currentProjectId: string | null;
+  setCurrentProjectId: (id: string | null) => void;
   clipboardDataUrl: string | null;
   clipboardDataRect: { x: number; y: number; w: number; h: number } | null;
   setClipboardDataRect: (rect: { x: number; y: number; w: number; h: number } | null) => void;
@@ -40,6 +42,8 @@ export interface DocumentSlice {
 }
 
 export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlice> = (set) => ({
+  currentProjectId: null,
+  setCurrentProjectId: (id) => set({ currentProjectId: id }),
   clipboardDataUrl: null,
   clipboardDataRect: null,
   setClipboardDataUrl: (url) => set({ clipboardDataUrl: url }),
