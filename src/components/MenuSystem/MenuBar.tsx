@@ -31,7 +31,10 @@ export const MenuBar: React.FC = () => {
   };
 
   const toggleMenu = (menuName: string) => {
-    setActiveMenu(activeMenu === menuName ? null : menuName);
+    const isClosing = activeMenu === menuName;
+    setActiveMenu(isClosing ? null : menuName);
+    // When switching top-level menus or closing, close all submenus to avoid auto-expanding them next time
+    setActiveSubmenus({});
   };
 
   const runAction = (action: (state: ReturnType<typeof useStore.getState>) => void) => {
