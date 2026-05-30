@@ -39,6 +39,7 @@ export interface UISlice {
 
   setIsNewDocumentDialogOpen: (isOpen: boolean) => void;
   setIsExportDialogOpen: (isOpen: boolean) => void;
+  setExportFormat: (format: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf') => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
   setIsOpenRecentDialogOpen: (isOpen: boolean) => void;
   setIsOpenFromCloudDialogOpen: (isOpen: boolean) => void;
@@ -61,6 +62,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   exportFormat: 'image/png',
   isNewDocumentDialogOpen: false,
   isExportDialogOpen: false,
+  exportFormat: 'image/png',
   isFileInfoDialogOpen: false,
   isOpenRecentDialogOpen: false,
   isOpenFromCloudDialogOpen: false,
@@ -92,6 +94,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
 
   setIsNewDocumentDialogOpen: (isOpen) => set({ isNewDocumentDialogOpen: isOpen }),
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
+  setExportFormat: (format) => set({ exportFormat: format }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
   setIsOpenRecentDialogOpen: (isOpen) => set({ isOpenRecentDialogOpen: isOpen }),
   setIsOpenFromCloudDialogOpen: (isOpen) => set({ isOpenFromCloudDialogOpen: isOpen }),
