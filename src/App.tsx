@@ -15,6 +15,7 @@ import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
+import { CameraDialog } from "./components/Dialogs/CameraDialog";
 import { ImportEngine } from './services/import/ImportEngine';
 import { removeBackground } from '@imgly/background-removal';
 import { AlertContainer } from './components/UI/AlertContainer';
@@ -589,6 +590,7 @@ const App: React.FC = () => {
       <OpenFromCloudDialog />
       <ExportAsDialog />
       <FileInfoDialog />
+      <CameraDialog />
 </div>
   );
 };

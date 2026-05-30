@@ -58,6 +58,7 @@ useStore.setState({
   currentProjectId: null,
   isNewDocumentDialogOpen: false,
   isMobileMenuOpen: false,
+  isCameraDialogOpen: false,
   activeMobileSubmenu: null,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,

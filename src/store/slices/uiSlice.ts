@@ -14,6 +14,7 @@ export interface UISlice {
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
   isSystemInfoDialogOpen: boolean;
+  isCameraDialogOpen: boolean;
   isMobileMenuOpen: boolean;
   showRulers: boolean;
   rulerUnit: 'px' | 'in' | 'cm';
@@ -44,6 +45,7 @@ export interface UISlice {
   setIsAboutDialogOpen: (isOpen: boolean) => void;
   setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
   setIsSystemInfoDialogOpen: (isOpen: boolean) => void;
+  setIsCameraDialogOpen: (isOpen: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
   setShowRulers: (show: boolean) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
@@ -64,6 +66,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isAboutDialogOpen: false,
   isKeyboardShortcutsDialogOpen: false,
   isSystemInfoDialogOpen: false,
+  isCameraDialogOpen: false,
   isMobileMenuOpen: false,
   showRulers: false,
   rulerUnit: 'px',
@@ -94,6 +97,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsAboutDialogOpen: (isOpen) => set({ isAboutDialogOpen: isOpen }),
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
   setIsSystemInfoDialogOpen: (isOpen) => set({ isSystemInfoDialogOpen: isOpen }),
+  setIsCameraDialogOpen: (isOpen) => set({ isCameraDialogOpen: isOpen }),
   setIsMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
   setShowRulers: (show) => set({ showRulers: show }),
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
