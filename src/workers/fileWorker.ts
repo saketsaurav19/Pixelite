@@ -27,17 +27,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           children: children.map(c => ({
              ...c,
              // Note: actual canvas conversion logic must be handled carefully.
-             // If main thread sends ImageData, ag-psd needs canvas.
-             // We'd use OffscreenCanvas here to reconstruct.
-             canvas: (() => {
-                if (c.imageData) {
-                  const oc = new OffscreenCanvas(width, height);
-                  const ctx = oc.getContext('2d');
-                  if (ctx) ctx.putImageData(c.imageData, 0, 0);
-                  return oc;
-                }
-                return undefined;
-             })()
+             // Pass imageData directly as ag-psd supports it natively without canvas.
+             imageData: c.imageData
           }))
         };
 
