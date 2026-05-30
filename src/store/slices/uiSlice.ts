@@ -7,6 +7,7 @@ export interface UISlice {
   removeAlert: (id: string) => void;
   isNewDocumentDialogOpen: boolean;
   isExportDialogOpen: boolean;
+  exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
   isOpenRecentDialogOpen: boolean;
   isHelpDialogOpen: boolean;

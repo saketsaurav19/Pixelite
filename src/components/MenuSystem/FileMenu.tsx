@@ -14,6 +14,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     setIsNewDocumentDialogOpen,
     setIsOpenRecentDialogOpen,
     setIsExportDialogOpen,
+    setExportFormat,
     setIsFileInfoDialogOpen,
     layers,
     setLayers,
@@ -211,14 +212,39 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
 
       {/* ── Export As ── */}
       <div
-        className="menu-item"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsExportDialogOpen(true);
-          closeMenus();
-        }}
+        className={`menu-item has-submenu ${activeSubmenu === 'exportAs' ? 'submenu-active' : ''}`}
+        onClick={(e) => toggleSubmenu(e, 'exportAs')}
       >
         <span className="menu-label">Export As...</span>
+        <LucideIcons.ChevronRight
+          size={14}
+          className={`submenu-icon ${activeSubmenu === 'exportAs' ? 'rotated' : ''}`}
+        />
+        <div className={`submenu ${activeSubmenu === 'exportAs' ? 'active' : ''}`}>
+          {[
+            { label: 'PNG', format: 'image/png' },
+            { label: 'JPG', format: 'image/jpeg' },
+            { label: 'WEBP', format: 'image/webp' },
+            { label: 'SVG', format: 'image/svg+xml' },
+            { label: 'GIF', format: 'image/gif' },
+            { label: 'PDF', format: 'application/pdf' },
+          ].map((item) => (
+            <div
+              key={item.format}
+              className="menu-item"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExportFormat(item.format as any);
+                setIsExportDialogOpen(true);
+                closeMenus();
+              }}
+            >
+              {item.label}
+            </div>
+          ))}
+          <div className="menu-divider" />
+          <div className="menu-item disabled">More...</div>
+        </div>
       </div>
 
       <div className="menu-item disabled" onClick={(e) => e.stopPropagation()}>
