@@ -34,7 +34,7 @@ export const copySelectionToClipboard = async (
   }
 
   let finalDataUrl = '';
-  let copyRect = selectionRect || { x: 0, y: 0, w: documentSize.w, h: documentSize.h };
+  const copyRect = selectionRect || { x: 0, y: 0, w: documentSize.w, h: documentSize.h };
 
   if (selectionRect) {
     const croppedCanvas = document.createElement('canvas');

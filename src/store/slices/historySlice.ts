@@ -9,11 +9,14 @@ export interface HistorySlice {
   undo: () => void;
   redo: () => void;
   recordHistory: (actionName: string) => void;
+  setHistory: (history: HistoryEntry[], index: number) => void;
 }
 
 export const createHistorySlice: StateCreator<EditorState, [], [], HistorySlice> = (set) => ({
   history: [], // Will be initialized in the main store
   historyIndex: 0,
+
+  setHistory: (history, index) => set({ history, historyIndex: index }),
 
   undo: () => set((state) => {
     if (state.historyIndex <= 0) return state;
@@ -92,9 +95,17 @@ export const createHistorySlice: StateCreator<EditorState, [], [], HistorySlice>
                 // We will rely on RecentProjectsStorage to manage states.
                 thumbnail = canvas.toDataURL('image/jpeg', 0.5);
              }
-           } catch(e) {}
+           } catch(e) {
+             console.error('Failed to generate thumbnail', e);
+           }
         }
-        await RecentProjectsStorage.saveProjectState(state as unknown as EditorState, thumbnail);
+        const savedId = await RecentProjectsStorage.saveProjectState(state as unknown as EditorState, thumbnail, state.currentProjectId, [...newHistory, newEntry], newHistory.length);
+        if (savedId && state.currentProjectId !== savedId) {
+          // We need to set it on the actual store instance since we are in a timeout
+          // For this we can use an action if available, but the slice itself only sets state for history.
+          // Because we only have set(), we'll use that.
+          set({ currentProjectId: savedId } as Partial<EditorState>);
+        }
       }, 2000); // 2 second debounce
     }
 
