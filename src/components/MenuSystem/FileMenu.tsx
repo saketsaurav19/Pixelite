@@ -57,6 +57,12 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         if (!isPlace) {
           setCurrentProjectId(null);
           setHistory([], 0);
+          if (result.exifData) {
+            (useStore.getState() as any).setExifData(result.exifData);
+          }
+          if (result.iccProfile) {
+            (useStore.getState() as any).setIccProfile(result.iccProfile);
+          }
         }
 
         if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
