@@ -13,7 +13,7 @@ const PRESETS = [
 ];
 
 export const NewDocumentDialog: React.FC = () => {
-  const { isNewDocumentDialogOpen, setIsNewDocumentDialogOpen, setDocumentSize, setLayers, recordHistory } = useStore();
+  const { isNewDocumentDialogOpen, setIsNewDocumentDialogOpen, setDocumentSize, setLayers, recordHistory, setCurrentProjectId, setHistory } = useStore();
   const [width, setWidth] = useState(1920);
   const [height, setHeight] = useState(1080);
   const [backgroundType, setBackgroundType] = useState<'white' | 'transparent'>('white');
@@ -21,6 +21,8 @@ export const NewDocumentDialog: React.FC = () => {
   if (!isNewDocumentDialogOpen) return null;
 
   const handleCreate = () => {
+    setCurrentProjectId(null);
+    setHistory([], 0);
     setDocumentSize({ w: width, h: height });
 
     if (backgroundType === 'white') {

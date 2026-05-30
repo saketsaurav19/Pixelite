@@ -20,7 +20,9 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     documentSize,
     setDocumentSize,
     recordHistory,
-    setIsMobileMenuOpen
+    setIsMobileMenuOpen,
+    setCurrentProjectId,
+    setHistory
   } = useStore();
 
   // Track which submenu is open by name (null = all closed)
@@ -49,6 +51,11 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       } else if (result.type === 'image' && result.dataUrl) {
         const isDefaultBackground =
           layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
+        if (!isPlace) {
+          setCurrentProjectId(null);
+          setHistory([], 0);
+        }
+
         if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
           setDocumentSize({ w: result.width, h: result.height });
           setLayers([{

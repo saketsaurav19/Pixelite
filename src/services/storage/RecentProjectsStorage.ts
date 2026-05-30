@@ -1,5 +1,5 @@
 import localforage from 'localforage';
-import type { EditorState } from '../../store/types';
+import type { EditorState, HistoryEntry } from '../../store/types';
 
 export interface RecentProject {
   id: string;
@@ -8,6 +8,8 @@ export interface RecentProject {
   thumbnailDataUrl: string;
   documentSize: { w: number; h: number };
   stateSnapshot: Partial<EditorState>;
+  history?: HistoryEntry[];
+  historyIndex?: number;
 }
 
 // Initialize localforage instance
@@ -40,19 +42,19 @@ async function checkStorageQuota(): Promise<boolean> {
 }
 
 export const RecentProjectsStorage = {
-  async saveProjectState(state: EditorState, thumbnailDataUrl: string): Promise<void> {
+  async saveProjectState(state: EditorState, thumbnailDataUrl: string, projectId: string | null = null, history: HistoryEntry[] = [], historyIndex: number = 0): Promise<string | null> {
     // 1. Validate - skip if empty
-    if (!state.layers || state.layers.length === 0) return;
+    if (!state.layers || state.layers.length === 0) return null;
     const isBlankBackground = state.layers.length === 1 &&
                               state.layers[0].name === 'Background' &&
                               state.layers[0].type === 'paint' &&
                               !state.layers[0].dataUrl;
-    if (isBlankBackground) return;
+    if (isBlankBackground) return null;
 
     // 2. Generate a name
     const topLayer = state.layers.find(l => l.type === 'image' && l.name !== 'Background');
     const name = topLayer ? topLayer.name : `Project ${new Date().toLocaleDateString()}`;
-    const id = `project_${Date.now()}`;
+    const id = projectId || `project_${Date.now()}`;
 
     // 3. Prepare the snapshot data to save
     const snapshot: Partial<EditorState> = {
@@ -67,7 +69,9 @@ export const RecentProjectsStorage = {
       timestamp: Date.now(),
       thumbnailDataUrl,
       documentSize: state.documentSize,
-      stateSnapshot: snapshot
+      stateSnapshot: snapshot,
+      history,
+      historyIndex
     };
 
     try {
@@ -89,8 +93,10 @@ export const RecentProjectsStorage = {
 
       // 5. Save the new project
       await storage.setItem(id, newProject);
+      return id;
     } catch (e) {
       console.error('Failed to save recent project state to indexedDB:', e);
+      return null;
     }
   },
 
