@@ -15,6 +15,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     setIsOpenRecentDialogOpen,
     setIsExportDialogOpen,
     setIsFileInfoDialogOpen,
+    setIsCameraDialogOpen,
     layers,
     setLayers,
     documentSize,
@@ -132,7 +133,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
-        accept="image/*,.psd"
+        accept="image/*,.psd,.heic,.heif"
         onChange={(e) => handleOpen(e, fileInputRef.current?.dataset.isPlace === 'true')}
         onClick={(e) => e.stopPropagation()}
       />
@@ -183,7 +184,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
             Open Recent
           </div>
           <div className="menu-item disabled">Open from Cloud</div>
-          <div className="menu-item disabled">Recover Autosave</div>
+          <div className="menu-item" onClick={(e) => { e.stopPropagation(); setIsCameraDialogOpen(true); closeMenus(); }}>Take Picture</div>
         </div>
       </div>
 

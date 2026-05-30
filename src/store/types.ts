@@ -130,6 +130,7 @@ export type Tool =
    isKeyboardShortcutsDialogOpen: boolean; 
    isSystemInfoDialogOpen: boolean; 
    isMobileMenuOpen: boolean; 
+  isCameraDialogOpen: boolean;
    showRulers: boolean; 
    setShowRulers: (show: boolean) => void; 
    rulerUnit: 'px' | 'in' | 'cm'; 
