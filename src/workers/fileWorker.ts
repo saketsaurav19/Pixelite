@@ -9,8 +9,22 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     const { type, id } = e.data;
 
     switch (type) {
-      case 'PARSE_PSD': {
-        const psd = readPsd(e.data.buffer);
+            case 'PARSE_PSD': {
+        const psd = readPsd(e.data.buffer, { skipLayerImageData: false, skipCompositeImageData: true, skipThumbnail: true });
+
+        // Convert any canvas objects to ImageData because HTMLCanvasElement cannot be sent via postMessage
+        if (psd.children) {
+           for (const layer of psd.children as any[]) {
+               if (layer.canvas) {
+                   const ctx = layer.canvas.getContext('2d');
+                   if (ctx) {
+                       layer.imageData = ctx.getImageData(0, 0, layer.canvas.width, layer.canvas.height);
+                   }
+                   delete layer.canvas;
+               }
+           }
+        }
+
         self.postMessage({ type: 'PSD_PARSED', id, psd, success: true });
         break;
       }
