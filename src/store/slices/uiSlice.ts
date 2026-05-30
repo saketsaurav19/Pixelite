@@ -64,7 +64,6 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   exportFormat: 'image/png',
   isNewDocumentDialogOpen: false,
   isExportDialogOpen: false,
-  exportFormat: 'image/png',
   isFileInfoDialogOpen: false,
   isOpenRecentDialogOpen: false,
   isOpenFromCloudDialogOpen: false,
