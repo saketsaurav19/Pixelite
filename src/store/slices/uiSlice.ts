@@ -9,6 +9,7 @@ export interface UISlice {
   isExportDialogOpen: boolean;
   isFileInfoDialogOpen: boolean;
   isOpenRecentDialogOpen: boolean;
+  isOpenFromCloudDialogOpen: boolean;
   isHelpDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
@@ -38,6 +39,7 @@ export interface UISlice {
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
   setIsOpenRecentDialogOpen: (isOpen: boolean) => void;
+  setIsOpenFromCloudDialogOpen: (isOpen: boolean) => void;
   setIsHelpDialogOpen: (isOpen: boolean) => void;
   setIsAboutDialogOpen: (isOpen: boolean) => void;
   setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
@@ -57,6 +59,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
   isOpenRecentDialogOpen: false,
+  isOpenFromCloudDialogOpen: false,
   isHelpDialogOpen: false,
   isAboutDialogOpen: false,
   isKeyboardShortcutsDialogOpen: false,
@@ -86,6 +89,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
   setIsOpenRecentDialogOpen: (isOpen) => set({ isOpenRecentDialogOpen: isOpen }),
+  setIsOpenFromCloudDialogOpen: (isOpen) => set({ isOpenFromCloudDialogOpen: isOpen }),
   setIsHelpDialogOpen: (isOpen) => set({ isHelpDialogOpen: isOpen }),
   setIsAboutDialogOpen: (isOpen) => set({ isAboutDialogOpen: isOpen }),
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
