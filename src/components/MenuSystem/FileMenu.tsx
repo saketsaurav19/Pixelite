@@ -13,6 +13,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
   const {
     setIsNewDocumentDialogOpen,
     setIsOpenRecentDialogOpen,
+    setIsOpenFromCloudDialogOpen,
     setIsExportDialogOpen,
     setIsFileInfoDialogOpen,
     setIsCameraDialogOpen,
@@ -21,7 +22,9 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     documentSize,
     setDocumentSize,
     recordHistory,
-    setIsMobileMenuOpen
+    setIsMobileMenuOpen,
+    setCurrentProjectId,
+    setHistory
   } = useStore();
 
   // Track which submenu is open by name (null = all closed)
@@ -50,6 +53,11 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       } else if (result.type === 'image' && result.dataUrl) {
         const isDefaultBackground =
           layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
+        if (!isPlace) {
+          setCurrentProjectId(null);
+          setHistory([], 0);
+        }
+
         if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
           setDocumentSize({ w: result.width, h: result.height });
           setLayers([{
@@ -104,12 +112,39 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     try {
       const buffer = await workerExportBridge.generatePSD(layers, documentSize.w, documentSize.h);
       const blob = new Blob([buffer as unknown as BlobPart], { type: 'application/x-photoshop' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'project.psd';
-      a.click();
-      URL.revokeObjectURL(url);
+
+      if ('showSaveFilePicker' in window) {
+        try {
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: 'project.psd',
+            types: [{
+              description: 'Photoshop Document',
+              accept: { 'application/x-photoshop': ['.psd'] },
+            }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (err: any) {
+          if (err.name !== 'AbortError') {
+            console.error(err);
+            alert('Failed to save PSD');
+          }
+        }
+      } else {
+        let fileName = prompt('Enter file name:', 'project.psd');
+        if (fileName) {
+          if (!fileName.toLowerCase().endsWith('.psd')) {
+            fileName += '.psd';
+          }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      }
     } catch (e) {
       console.error(e);
       alert('Failed to generate PSD');
@@ -183,8 +218,17 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
           >
             Open Recent
           </div>
-          <div className="menu-item disabled">Open from Cloud</div>
           <div className="menu-item" onClick={(e) => { e.stopPropagation(); setIsCameraDialogOpen(true); closeMenus(); }}>Take Picture</div>
+          <div
+            className="menu-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpenFromCloudDialogOpen(true);
+              closeMenus();
+            }}
+          >
+            Open from Cloud
+          </div>
         </div>
       </div>
 
