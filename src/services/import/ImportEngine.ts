@@ -145,14 +145,21 @@ export class ImportEngine {
             if (viewport.width > maxWidth) maxWidth = viewport.width;
             if (viewport.height > maxHeight) maxHeight = viewport.height;
 
-            // Wait to properly render it to canvas or svg
-            // SVG approach:
-            const opList = await page.getOperatorList();
-            const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
-            const svgElement = await svgGfx.getSVG(opList, viewport);
+            // Render to canvas instead of SVG to support embedded bitmaps
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
 
-            const svgString = new XMLSerializer().serializeToString(svgElement as any);
-            const dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgString)));
+            if (ctx) {
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                await page.render(renderContext).promise;
+            }
+
+            const dataUrl = canvas.toDataURL('image/png');
 
             frames.push({
                 name: `Page ${i}`,
