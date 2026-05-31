@@ -84,6 +84,9 @@ export interface DocumentSpecificState {
   isLightingEnabled: boolean;
   lightingQuality: 'low' | 'medium' | 'high';
   lightingDepthScale: number;
+  ambientIntensity: number;
+  ambientColor: string;
+  showLightSource: boolean;
   workflow: {
     step: 'image' | 'depth' | 'simulation' | 'refinement' | 'output';
     status: Record<'image' | 'depth' | 'simulation' | 'refinement' | 'output', 'pending' | 'completed' | 'error' | 'loading'>;

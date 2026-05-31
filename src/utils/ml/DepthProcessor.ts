@@ -154,7 +154,7 @@ export class DepthProcessor {
       // Draw 256x256 depth map onto full-size canvas
       // We first draw it at 0,0 to fill the background and avoid black gaps on the edges
       upscaleCtx.drawImage(tempCanvas, 0, 0, originalWidth, originalHeight);
-      
+
       // Then apply the 10px right shift for perfect subject alignment as requested
       // This ensures the "color appearance" artifact on the left corner is filled
       upscaleCtx.drawImage(tempCanvas, 10, 0, originalWidth, originalHeight);

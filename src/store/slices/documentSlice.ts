@@ -76,6 +76,10 @@ const extractDocumentState = (state: EditorState): DocumentSpecificState => ({
   lights: state.lights,
   isLightingEnabled: state.isLightingEnabled,
   lightingQuality: state.lightingQuality,
+  lightingDepthScale: state.lightingDepthScale,
+  ambientIntensity: state.ambientIntensity,
+  ambientColor: state.ambientColor,
+  showLightSource: state.showLightSource,
   workflow: state.workflow,
 });
 
@@ -119,6 +123,10 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
     lights: [],
     isLightingEnabled: false,
     lightingQuality: 'medium',
+    lightingDepthScale: 200,
+    ambientIntensity: 0.1,
+    ambientColor: '#ffffff',
+    showLightSource: true,
     workflow: {
       step: 'image',
       status: {

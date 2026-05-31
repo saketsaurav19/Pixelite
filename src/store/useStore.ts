@@ -58,6 +58,9 @@ const initialState = {
         isLightingEnabled: false,
         lightingQuality: 'medium' as const,
         lightingDepthScale: 200,
+        ambientIntensity: 0.1,
+        ambientColor: '#ffffff',
+        showLightSource: true,
         workflow: {
           step: 'image' as const,
           status: {
@@ -97,6 +100,9 @@ const initialState = {
   isLightingEnabled: false,
   lightingQuality: 'medium' as const,
   lightingDepthScale: 200,
+  ambientIntensity: 0.1,
+  ambientColor: '#ffffff',
+  showLightSource: true,
   workflow: {
     step: 'image' as const,
     status: {
