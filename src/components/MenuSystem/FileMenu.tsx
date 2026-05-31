@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { ImportEngine } from '../../services/import/ImportEngine';
+import { useFileImporter } from '../../hooks/useFileImporter';
 import { workerExportBridge } from '../../services/export/WorkerExportBridge';
 import './MenuSystem.css';
 interface MenuProps {
@@ -17,13 +17,8 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     setIsFileInfoDialogOpen,
     setIsCameraDialogOpen,
     layers,
-    setLayers,
     documentSize,
-    setDocumentSize,
-    recordHistory,
-    setIsMobileMenuOpen,
-    setCurrentProjectId,
-    setHistory
+    setIsMobileMenuOpen
   } = useStore();
   // Track which submenu is open by name (null = all closed)
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
@@ -34,6 +29,8 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     onClose();
     setIsMobileMenuOpen(false);
   };
+    const { handleFileImport } = useFileImporter();
+
   const handleOpen = async (e: React.ChangeEvent<HTMLInputElement>, isPlace: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) {
@@ -41,97 +38,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
       return;
     }
     try {
-      const result = await ImportEngine.importFile(file);
-
-            if (result.type === 'psd') {
-        const psdData = await workerExportBridge.parsePSD(result.psdData);
-
-        if (!isPlace) {
-          setCurrentProjectId(null);
-          setHistory([], 0);
-          setDocumentSize({ w: psdData.width, h: psdData.height });
-        }
-
-        const newLayers: any[] = [];
-
-        const processPsdLayer = (child: any) => {
-          if (child.children) {
-             child.children.forEach(processPsdLayer);
-          } else if (child.dataUrl) {
-            newLayers.push({
-              id: Math.random().toString(36).substring(7),
-              name: child.name || "Layer",
-              type: "image",
-              dataUrl: child.dataUrl,
-              position: {
-                x: child.left || 0,
-                y: child.top || 0
-              },
-              visible: child.hidden !== true,
-              locked: false,
-              opacity: typeof child.opacity === "number" ? child.opacity : 1,
-              blendMode: child.blendMode === "pass through" || !child.blendMode ? "source-over" : child.blendMode
-            });
-          }
-        };
-
-        if (psdData.children) {
-          psdData.children.forEach(processPsdLayer);
-        }
-
-        if (!isPlace) {
-          setLayers(newLayers.reverse());
-        } else {
-          setLayers([...layers, ...newLayers.reverse()]);
-        }
-        recordHistory(isPlace ? `Place PSD ${file.name}` : `Open PSD ${file.name}`);
-      } else if (result.type === 'image' && result.dataUrl) {
-        const isDefaultBackground =
-          layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
-        if (!isPlace) {
-          setCurrentProjectId(null);
-          setHistory([], 0);
-          if (result.exifData) {
-            (useStore.getState() as any).setExifData(result.exifData);
-          }
-          if (result.iccProfile) {
-            (useStore.getState() as any).setIccProfile(result.iccProfile);
-          }
-        }
-        if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
-          setDocumentSize({ w: result.width, h: result.height });
-          setLayers([{
-            id: Math.random().toString(36).substring(7),
-            name: result.name,
-            type: 'image',
-            dataUrl: result.dataUrl,
-            position: { x: 0, y: 0 },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'source-over'
-          }]);
-        } else {
-          setLayers([...layers, {
-            id: Math.random().toString(36).substring(7),
-            name: result.name,
-            type: 'image',
-            dataUrl: result.dataUrl,
-            position: {
-              x: (documentSize.w - result.width) / 2,
-              y: (documentSize.h - result.height) / 2
-            },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'source-over'
-          }]);
-        }
-        recordHistory(isPlace ? `Place ${result.name}` : `Open ${result.name}`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Failed to open file.');
+      await handleFileImport(file, isPlace);
     } finally {
       closeMenus();
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -229,6 +136,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
         type="file"
         ref={fileInputRef}
         style={{ display: 'none' }}
+        accept="image/*,image/svg+xml,application/pdf,.psd"
         onChange={(e) => handleOpen(e, fileInputRef.current?.dataset.isPlace === 'true')}
         onClick={(e) => e.stopPropagation()}
       />
