@@ -131,25 +131,44 @@ export class ImportEngine {
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdf = await loadingTask.promise;
 
-    // Convert first page to SVG
-    // You requested original vector, so we use SVGGraphics
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 1 });
+    const numPages = pdf.numPages;
+    const frames: { dataUrl: string; name: string }[] = [];
 
-    const opList = await page.getOperatorList();
-    const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
-    const svgElement = await svgGfx.getSVG(opList, viewport);
+    let maxWidth = 0;
+    let maxHeight = 0;
 
-    // Create SVG Data URL
-    const svgString = new XMLSerializer().serializeToString(svgElement as any);
-    const dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgString)));
+    for (let i = 1; i <= numPages; i++) {
+        try {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 1 });
+
+            if (viewport.width > maxWidth) maxWidth = viewport.width;
+            if (viewport.height > maxHeight) maxHeight = viewport.height;
+
+            // Wait to properly render it to canvas or svg
+            // SVG approach:
+            const opList = await page.getOperatorList();
+            const svgGfx = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+            const svgElement = await svgGfx.getSVG(opList, viewport);
+
+            const svgString = new XMLSerializer().serializeToString(svgElement as any);
+            const dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgString)));
+
+            frames.push({
+                name: `Page ${i}`,
+                dataUrl
+            });
+        } catch (e) {
+            console.error(`Failed to render PDF page ${i}`, e);
+        }
+    }
 
     return {
       name: file.name,
       type: 'pdf',
-      dataUrl,
-      width: viewport.width,
-      height: viewport.height
+      frames,
+      width: maxWidth,
+      height: maxHeight
     };
   }
 

@@ -1,3 +1,4 @@
+import { findLayerById } from './utils/layerUtils';
 import { Application } from "./scripting/Application";
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
@@ -25,6 +26,67 @@ import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 
 const App: React.FC = () => {
+// RECURSIVE LAYER COMPONENT
+const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
+  return layerList.map((layer) => (
+    <div key={layer.id} style={{ marginLeft: depth * 12 + 'px' }}>
+      <div
+        className={`layer-node ${draggedIndex === layer.id ? 'dragging' : ''}`}
+        draggable={true}
+        onDragStart={(e) => {
+           e.stopPropagation();
+           setDraggedIndex(layer.id);
+        }}
+        onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (draggedIndex && draggedIndex !== layer.id) {
+            // Very simple target logic for now: insert before
+            useStore.getState().reorderNodesAction?.(draggedIndex, layer.id, 'before');
+            recordHistory('Reorder Layers');
+          }
+          setDraggedIndex(null);
+        }}
+        onDragEnd={() => setDraggedIndex(null)}
+      >
+        <div className={`layer-row ${activeLayerId === layer.id ? 'active' : ''}`} onClick={(e) => {
+            e.stopPropagation();
+            setActiveLayer(layer.id);
+        }}>
+          {layer.type === 'group' && (
+             <div className="layer-collapse" onClick={(e) => {
+                 e.stopPropagation();
+                 updateLayer(layer.id, { collapsed: !layer.collapsed });
+             }}>
+                {layer.collapsed ? <LucideIcons.ChevronRight size={12} /> : <LucideIcons.ChevronDown size={12} />}
+             </div>
+          )}
+          <div className="layer-eye" onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}>
+            {layer.visible ? <LucideIcons.Eye size={12} /> : <LucideIcons.EyeOff size={12} />}
+          </div>
+          <div className="layer-thumb">
+            {layer.thumbnail ? <img src={layer.thumbnail} alt="" /> : (layer.type === 'group' ? <LucideIcons.Folder size={16} /> : null)}
+          </div>
+          <span className="layer-title">{layer.name}</span>
+          <div className="layer-order-btns">
+            <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); recordHistory('Move Layer Up'); }} title="Move Up"><LucideIcons.ChevronUp size={12} /></button>
+            <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); recordHistory('Move Layer Down'); }} title="Move Down"><LucideIcons.ChevronDown size={12} /></button>
+          </div>
+        </div>
+      </div>
+      {layer.type === 'group' && !layer.collapsed && layer.children && (
+        <div className="layer-children">
+          {renderLayerTree(layer.children, depth + 1)}
+        </div>
+      )}
+    </div>
+  ));
+};
+
   React.useEffect(() => {
     (window as any).app = new Application();
   }, []);
@@ -52,7 +114,7 @@ const App: React.FC = () => {
     setCropRect,
     setLassoPaths,
     moveLayer,
-    reorderLayers,
+
     setIsTyping,
     isMobileMenuOpen,
     setIsMobileMenuOpen,
@@ -465,7 +527,7 @@ const App: React.FC = () => {
             
             {/* Global Layer Properties - Only visible if a layer is active */}
             {activeLayerId && (() => {
-              const activeLayer = layers.find(l => l.id === activeLayerId);
+              const activeLayer = findLayerById(layers, activeLayerId);
               if (!activeLayer) return null;
               return (
                 <div className="layer-global-properties">
@@ -533,38 +595,16 @@ const App: React.FC = () => {
               );
             })()}
 
-            <div className="panel-content">
-              {layers.map((layer, idx) => (
-                <div
-                  key={layer.id}
-                  className={`layer-node ${draggedIndex === idx ? 'dragging' : ''}`}
-                  draggable={true}
-                  onDragStart={() => setDraggedIndex(idx)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (draggedIndex !== null && draggedIndex !== idx) {
-                      reorderLayers(draggedIndex, idx);
-                      recordHistory('Reorder Layers');
-                    }
-                    setDraggedIndex(null);
-                  }}
-                  onDragEnd={() => setDraggedIndex(null)}
-                >
-                  <div className={`layer-row ${activeLayerId === layer.id ? 'active' : ''}`} onClick={() => setActiveLayer(layer.id)}>
-                    <div className="layer-eye" onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}>
-                      {layer.visible ? <LucideIcons.Eye size={12} /> : <LucideIcons.EyeOff size={12} />}
-                    </div>
-                    <div className="layer-thumb">
-                      {layer.thumbnail && <img src={layer.thumbnail} alt="" />}
-                    </div>
-                    <span className="layer-title">{layer.name}</span>
-                    <div className="layer-order-btns">
-                      <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); recordHistory('Move Layer Up'); }} title="Move Up"><LucideIcons.ChevronUp size={12} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); recordHistory('Move Layer Down'); }} title="Move Down"><LucideIcons.ChevronDown size={12} /></button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="panel-content" onDrop={(e) => {
+              e.preventDefault();
+              if (draggedIndex && layers.length > 0) {
+                 // Drop on empty space in panel -> move to root bottom
+                 useStore.getState().reorderNodesAction?.(draggedIndex, layers[layers.length - 1].id, 'after');
+                 recordHistory('Reorder Layers');
+              }
+              setDraggedIndex(null);
+            }} onDragOver={(e) => e.preventDefault()}>
+              {renderLayerTree(layers)}
             </div>
             <div className="panel-footer">
               <button onClick={() => addLayer({ name: `Layer ${layers.length + 1}` })}><LucideIcons.Plus size={14} /></button>

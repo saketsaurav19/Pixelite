@@ -686,7 +686,7 @@ const Canvas: React.FC = () => {
             key={layer.id}
             layer={layer}
             documentSize={documentSize}
-            canvasRef={(el) => { canvasRefs.current[layer.id] = el; }}
+            canvasRefs={canvasRefs}
             layersCount={layers.length}
             layerIndex={index}
           />

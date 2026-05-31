@@ -88,7 +88,48 @@ export const useFileImporter = () => {
           setLayers([...layers, ...newLayers.reverse()]);
         }
         recordHistory(isPlace ? `Place GIF ${result.name}` : `Open GIF ${result.name}`);
-      } else if ((result.type === 'image' || result.type === 'pdf') && result.dataUrl) {
+      } else if (result.type === 'pdf' && result.frames) {
+        if (!isPlace) {
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          setDocumentSize({ w: result.width, h: result.height });
+        }
+
+        const childLayers: Layer[] = result.frames.map((frame, index) => ({
+          id: Math.random().toString(36).substring(7),
+          name: frame.name || `Page ${index + 1}`,
+          type: 'image',
+          dataUrl: frame.dataUrl,
+          position: { x: 0, y: 0 },
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'source-over'
+        }));
+
+        const pdfGroup: Layer = {
+          id: Math.random().toString(36).substring(7),
+          name: 'PDF Pages',
+          type: 'group',
+          children: childLayers.reverse(), // stack pages bottom to top
+          collapsed: false,
+          position: isPlace ? {
+            x: (documentSize.w - result.width) / 2,
+            y: (documentSize.h - result.height) / 2
+          } : { x: 0, y: 0 },
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'pass through'
+        };
+
+        if (!isPlace) {
+          setLayers([pdfGroup]);
+        } else {
+          setLayers([pdfGroup, ...layers]);
+        }
+        recordHistory(isPlace ? `Place PDF ${result.name}` : `Open PDF ${result.name}`);
+      } else if (result.type === 'image' && result.dataUrl) {
         const isDefaultBackground =
           layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
         if (!isPlace) {
