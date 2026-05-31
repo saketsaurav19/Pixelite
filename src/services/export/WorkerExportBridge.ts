@@ -90,7 +90,7 @@ export class WorkerExportBridge {
 
     const id = Math.random().toString(36).substring(7);
 
-    return new Promise((resolve, reject) => {
+    const parsedPsd = await new Promise<any>((resolve, reject) => {
       this.messageCallbacks.set(id, {
         resolve: (res) => {
           // Convert blobs to Object URLs in the main thread
