@@ -11,7 +11,7 @@ import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
-import { workerExportBridge } from './services/export/WorkerExportBridge';
+import { useFileImporter } from './hooks/useFileImporter';
 import { MenuBar } from './components/MenuSystem/MenuBar';
 import { OpenRecentDialog } from './components/Dialogs/OpenRecentDialog';
 import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
@@ -20,7 +20,6 @@ import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
 import { CameraDialog } from "./components/Dialogs/CameraDialog";
 import { MobileCameraDialog } from "./components/Dialogs/MobileCameraDialog";
-import { ImportEngine } from './services/import/ImportEngine';
 import { removeBackground } from '@imgly/background-removal';
 import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
@@ -182,6 +181,7 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
     setIsMobileMenuOpen,
     setActiveMobileSubmenu
   } = useStore();
+  const { handleFileImport } = useFileImporter();
 
 
 
@@ -393,95 +393,12 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
     if (!file) return;
 
     try {
-      const result = await ImportEngine.importFile(file);
-      const currentState = useStore.getState();
-
-      if (result.type === 'psd') {
-
-        const psdData = await workerExportBridge.parsePSD(result.psdData);
-        currentState.setCurrentProjectId(null);
-        currentState.setHistory([], 0);
-        currentState.setDocumentSize({ w: psdData.width, h: psdData.height });
-
-        const newLayers: any[] = [];
-        const processPsdLayer = (child: any) => {
-          if (child.children) {
-            child.children.forEach(processPsdLayer);
-          } else if (child.dataUrl) {
-            newLayers.push({
-              id: Math.random().toString(36).substring(7),
-              name: child.name || "Layer",
-              type: "image",
-              dataUrl: child.dataUrl,
-              position: {
-                x: child.left || 0,
-                y: child.top || 0
-              },
-              visible: child.hidden !== true,
-              locked: false,
-              opacity: typeof child.opacity === "number" ? child.opacity : 1,
-              blendMode: child.blendMode === "pass through" || !child.blendMode ? "source-over" : child.blendMode
-            });
-          }
-        };
-
-        if (psdData.children) {
-          psdData.children.forEach(processPsdLayer);
-        }
-
-        currentState.setLayers(newLayers.reverse());
-        currentState.recordHistory(`Open PSD ${file.name}`);
-      } else if (result.type === 'image' && result.dataUrl) {
-        const isDefaultBackground =
-          currentState.layers.length === 1 &&
-          currentState.layers[0].name === 'Background' &&
-          currentState.layers[0].type === 'paint';
-
-        currentState.setCurrentProjectId(null);
-        currentState.setHistory([], 0);
-
-        if (result.exifData) {
-          (currentState as any).setExifData(result.exifData);
-        }
-        if (result.iccProfile) {
-          (currentState as any).setIccProfile(result.iccProfile);
-        }
-
-        if (currentState.layers.length === 0 || isDefaultBackground) {
-          currentState.setDocumentSize({ w: result.width, h: result.height });
-          currentState.setLayers([{
-            id: Math.random().toString(36).substring(7),
-            name: result.name,
-            type: 'image',
-            dataUrl: result.dataUrl,
-            position: { x: 0, y: 0 },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'source-over'
-          }]);
-        } else {
-          currentState.setLayers([...currentState.layers, {
-            id: Math.random().toString(36).substring(7),
-            name: result.name,
-            type: 'image',
-            dataUrl: result.dataUrl,
-            position: {
-              x: (currentState.documentSize.w - result.width) / 2,
-              y: (currentState.documentSize.h - result.height) / 2
-            },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'source-over'
-          }]);
-        }
-        currentState.recordHistory(`Open ${result.name}`);
-      }
+      await handleFileImport(file, false);
     } catch (err) {
       console.error(err);
       addAlert({ type: 'error', message: 'Failed to open image.' });
     } finally {
+      // Clear the input value so the same file can be selected again
       e.target.value = '';
     }
   };
@@ -508,136 +425,7 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
       if (!file) return;
 
       try {
-        const result = await ImportEngine.importFile(file);
-        const currentState = useStore.getState();
-
-        if (result.type === 'psd') {
-          const psdData = await workerExportBridge.parsePSD(result.psdData);
-          currentState.setCurrentProjectId(null);
-          currentState.setHistory([], 0);
-          currentState.setDocumentSize({ w: psdData.width, h: psdData.height });
-
-          const newLayers = [];
-          const processPsdLayer = (child) => {
-            if (child.children) {
-              child.children.forEach(processPsdLayer);
-            } else if (child.dataUrl) {
-              newLayers.push({
-                id: Math.random().toString(36).substring(7),
-                name: child.name || "Layer",
-                type: "image",
-                dataUrl: child.dataUrl,
-                position: {
-                  x: child.left || 0,
-                  y: child.top || 0
-                },
-                visible: child.hidden !== true,
-                locked: false,
-                opacity: typeof child.opacity === "number" ? child.opacity / 255 : 1,
-                blendMode: child.blendMode === "pass through" || !child.blendMode ? "source-over" : child.blendMode
-              });
-            }
-          };
-
-          if (psdData.children) {
-            psdData.children.forEach(processPsdLayer);
-          }
-          currentState.setLayers(newLayers.reverse());
-          currentState.recordHistory(`Open PSD ${file.name}`);
-        } else if (result.type === 'gif' && result.frames) {
-          currentState.setCurrentProjectId(null);
-          currentState.setHistory([], 0);
-          currentState.setDocumentSize({ w: result.width, h: result.height });
-
-          const newLayers = result.frames.map((frame, index) => ({
-            id: Math.random().toString(36).substring(7),
-            name: frame.name || `Frame ${index + 1}`,
-            type: 'image',
-            dataUrl: frame.dataUrl,
-            position: { x: 0, y: 0 },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'source-over'
-          }));
-
-          currentState.setLayers(newLayers.reverse());
-          currentState.recordHistory(`Open GIF ${result.name}`);
-        } else if (result.type === 'pdf' && result.frames) {
-          currentState.setCurrentProjectId(null);
-          currentState.setHistory([], 0);
-          currentState.setDocumentSize({ w: result.width, h: result.height });
-
-          const childLayers = result.frames.map((frame, index) => ({
-            id: Math.random().toString(36).substring(7),
-            name: frame.name || `Page ${index + 1}`,
-            type: 'image',
-            dataUrl: frame.dataUrl,
-            position: { x: 0, y: 0 },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'source-over'
-          }));
-
-          const pdfGroup = {
-            id: Math.random().toString(36).substring(7),
-            name: 'PDF Pages',
-            type: 'group',
-            children: childLayers.reverse(),
-            collapsed: false,
-            position: { x: 0, y: 0 },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'pass through'
-          };
-
-          currentState.setLayers([pdfGroup]);
-          currentState.recordHistory(`Open PDF ${result.name}`);
-        } else if (result.type === 'image' && result.dataUrl) {
-          const isDefaultBackground = currentState.layers.length === 1 && currentState.layers[0].name === 'Background' && currentState.layers[0].type === 'paint';
-
-          currentState.setCurrentProjectId(null);
-          currentState.setHistory([], 0);
-          if (result.exifData) {
-            currentState.setExifData(result.exifData);
-          }
-          if (result.iccProfile) {
-            currentState.setIccProfile(result.iccProfile);
-          }
-
-          if (currentState.layers.length === 0 || isDefaultBackground) {
-            currentState.setDocumentSize({ w: result.width, h: result.height });
-            currentState.setLayers([{
-              id: Math.random().toString(36).substring(7),
-              name: result.name,
-              type: 'image',
-              dataUrl: result.dataUrl,
-              position: { x: 0, y: 0 },
-              visible: true,
-              locked: false,
-              opacity: 1,
-              blendMode: 'source-over'
-            }]);
-          } else {
-            currentState.setLayers([...currentState.layers, {
-              id: Math.random().toString(36).substring(7),
-              name: result.name,
-              type: 'image',
-              dataUrl: result.dataUrl,
-              position: {
-                x: (currentState.documentSize.w - result.width) / 2,
-                y: (currentState.documentSize.h - result.height) / 2
-              },
-              visible: true,
-              locked: false,
-              opacity: 1,
-              blendMode: 'source-over'
-            }]);
-          }
-          currentState.recordHistory(`Open ${result.name}`);
-        }
+        await handleFileImport(file, false);
       } catch (err) {
         console.error(err);
         addAlert({ type: 'error', message: 'Failed to open dragged image.' });
