@@ -24,7 +24,7 @@ export const copySelectionToClipboard = async (
         img.src = layer.dataUrl!;
       });
 
-      ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+      ctx.globalCompositeOperation = layer.blendMode === 'pass through' ? 'source-over' : (layer.blendMode || 'source-over') as GlobalCompositeOperation;
       ctx.globalAlpha = layer.opacity;
 
       if (layer.type === 'paint' || layer.type === 'image') {
