@@ -1598,3 +1598,24 @@ body {
   height: 100%;
   object-fit: cover;
 }
+
+/* Layer Context Menu and Inline Renaming */
+.layer-rename-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  outline: none;
+  width: 100%;
+  flex-grow: 1;
+}
+
+.layer-row.long-press-active {
+  background-color: var(--bg-tertiary);
+  opacity: 0.8;
+  transform: scale(0.98);
+  transition: all 0.1s ease;
+}
