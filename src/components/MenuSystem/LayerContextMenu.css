@@ -1,0 +1,37 @@
+.layer-context-menu {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px;
+  /* Prevent clicks from propagating to canvas or other elements */
+  pointer-events: auto;
+}
+
+.layer-context-menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.1s;
+}
+
+.layer-context-menu .menu-item:hover {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+.layer-context-menu .menu-item.text-danger:hover {
+  background-color: #d32f2f;
+}
