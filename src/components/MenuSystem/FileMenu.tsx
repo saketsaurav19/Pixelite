@@ -170,38 +170,23 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     closeMenus();
     try {
       const buffer = await workerExportBridge.generatePSD(layers, documentSize.w, documentSize.h);
-      const blob = new Blob([buffer as unknown as BlobPart], { type: 'application/x-photoshop' });
-      if ('showSaveFilePicker' in window) {
-        try {
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName: 'project.psd',
-            types: [{
-              description: 'Photoshop Document',
-              accept: { 'application/x-photoshop': ['.psd'] },
-            }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-        } catch (err: any) {
-          if (err.name !== 'AbortError') {
-            console.error(err);
-            alert('Failed to save PSD');
-          }
+      // Using application/octet-stream to prevent Android from coercing the file extension to .bin
+      const blob = new Blob([buffer as unknown as BlobPart], { type: 'application/octet-stream' });
+
+      let fileName = prompt('Enter file name:', 'project.psd');
+      if (fileName) {
+        if (!fileName.toLowerCase().endsWith('.psd')) {
+          fileName += '.psd';
         }
-      } else {
-        let fileName = prompt('Enter file name:', 'project.psd');
-        if (fileName) {
-          if (!fileName.toLowerCase().endsWith('.psd')) {
-            fileName += '.psd';
-          }
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = fileName;
-          a.click();
-          URL.revokeObjectURL(url);
-        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        // Append to body and click to ensure it works properly on mobile devices
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       }
     } catch (e) {
       console.error(e);
