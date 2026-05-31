@@ -1,5 +1,7 @@
 import heic2any from 'heic2any';
 import piexif from 'piexifjs';
+import exifr from 'exifr';
+import { mapExifrToPiexif } from './../../utils/exifUtils';
 export interface ImportResult {
   name: string;
   type: 'image' | 'psd';
@@ -19,16 +21,28 @@ export class ImportEngine {
    */
   static async importFile(file: File): Promise<ImportResult> {
     let fileToRead = file;
+    let heicExifData: any = null;
 
     if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
       try {
+        const parsed = await exifr.parse(file, {
+          translateKeys: false,
+          translateValues: false,
+          reviveValues: false,
+          mergeOutput: false,
+          tiff: true,
+          gps: true,
+          interop: true
+        });
+        heicExifData = mapExifrToPiexif(parsed);
+
         const convertedBlob = await heic2any({ blob: file, toType: 'image/jpeg' });
         // heic2any might return an array of blobs if it's an animation/sequence, we just take the first one
         const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
         fileToRead = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
       } catch (err) {
         console.error('Failed to convert HEIC to JPEG:', err);
-        throw new Error('Failed to parse HEIC file');
+        throw new Error('Failed to parse HEIC file', { cause: err });
       }
     }
 
@@ -54,7 +68,9 @@ export class ImportEngine {
         // Standard Image
         if (typeof result === 'string') {
           let exifData = null;
-          if (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
+          if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+             exifData = heicExifData;
+          } else if (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
             try {
                exifData = piexif.load(result);
             } catch (e) {
