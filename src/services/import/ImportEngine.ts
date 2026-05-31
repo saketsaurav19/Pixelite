@@ -7,6 +7,7 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
 
 // The workerSrc must be set to the PDF.js worker so it can operate
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.js`;
+(pdfjsLib.GlobalWorkerOptions as any).standardFontDataUrl = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`;
 
 import exifr from 'exifr';
 import { mapExifrToPiexif } from './../../utils/exifUtils';
