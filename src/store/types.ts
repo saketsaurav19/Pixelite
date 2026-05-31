@@ -15,33 +15,69 @@ export type Tool =
    | 'shape' | 'ellipse_shape' | 'triangle_shape' | 'polygon_shape' | 'line_shape' | 'custom_shape'  
    | 'hand' | 'rotate_view' | 'zoom_tool'; 
   
- export interface Layer { 
-   id: string; 
-   name: string; 
-   visible: boolean; 
-   locked: boolean; 
-   opacity: number; 
-   dataUrl?: string; 
-   type: 'image' | 'paint' | 'text' | 'shape'; 
-   position: { x: number; y: number }; 
-   blendMode: GlobalCompositeOperation; 
-   textContent?: string; 
-   fontSize?: number; 
-   color?: string; 
-   strokeColor?: string; 
-   strokeWidth?: number; 
-   isVertical?: boolean; 
-   shapeData?: { 
-     type: 'rect' | 'path' | 'ellipse'; 
-     w?: number; h?: number; 
-     points?: { x: number; y: number }[]; 
-     fill: string; stroke: string; strokeWidth: number; 
-     smooth?: boolean; 
-     closed?: boolean; 
-     cornerRadius?: number; 
-   }; 
-   thumbnail?: string; 
- } 
+
+export type BlendMode = GlobalCompositeOperation | 'pass through';
+
+export interface BaseLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  blendMode: BlendMode;
+  position?: { x: number; y: number }; // Top level position property to avoid widespread refactoring errors for now
+  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer';
+}
+
+export type LayerData = {
+  dataUrl?: string;
+  type: 'image' | 'paint' | 'text' | 'shape';
+  textContent?: string;
+  fontSize?: number;
+  color?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  isVertical?: boolean;
+  shapeData?: {
+    type: 'rect' | 'path' | 'ellipse';
+    w?: number; h?: number;
+    points?: { x: number; y: number }[];
+    fill: string; stroke: string; strokeWidth: number;
+    smooth?: boolean;
+    closed?: boolean;
+    cornerRadius?: number;
+  };
+  thumbnail?: string;
+};
+
+// We keep Layer as an interface mimicking the old one but with new properties to be backward-compatible while we migrate
+export type Layer = BaseLayer & {
+  type: 'image' | 'paint' | 'text' | 'shape' | 'group';
+  children?: Layer[];
+  collapsed?: boolean;
+
+  // LayerData fields directly on Layer for easier migration
+  dataUrl?: string;
+  textContent?: string;
+  fontSize?: number;
+  color?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  isVertical?: boolean;
+  shapeData?: {
+    type: 'rect' | 'path' | 'ellipse';
+    w?: number; h?: number;
+    points?: { x: number; y: number }[];
+    fill: string; stroke: string; strokeWidth: number;
+    smooth?: boolean;
+    closed?: boolean;
+    cornerRadius?: number;
+  };
+  thumbnail?: string;
+
+  position: { x: number; y: number };
+};
+
   
  export interface HistoryEntry { 
    name: string; 
