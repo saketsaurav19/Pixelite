@@ -27,13 +27,17 @@ export function findParentNode(layers: Layer[], id: string): Layer | null {
 }
 
 export function removeNode(layers: Layer[], id: string): Layer[] {
-  return layers.filter(layer => {
-    if (layer.id === id) return false;
-    if (layer.children) {
-      layer.children = removeNode(layer.children, id);
-    }
-    return true;
-  });
+  return layers
+    .filter(layer => layer.id !== id)
+    .map(layer => {
+      if (layer.children) {
+        return {
+          ...layer,
+          children: removeNode(layer.children, id)
+        };
+      }
+      return layer;
+    });
 }
 
 export function insertNode(layers: Layer[], node: Layer, parentId?: string | null): Layer[] {
@@ -116,9 +120,10 @@ export function moveNode(layers: Layer[], id: string, direction: 'up' | 'down'):
 }
 
 export function reorderNodes(layers: Layer[], draggedId: string, targetId: string, position: 'before' | 'after' | 'inside'): Layer[] {
-    let newLayers = removeNode(layers, draggedId);
     const draggedNode = findLayerById(layers, draggedId);
     if (!draggedNode) return layers;
+
+    let newLayers = removeNode(layers, draggedId);
 
     if (position === 'inside') {
         return insertNode(newLayers, draggedNode, targetId);
