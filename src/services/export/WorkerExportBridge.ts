@@ -35,7 +35,8 @@ export class WorkerExportBridge {
     const id = Math.random().toString(36).substring(7);
 
     // Rasterize layers into ImageData in the main thread to pass to the worker
-    const rasterizedChildren = await Promise.all(layers.map(async (layer) => {
+    const reversedLayers = [...layers].reverse();
+    const rasterizedChildren = await Promise.all(reversedLayers.map(async (layer) => {
       let imageData: ImageData;
 
       const canvas = document.createElement('canvas');
@@ -90,7 +91,7 @@ export class WorkerExportBridge {
 
     const id = Math.random().toString(36).substring(7);
 
-    return new Promise((resolve, reject) => {
+    const parsedPsd = await new Promise<any>((resolve, reject) => {
       this.messageCallbacks.set(id, {
         resolve: (res) => {
           // Convert blobs to Object URLs in the main thread
