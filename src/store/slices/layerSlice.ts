@@ -1,6 +1,8 @@
+
 import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { EditorState, Layer } from '../types';
+import { findLayerById, removeNode, insertNode, updateNode, flattenTree, moveNode, reorderNodes } from '../../utils/layerUtils';
 
 export interface LayerSlice {
   layers: Layer[];
@@ -13,7 +15,8 @@ export interface LayerSlice {
   duplicateLayer: (id: string) => void;
   toggleLayerVisibility: (id: string) => void;
   moveLayer: (id: string, direction: 'up' | 'down') => void;
-  reorderLayers: (startIndex: number, endIndex: number) => void;
+  reorderLayers: (startIndex: number, endIndex: number) => void; // Old array-based, consider deprecating
+  reorderNodesAction: (draggedId: string, targetId: string, position: 'before'|'after'|'inside') => void;
   setLayers: (layers: Layer[]) => void;
   mergeLayers: (ids: string[]) => void;
   flattenImage: () => void;
@@ -27,7 +30,7 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
   addLayer: (layer) => set((state) => {
     const newLayer: Layer = {
       id: nanoid(),
-      name: `Layer ${state.layers.length + 1}`,
+      name: `Layer ${flattenTree(state.layers).length + 1}`,
       visible: true,
       locked: false,
       opacity: 1,
@@ -35,73 +38,82 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       position: { x: 0, y: 0 },
       blendMode: 'source-over',
       ...layer,
-    };
+    } as Layer;
     return {
-      layers: [newLayer, ...state.layers],
+      layers: [newLayer, ...state.layers], // Adds to top level for now
       activeLayerId: newLayer.id,
     };
   }),
 
   removeLayer: (id) => set((state) => ({
-    layers: state.layers.filter((l) => l.id !== id),
+    layers: removeNode(state.layers, id),
     activeLayerId: state.activeLayerId === id ? (state.layers[0]?.id || null) : state.activeLayerId
   })),
 
   setActiveLayer: (id) => set({ activeLayerId: id }),
 
   updateLayer: (id, updates) => set((state) => ({
-    layers: state.layers.map((l) => (l.id === id ? { ...l, ...updates } : l)),
+    layers: updateNode(state.layers, id, updates)
   })),
 
   duplicateLayer: (id) => set((state) => {
-    const layerToDup = state.layers.find(l => l.id === id);
+    const layerToDup = findLayerById(state.layers, id);
     if (!layerToDup) return state;
     const newLayer: Layer = {
       ...layerToDup,
       id: nanoid(),
       name: `${layerToDup.name} Copy`,
-      position: { x: layerToDup.position.x + 20, y: layerToDup.position.y + 20 }
+      position: layerToDup.position ? { x: layerToDup.position.x + 20, y: layerToDup.position.y + 20 } : {x:0, y:0}
     };
     return {
-      layers: [newLayer, ...state.layers],
+      layers: insertNode(state.layers, newLayer), // Insert at top level for now
       activeLayerId: newLayer.id,
     };
   }),
 
-  toggleLayerVisibility: (id) => set((state) => ({
-    layers: state.layers.map((l) => 
-      l.id === id ? { ...l, visible: !l.visible } : l
-    ),
-  })),
-
-  moveLayer: (id, direction) => set((state) => {
-    const index = state.layers.findIndex(l => l.id === id);
-    if (index === -1) return state;
-    const newLayers = [...state.layers];
-    if (direction === 'up' && index > 0) {
-      [newLayers[index], newLayers[index - 1]] = [newLayers[index - 1], newLayers[index]];
-    } else if (direction === 'down' && index < newLayers.length - 1) {
-      [newLayers[index], newLayers[index + 1]] = [newLayers[index + 1], newLayers[index]];
-    }
-    return { layers: newLayers };
+  toggleLayerVisibility: (id) => set((state) => {
+    const layer = findLayerById(state.layers, id);
+    if (!layer) return state;
+    return {
+      layers: updateNode(state.layers, id, { visible: !layer.visible })
+    };
   }),
 
+  moveLayer: (id, direction) => set((state) => ({
+    layers: moveNode(state.layers, id, direction)
+  })),
+
   reorderLayers: (startIndex, endIndex) => set((state) => {
+    // Keep backward compat for now, assumes flat list
     const next = [...state.layers];
-    const [removed] = next.splice(startIndex, 1);
-    next.splice(endIndex, 0, removed);
+    if (startIndex >= 0 && startIndex < next.length && endIndex >= 0 && endIndex <= next.length) {
+      const [removed] = next.splice(startIndex, 1);
+      next.splice(endIndex, 0, removed);
+    }
     return { layers: next };
   }),
 
+  reorderNodesAction: (draggedId, targetId, position) => set((state) => ({
+    layers: reorderNodes(state.layers, draggedId, targetId, position)
+  })),
+
   setLayers: (layers) => set({ layers }),
+
   mergeLayers: (ids) => set((state) => {
-    const remainingLayers = state.layers.filter(l => !ids.slice(1).includes(l.id));
-    return { layers: remainingLayers, activeLayerId: ids[0] };
+    let newLayers = state.layers;
+    const layerToKeep = ids[0];
+    for (let i = 1; i < ids.length; i++) {
+        newLayers = removeNode(newLayers, ids[i]);
+    }
+    return { layers: newLayers, activeLayerId: layerToKeep };
   }),
+
   flattenImage: () => set((state) => {
     if (state.layers.length === 0) return state;
+    const allLayers = flattenTree(state.layers);
+    const bottomLayer = allLayers[allLayers.length - 1] || state.layers[0];
     const backgroundLayer: Layer = {
-      ...state.layers[state.layers.length - 1],
+      ...bottomLayer,
       id: nanoid(),
       name: 'Background',
       locked: true,
@@ -109,7 +121,8 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     };
     return { layers: [backgroundLayer], activeLayerId: backgroundLayer.id };
   }),
+
   rasterizeLayer: (id) => set((state) => ({
-    layers: state.layers.map(l => l.id === id ? { ...l, type: 'paint' } : l)
+    layers: updateNode(state.layers, id, { type: 'paint' })
   })),
 });
