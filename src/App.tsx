@@ -1,3 +1,4 @@
+import { Application } from "./scripting/Application";
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from './store/useStore';
@@ -24,6 +25,9 @@ import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 
 const App: React.FC = () => {
+  React.useEffect(() => {
+    (window as any).app = new Application();
+  }, []);
 
   const addAlert = useStore(state => state.addAlert);
   const {
@@ -291,7 +295,7 @@ const App: React.FC = () => {
               },
               visible: child.hidden !== true,
               locked: false,
-              opacity: typeof child.opacity === "number" ? child.opacity / 255 : 1,
+              opacity: typeof child.opacity === "number" ? child.opacity : 1,
               blendMode: child.blendMode === "pass through" || !child.blendMode ? "source-over" : child.blendMode
             });
           }
