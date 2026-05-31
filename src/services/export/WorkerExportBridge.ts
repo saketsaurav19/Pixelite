@@ -49,7 +49,8 @@ export class WorkerExportBridge {
 
       async generatePSD(layers: any[], width: number, height: number): Promise<Uint8Array> {
     ensureCanvasInitialized();
-    const rasterizedChildren = await Promise.all(layers.map(async (layer) => {
+    const reversedLayers = [...layers].reverse();
+    const rasterizedChildren = await Promise.all(reversedLayers.map(async (layer) => {
       let imageData: ImageData;
 
       const canvas = document.createElement('canvas');
