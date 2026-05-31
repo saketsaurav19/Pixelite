@@ -46,6 +46,7 @@ export type LayerData = {
     smooth?: boolean;
     closed?: boolean;
     cornerRadius?: number;
+    svgPath?: string;
   };
   thumbnail?: string;
 };
@@ -72,6 +73,7 @@ export type Layer = BaseLayer & {
     smooth?: boolean;
     closed?: boolean;
     cornerRadius?: number;
+    svgPath?: string;
   };
   thumbnail?: string;
 
