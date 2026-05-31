@@ -10,14 +10,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLi
 
 import exifr from 'exifr';
 import { mapExifrToPiexif } from './../../utils/exifUtils';
+import { parseSVG } from '../../utils/svgUtils';
+import type { Layer } from '../../store/types';
+
 export interface ImportResult {
   name: string;
-  type: 'image' | 'psd' | 'pdf' | 'gif';
+  type: 'image' | 'psd' | 'pdf' | 'gif' | 'svg';
   dataUrl?: string; // For images
   // For PSDs, we might return parsed layer data
   psdData?: any;
   // For multi-frame/multi-page formats
   frames?: { dataUrl: string; name: string }[];
+  layers?: Layer[];
   width: number;
   height: number;
   exifData?: any;
@@ -60,6 +64,10 @@ export class ImportEngine {
 
     if (lowerName.endsWith('.pdf')) {
       return this.importPdf(fileToRead);
+    }
+
+    if (lowerName.endsWith('.svg')) {
+      return this.importSvg(fileToRead);
     }
 
     if (lowerName.endsWith('.gif')) {
@@ -126,7 +134,34 @@ export class ImportEngine {
     });
   }
 
-  static async importPdf(file: File): Promise<ImportResult> {
+
+  static async importSvg(file: File): Promise<ImportResult> {
+    const text = await file.text();
+    const layers = await parseSVG(text);
+
+    // Estimate width/height from svg if possible, or fallback
+    let width = 800;
+    let height = 600;
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "image/svg+xml");
+      const svg = doc.querySelector('svg');
+      if (svg) {
+        if (svg.hasAttribute('width')) width = parseFloat(svg.getAttribute('width') || '800');
+        if (svg.hasAttribute('height')) height = parseFloat(svg.getAttribute('height') || '600');
+      }
+    } catch (e) { /* ignore */ }
+
+    return {
+      name: file.name,
+      type: 'svg',
+      layers,
+      width,
+      height
+    };
+  }
+
+static async importPdf(file: File): Promise<ImportResult> {
     const arrayBuffer = await file.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdf = await loadingTask.promise;

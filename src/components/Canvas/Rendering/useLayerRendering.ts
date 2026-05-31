@@ -83,9 +83,21 @@ export const useLayerRendering = (
             ctx.lineWidth = sw;
             ctx.stroke();
           }
-        } else if (type === 'path' && points && points.length > 0) {
-          ctx.beginPath();
-          if (layer.shapeData.smooth && points.length >= 3) {
+          } else if (type === 'path') {
+          if (layer.shapeData.svgPath) {
+            const p = new Path2D(layer.shapeData.svgPath);
+            if (fill) {
+              ctx.fillStyle = fill;
+              ctx.fill(p);
+            }
+            if (stroke && sw > 0) {
+              ctx.strokeStyle = stroke;
+              ctx.lineWidth = sw;
+              ctx.stroke(p);
+            }
+          } else if (points && points.length > 0) {
+            ctx.beginPath();
+            if (layer.shapeData.smooth && points.length >= 3) {
             ctx.moveTo(points[0].x, points[0].y);
             for (let i = 0; i < (layer.shapeData.closed ? points.length : points.length - 1); i++) {
               const p0 = points[(i - 1 + points.length) % points.length];
@@ -115,6 +127,7 @@ export const useLayerRendering = (
             ctx.strokeStyle = stroke;
             ctx.lineWidth = sw;
             ctx.stroke();
+          }
           }
         }
       }
