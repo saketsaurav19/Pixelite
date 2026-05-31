@@ -1,3 +1,4 @@
+import { Application } from "./scripting/Application";
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from './store/useStore';
@@ -24,6 +25,9 @@ import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 
 const App: React.FC = () => {
+  React.useEffect(() => {
+    (window as any).app = new Application();
+  }, []);
 
   const addAlert = useStore(state => state.addAlert);
   const {
