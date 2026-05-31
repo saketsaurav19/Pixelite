@@ -24,8 +24,23 @@ import { ImportEngine } from './services/import/ImportEngine';
 import { removeBackground } from '@imgly/background-removal';
 import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
+import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
 
 const App: React.FC = () => {
+  const [layerContextMenu, setLayerContextMenu] = React.useState<{ layerId: string; x: number; y: number } | null>(null);
+  const [renamingLayerId, setRenamingLayerId] = React.useState<string | null>(null);
+  const [newLayerName, setNewLayerName] = React.useState<string>('');
+  const [longPressTimer, setLongPressTimer] = React.useState<NodeJS.Timeout | null>(null);
+  const [longPressActiveLayerId, setLongPressActiveLayerId] = React.useState<string | null>(null);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setLongPressActiveLayerId(null);
+  };
+
 // RECURSIVE LAYER COMPONENT
 const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
   return layerList.map((layer) => (
@@ -53,10 +68,31 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
         }}
         onDragEnd={() => setDraggedIndex(null)}
       >
-        <div className={`layer-row ${activeLayerId === layer.id ? 'active' : ''}`} onClick={(e) => {
+        <div
+          className={`layer-row ${activeLayerId === layer.id ? 'active' : ''} ${longPressActiveLayerId === layer.id ? 'long-press-active' : ''}`}
+          onClick={(e) => {
             e.stopPropagation();
             setActiveLayer(layer.id);
-        }}>
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setLayerContextMenu({ layerId: layer.id, x: e.clientX, y: e.clientY });
+          }}
+          onPointerDown={(e) => {
+            if (e.pointerType === 'mouse') return;
+            const timer = setTimeout(() => {
+              setLayerContextMenu({ layerId: layer.id, x: e.clientX, y: e.clientY });
+              setLongPressActiveLayerId(null);
+            }, 300);
+            setLongPressTimer(timer);
+            setLongPressActiveLayerId(layer.id);
+          }}
+          onPointerUp={clearLongPressTimer}
+          onPointerCancel={clearLongPressTimer}
+          onPointerMove={clearLongPressTimer}
+          onPointerLeave={clearLongPressTimer}
+        >
           {layer.type === 'group' && (
              <div className="layer-collapse" onClick={(e) => {
                  e.stopPropagation();
@@ -71,7 +107,33 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
           <div className="layer-thumb">
             {layer.thumbnail ? <img src={layer.thumbnail} alt="" /> : (layer.type === 'group' ? <LucideIcons.Folder size={16} /> : null)}
           </div>
-          <span className="layer-title">{layer.name}</span>
+          {renamingLayerId === layer.id ? (
+            <input
+              type="text"
+              autoFocus
+              className="layer-rename-input"
+              value={newLayerName}
+              onChange={(e) => setNewLayerName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateLayer(layer.id, { name: newLayerName });
+                  setRenamingLayerId(null);
+                  e.currentTarget.blur();
+                } else if (e.key === 'Escape') {
+                  setRenamingLayerId(null);
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={() => {
+                updateLayer(layer.id, { name: newLayerName });
+                setRenamingLayerId(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="layer-title">{layer.name}</span>
+          )}
           <div className="layer-order-btns">
             <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); recordHistory('Move Layer Up'); }} title="Move Up"><LucideIcons.ChevronUp size={12} /></button>
             <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); recordHistory('Move Layer Down'); }} title="Move Down"><LucideIcons.ChevronDown size={12} /></button>
@@ -680,6 +742,27 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
       <FileInfoDialog />
       <CameraDialog />
       <MobileCameraDialog />
+
+      {layerContextMenu && (
+        <LayerContextMenu
+          position={{ x: layerContextMenu.x, y: layerContextMenu.y }}
+          layerId={layerContextMenu.layerId}
+          onClose={() => setLayerContextMenu(null)}
+          onRename={(id) => {
+            const layer = useStore.getState().layers.find(l => l.id === id);
+            if (layer) {
+              setNewLayerName(layer.name);
+              setRenamingLayerId(id);
+            }
+            setLayerContextMenu(null);
+          }}
+          onDelete={(id) => {
+            useStore.getState().removeLayer(id);
+            useStore.getState().recordHistory('Delete Layer');
+            setLayerContextMenu(null);
+          }}
+        />
+      )}
 </div>
   );
 };
