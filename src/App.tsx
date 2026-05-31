@@ -905,7 +905,7 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
           layerId={layerContextMenu.layerId}
           onClose={() => setLayerContextMenu(null)}
           onRename={(id) => {
-            const layer = useStore.getState().layers.find(l => l.id === id);
+            const layer = findLayerById(useStore.getState().layers, id);
             if (layer) {
               setNewLayerName(layer.name);
               setRenamingLayerId(id);
