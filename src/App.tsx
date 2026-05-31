@@ -9,6 +9,7 @@ import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
+import { workerExportBridge } from './services/export/WorkerExportBridge';
 import { MenuBar } from './components/MenuSystem/MenuBar';
 import { OpenRecentDialog } from './components/Dialogs/OpenRecentDialog';
 import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
@@ -265,31 +266,74 @@ const App: React.FC = () => {
 
     try {
       const result = await ImportEngine.importFile(file);
-      if (result.type !== 'image' || !result.dataUrl) return;
-
       const currentState = useStore.getState();
-      const isDefaultBackground =
-        currentState.layers.length === 1 &&
-        currentState.layers[0].name === 'Background' &&
-        currentState.layers[0].type === 'paint';
 
-      if (currentState.layers.length === 0 || isDefaultBackground) {
-        currentState.setDocumentSize({ w: result.width, h: result.height });
-        currentState.setLayers([{
-          id: Math.random().toString(36).substring(7),
-          name: result.name,
-          type: 'image',
-          dataUrl: result.dataUrl,
-          position: { x: 0, y: 0 },
-          visible: true,
-          locked: false,
-          opacity: 1,
-          blendMode: 'source-over'
-        }]);
-      } else {
-        currentState.setLayers([...
-          currentState.layers,
-          {
+      if (result.type === 'psd') {
+
+        const psdData = await workerExportBridge.parsePSD(result.psdData);
+        currentState.setCurrentProjectId(null);
+        currentState.setHistory([], 0);
+        currentState.setDocumentSize({ w: psdData.width, h: psdData.height });
+
+        const newLayers: any[] = [];
+        const processPsdLayer = (child: any) => {
+          if (child.children) {
+            child.children.forEach(processPsdLayer);
+          } else if (child.dataUrl) {
+            newLayers.push({
+              id: Math.random().toString(36).substring(7),
+              name: child.name || "Layer",
+              type: "image",
+              dataUrl: child.dataUrl,
+              position: {
+                x: child.left || 0,
+                y: child.top || 0
+              },
+              visible: child.hidden !== true,
+              locked: false,
+              opacity: typeof child.opacity === "number" ? child.opacity / 255 : 1,
+              blendMode: child.blendMode === "pass through" || !child.blendMode ? "source-over" : child.blendMode
+            });
+          }
+        };
+
+        if (psdData.children) {
+          psdData.children.forEach(processPsdLayer);
+        }
+
+        currentState.setLayers(newLayers.reverse());
+        currentState.recordHistory(`Open PSD ${file.name}`);
+      } else if (result.type === 'image' && result.dataUrl) {
+        const isDefaultBackground =
+          currentState.layers.length === 1 &&
+          currentState.layers[0].name === 'Background' &&
+          currentState.layers[0].type === 'paint';
+
+        currentState.setCurrentProjectId(null);
+        currentState.setHistory([], 0);
+
+        if (result.exifData) {
+          (currentState as any).setExifData(result.exifData);
+        }
+        if (result.iccProfile) {
+          (currentState as any).setIccProfile(result.iccProfile);
+        }
+
+        if (currentState.layers.length === 0 || isDefaultBackground) {
+          currentState.setDocumentSize({ w: result.width, h: result.height });
+          currentState.setLayers([{
+            id: Math.random().toString(36).substring(7),
+            name: result.name,
+            type: 'image',
+            dataUrl: result.dataUrl,
+            position: { x: 0, y: 0 },
+            visible: true,
+            locked: false,
+            opacity: 1,
+            blendMode: 'source-over'
+          }]);
+        } else {
+          currentState.setLayers([...currentState.layers, {
             id: Math.random().toString(36).substring(7),
             name: result.name,
             type: 'image',
@@ -302,11 +346,10 @@ const App: React.FC = () => {
             locked: false,
             opacity: 1,
             blendMode: 'source-over'
-          }
-        ]);
+          }]);
+        }
+        currentState.recordHistory(`Open ${result.name}`);
       }
-
-      currentState.recordHistory(`Open ${result.name}`);
     } catch (err) {
       console.error(err);
       addAlert({ type: 'error', message: 'Failed to open image.' });
