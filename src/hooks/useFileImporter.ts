@@ -88,30 +88,31 @@ export const useFileImporter = () => {
           setLayers([...layers, ...newLayers.reverse()]);
         }
         recordHistory(isPlace ? `Place GIF ${result.name}` : `Open GIF ${result.name}`);
-      } else if (result.type === 'pdf' && result.frames) {
+      } else if (result.type === 'svg' && result.layers) {
         if (!isPlace) {
           setCurrentProjectId(null);
           setHistory([], 0);
           setDocumentSize({ w: result.width, h: result.height });
         }
 
-        const childLayers: Layer[] = result.frames.map((frame, index) => ({
-          id: Math.random().toString(36).substring(7),
-          name: frame.name || `Page ${index + 1}`,
-          type: 'image',
-          dataUrl: frame.dataUrl,
-          position: { x: 0, y: 0 },
-          visible: true,
-          locked: false,
-          opacity: 1,
-          blendMode: 'source-over'
-        }));
+        if (!isPlace) {
+          setLayers(result.layers.reverse());
+        } else {
+          setLayers([...layers, ...result.layers.reverse()]);
+        }
+        recordHistory(isPlace ? `Place SVG ${result.name}` : `Open SVG ${result.name}`);
+      } else if (result.type === 'pdf' && result.layers) {
+        if (!isPlace) {
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          setDocumentSize({ w: result.width, h: result.height });
+        }
 
         const pdfGroup: Layer = {
           id: Math.random().toString(36).substring(7),
           name: 'PDF Pages',
           type: 'group',
-          children: childLayers.reverse(), // stack pages bottom to top
+          children: result.layers.reverse(), // stack pages bottom to top
           collapsed: false,
           position: isPlace ? {
             x: (documentSize.w - result.width) / 2,
