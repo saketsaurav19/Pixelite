@@ -291,7 +291,7 @@ const App: React.FC = () => {
               },
               visible: child.hidden !== true,
               locked: false,
-              opacity: typeof child.opacity === "number" ? child.opacity / 255 : 1,
+              opacity: typeof child.opacity === "number" ? child.opacity : 1,
               blendMode: child.blendMode === "pass through" || !child.blendMode ? "source-over" : child.blendMode
             });
           }
