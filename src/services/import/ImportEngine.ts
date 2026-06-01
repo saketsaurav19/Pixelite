@@ -129,7 +129,6 @@ async function extractPageLayers(
 
   // Current path accumulator
   let pathSegs: PathSegment[] = [];
-  let vectorGroupCounter = 0;
 
 
   // Helper: build a shape Layer from accumulated path + current paint state
@@ -142,11 +141,6 @@ async function extractPageLayers(
     const fill = paint === 'stroke' ? 'none' : colorToHex(currentState.fillColor);
     const stroke = paint === 'fill' ? 'none' : colorToHex(currentState.strokeColor);
     const sw = currentState.lineWidth;
-
-    // Build a tiny SVG data URL so it can be rendered via our existing shape→svgPath pipeline
-    const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${vpw}" height="${vph}">
-  <path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" fill-opacity="${currentState.alpha}" stroke-opacity="${currentState.strokeAlpha}"/>
-</svg>`;
 
     layers.push({
       id: nanoid(),
