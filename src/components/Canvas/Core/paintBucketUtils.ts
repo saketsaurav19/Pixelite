@@ -1,6 +1,7 @@
 import type { CanvasRefs } from '../types';
 import type { Layer } from '../../../store/useStore';
 import { colorDistance } from './colorUtils';
+import { findLayerById } from '../../../utils/layerUtils';
 
 export const handlePaintBucket = (
   x: number,
@@ -13,14 +14,16 @@ export const handlePaintBucket = (
   updateLayer: (id: string, updates: Partial<Layer>) => void,
   recordHistory: (label: string) => void
 ) => {
-  const id = activeLayerId || layers[0]?.id;
+  const id = activeLayerId || (layers.length > 0 ? layers[0].id : null);
+  if (!id) return;
   const canvas = canvasRefs.current[id];
   const ctx = canvas?.getContext('2d', { willReadFrequently: true });
   if (!ctx || !canvas) return;
 
-  const layer = layers.find(l => l.id === id);
-  const lx = Math.round(x - (layer?.position.x || 0));
-  const ly = Math.round(y - (layer?.position.y || 0));
+  const layer = findLayerById(layers, id);
+  const lx = Math.round(x - (layer?.position?.x || 0));
+  const ly = Math.round(y - (layer?.position?.y || 0));
+  if (!layer) return;
 
   if (lx < 0 || ly < 0 || lx >= canvas.width || ly >= canvas.height) return;
 
