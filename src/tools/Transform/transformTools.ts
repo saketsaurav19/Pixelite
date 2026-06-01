@@ -41,10 +41,32 @@ export const transformTools: ToolModule[] = [
         h: Math.abs(coords.y - startCoords.y)
       }, 'rect');
     },
-    end: ({ selectionRect, setDocumentSize, setSelectionRect, recordHistory, setIsInteracting }) => {
+    end: ({ selectionRect, setDocumentSize, setSelectionRect, recordHistory, setIsInteracting, addLayer, documentSize }) => {
       if (selectionRect && selectionRect.w > 10 && selectionRect.h > 10) {
-        setDocumentSize({ w: Math.round(selectionRect.w), h: Math.round(selectionRect.h) });
-        recordHistory('Resize Artboard');
+        const w = Math.round(selectionRect.w);
+        const h = Math.round(selectionRect.h);
+        const x = Math.round(selectionRect.x);
+        const y = Math.round(selectionRect.y);
+
+        addLayer({
+          name: 'Artboard',
+          type: 'artboard',
+          position: { x, y },
+          width: w,
+          height: h,
+          children: []
+        });
+
+        // Auto-expand document if needed
+        let newDocW = documentSize.w;
+        let newDocH = documentSize.h;
+        if (x + w > documentSize.w) newDocW = x + w;
+        if (y + h > documentSize.h) newDocH = y + h;
+        if (newDocW !== documentSize.w || newDocH !== documentSize.h) {
+          setDocumentSize({ w: newDocW, h: newDocH });
+        }
+
+        recordHistory('Create Artboard');
       }
       setSelectionRect(null);
       setIsInteracting(false);

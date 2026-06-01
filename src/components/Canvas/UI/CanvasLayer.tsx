@@ -18,22 +18,24 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   layerIndex,
   depth = 0
 }) => {
-  // If it's a group, we wrap the children in an isolated div for compositing
-  if (layer.type === 'group') {
+  // If it's a group or artboard, we wrap the children in an isolated div for compositing
+  if (layer.type === 'group' || layer.type === 'artboard') {
     return (
       <div
         className={`layer-group ${layer.visible ? 'visible' : 'hidden'}`}
         style={{
           position: 'absolute',
-          top: 0, left: 0,
-          width: '100%', height: '100%',
+          top: layer.type === 'artboard' ? (layer.position?.y || 0) / 2 : 0,
+          left: layer.type === 'artboard' ? (layer.position?.x || 0) / 2 : 0,
+          width: layer.type === 'artboard' && layer.width ? `${layer.width / 2}px` : '100%',
+          height: layer.type === 'artboard' && layer.height ? `${layer.height / 2}px` : '100%',
+          backgroundColor: layer.type === 'artboard' ? '#ffffff' : 'transparent',
           zIndex: layersCount - layerIndex,
           pointerEvents: 'none',
           isolation: 'isolate',
           mixBlendMode: (layer.blendMode === 'source-over' || layer.blendMode === 'pass through' ? 'normal' : (layer.blendMode || 'normal')) as any,
           opacity: layer.opacity,
-          // Group doesn't have a specific transform if we treat its children absolutely
-          // If we want group positioning, we could apply transform here, but Photoshop typically handles child transforms relative to document unless dragged
+          // Artboards create a local coordinate system and draw a white background
         }}
       >
         {layer.children?.map((childLayer, childIndex) => (
