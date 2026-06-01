@@ -181,16 +181,32 @@ export class ImportEngine {
     const numPages = pdf.numPages;
     const topLevelLayers: Layer[] = [];
 
-    let maxWidth = 0;
-    let maxHeight = 0;
+    let currentX = 0;
+    let currentY = 0;
+    let currentRowHeight = 0;
+    let maxDocWidth = 0;
+    const padding = 20;
+    const maxRowWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
 
     for (let i = 1; i <= numPages; i++) {
       try {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1 });
 
-        if (viewport.width > maxWidth) maxWidth = viewport.width;
-        if (viewport.height > maxHeight) maxHeight = viewport.height;
+        if (currentX > 0 && currentX + viewport.width > maxRowWidth) {
+          currentX = 0;
+          currentY += currentRowHeight + padding;
+          currentRowHeight = 0;
+        }
+
+        const pageX = currentX;
+        const pageY = currentY;
+
+        currentX += viewport.width + padding;
+        currentRowHeight = Math.max(currentRowHeight, viewport.height);
+        if (currentX - padding > maxDocWidth) {
+          maxDocWidth = currentX - padding;
+        }
 
         // Extract per-element sub-layers
         const subLayers = await extractPageLayers(page, viewport);
@@ -202,7 +218,7 @@ export class ImportEngine {
           type: 'group',
           children: subLayers,
           collapsed: false,
-          position: { x: 0, y: 0 },
+          position: { x: pageX, y: pageY },
           visible: true,
           locked: false,
           opacity: 1,
@@ -221,8 +237,8 @@ export class ImportEngine {
       // We return layers directly (not frames) so useFileImporter uses the
       // existing layers path instead of the frames path.
       layers: topLevelLayers,
-      width: maxWidth,
-      height: maxHeight,
+      width: maxDocWidth > 0 ? maxDocWidth : maxRowWidth,
+      height: currentY + currentRowHeight,
     };
   }
 
