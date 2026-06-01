@@ -14,22 +14,36 @@
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
+<<<<<<< HEAD
     "ag-psd": "^30.1.1",
+=======
+    "@vitejs/plugin-react": "^5.2.0",
+    "ag-psd": "^30.1.1",
+    "canvas": "^3.2.3",
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
     "framer-motion": "^12.38.0",
+    "heic2any": "^0.0.4",
+    "localforage": "^1.10.0",
     "lucide-react": "^1.11.0",
     "nanoid": "^5.1.9",
     "onnxruntime-web": "^1.21.0",
+    "piexifjs": "^1.0.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "vite": "^7.3.3",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.2",
+    "@types/piexifjs": "^1.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+<<<<<<< HEAD
     "@vitejs/plugin-react": "^6.0.1",
     "@webgpu/types": "^0.1.69",
+=======
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
@@ -37,7 +51,6 @@
     "globals": "^17.5.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10",
     "vite-plugin-pwa": "^1.2.0"
   }
 }

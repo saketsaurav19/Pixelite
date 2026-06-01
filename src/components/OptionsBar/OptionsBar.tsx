@@ -1,20 +1,18 @@
 import React from 'react';
 import { useStore } from '../../store/useStore';
 import { hexToRgba } from '../../utils/canvasUtils';
+import { toolState } from '../../tools/toolState';
 import ColorPicker from '../shared/ColorPicker';
 import * as LucideIcons from 'lucide-react';
-
 interface EditableValueProps {
   value: number;
   unit: string;
   onCommit: (val: number) => void;
 }
-
 const EditableValue: React.FC<EditableValueProps> = ({ value, unit, onCommit }) => {
   const [isEditing, setIsEditing] = React.useState(false);
   const [tempValue, setTempValue] = React.useState('');
   const setIsTyping = useStore(state => state.setIsTyping);
-
   React.useEffect(() => {
     if (isEditing) {
       setIsTyping(true);
@@ -23,7 +21,6 @@ const EditableValue: React.FC<EditableValueProps> = ({ value, unit, onCommit }) 
     }
     return () => setIsTyping(false);
   }, [isEditing, setIsTyping]);
-
   if (isEditing) {
     return (
       <input
@@ -45,7 +42,6 @@ const EditableValue: React.FC<EditableValueProps> = ({ value, unit, onCommit }) 
       />
     );
   }
-
   return (
     <span
       className="value-label"
@@ -59,7 +55,6 @@ const EditableValue: React.FC<EditableValueProps> = ({ value, unit, onCommit }) 
     </span>
   );
 };
-
 const OptionsBar: React.FC = () => {
   const {
     activeTool, brushSize, setBrushSize,
@@ -102,19 +97,21 @@ const OptionsBar: React.FC = () => {
     lightingDepthScale, showLightSource, updateLighting,
     documentSize
   } = useStore();
-
   const handleDeselect = () => {
     setSelectionRect(null);
     setLassoPaths([]);
     setIsInverseSelection(false);
     recordHistory('Deselect');
   };
-
+  const brushLikeTools = ['brush', 'pencil', 'color_replacement', 'mixer_brush', 'clone', 'pattern_stamp', 'eraser', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush'];
+  const textTools = ['text', 'vertical_text'];
+  const shapeTools = ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'];
+  const penTools = ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'];
+  const detailTools = ['blur', 'sharpen', 'smudge', 'dodge', 'burn', 'sponge', 'healing', 'healing_brush', 'patch', 'red_eye'];
   return (
     <div className="options-bar">
       <div className="tool-indicator">{activeTool.toUpperCase()}</div>
       <div className="options-divider" />
-
       {(['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
         <>
           <div className="option-control">
@@ -143,18 +140,27 @@ const OptionsBar: React.FC = () => {
                 if (paths.length > 0) {
                   const subdividedPaths = paths.map(path => {
                     if (!path.smooth || path.points.length < 3) return path.points;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                     const result: { x: number, y: number }[] = [];
                     const steps = 12; // High resolution for selection
                     const points = path.points;
                     const len = points.length;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                     for (let i = 0; i < (path.closed ? len : len - 1); i++) {
                       const p0 = points[(i - 1 + len) % len];
                       const p1 = points[i % len];
                       const p2 = points[(i + 1) % len];
                       const p3 = points[(i + 2) % len];
+<<<<<<< HEAD
 
+=======
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                       for (let t = 0; t < steps; t++) {
                         const u = t / steps;
                         const x = 0.5 * (
@@ -175,7 +181,10 @@ const OptionsBar: React.FC = () => {
                     if (!path.closed) result.push(points[len - 1]);
                     return result;
                   });
+<<<<<<< HEAD
 
+=======
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                   setLassoPaths(subdividedPaths);
                   setVectorPaths([]);
                   setActivePathIndex(null);
@@ -279,7 +288,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {activeTool === 'move' && (
         <>
           <div className="option-control">
@@ -305,7 +313,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {activeTool === 'color_sampler' && (
         <>
           <div className="option-control">
@@ -329,7 +336,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {activeTool === 'ruler' && (
         <>
           <div className="option-control">
@@ -356,7 +362,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {(activeTool === 'slice' || activeTool === 'slice_select') && (
         <>
           <div className="option-control">
@@ -367,15 +372,15 @@ const OptionsBar: React.FC = () => {
             >
               Clear Slices
             </button>
-            {activeTool === 'slice_select' && (window as any)._sliceLastClickedIdx !== undefined && (
+            {activeTool === 'slice_select' && toolState._sliceLastClickedIdx !== undefined && (
               <button
                 className="premium-btn-sm"
                 onClick={() => {
-                  const idx = (window as any)._sliceLastClickedIdx;
+                  const idx = toolState._sliceLastClickedIdx;
                   const slices = [...useStore.getState().slices];
                   slices.splice(idx, 1);
                   useStore.getState().setSlices(slices);
-                  delete (window as any)._sliceLastClickedIdx;
+                  delete toolState._sliceLastClickedIdx;
                   recordHistory('Delete Slice');
                 }}
                 style={{ padding: '4px 12px', fontSize: '11px', background: '#444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', marginLeft: '8px' }}
@@ -387,7 +392,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {activeTool === 'crop' && (
         <>
           <div className="option-control">
@@ -410,7 +414,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {(activeTool === 'magic_wand' || activeTool === 'quick_selection' || activeTool === 'object_selection' || activeTool === 'paint_bucket' || activeTool === 'magic_eraser') && (
         <>
           <div className="option-control">
@@ -437,6 +440,7 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
+<<<<<<< HEAD
 
       {activeTool === 'lighting' && (
         <>
@@ -618,6 +622,8 @@ const OptionsBar: React.FC = () => {
         </>
       )}
 
+=======
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
       {activeTool === 'zoom_tool' && (
         <>
           <div className="option-control">
@@ -634,7 +640,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {activeTool === 'pattern_stamp' && (
         <div className="option-control">
           <button
@@ -652,7 +657,6 @@ const OptionsBar: React.FC = () => {
           <input
             id="pattern-upload"
             type="file"
-            accept="image/*"
             style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -667,7 +671,6 @@ const OptionsBar: React.FC = () => {
           />
         </div>
       )}
-
       {activeTool === 'marquee' && selectionRect && (
         <div className="option-control">
           <button
@@ -679,7 +682,6 @@ const OptionsBar: React.FC = () => {
           </button>
         </div>
       )}
-
       {activeTool === 'polygon_shape' && (
         <div className="option-control">
           <label>Sides</label>
@@ -691,7 +693,6 @@ const OptionsBar: React.FC = () => {
           <EditableValue value={polygonSides} unit="" onCommit={setPolygonSides} />
         </div>
       )}
-
       {activeTool === 'custom_shape' && (
         <>
           <div className="option-control">
@@ -714,7 +715,6 @@ const OptionsBar: React.FC = () => {
           </div>
         </>
       )}
-
       {(activeTool === 'shape' || activeTool === 'triangle_shape') && (
         <div className="option-control">
           <label>Radius</label>
@@ -726,13 +726,11 @@ const OptionsBar: React.FC = () => {
           <EditableValue value={cornerRadius} unit="px" onCommit={setCornerRadius} />
         </div>
       )}
-
       {activeTool === 'ellipse_shape' && (
         <div className="option-control">
           <span style={{ fontSize: '11px', color: '#888' }}>Drag to draw ellipse</span>
         </div>
       )}
-
       {activeTool === 'rotate_view' && (
         <>
           <div className="option-control">
@@ -753,7 +751,6 @@ const OptionsBar: React.FC = () => {
           </button>
         </>
       )}
-
       {activeTool === 'hand' && (
         <button
           className="option-btn"
@@ -766,7 +763,6 @@ const OptionsBar: React.FC = () => {
           Reset View & Zoom
         </button>
       )}
-
       {activeTool === 'gradient' && (
         <div className="option-control">
           <label>Type</label>
@@ -794,7 +790,6 @@ const OptionsBar: React.FC = () => {
           </div>
         </div>
       )}
-
       {(activeTool === 'healing_brush' || activeTool === 'patch' || activeTool === 'content_aware_move') && (
         <>
           {activeTool === 'healing_brush' && (
@@ -827,7 +822,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {(activeTool === 'text' || activeTool === 'vertical_text') && (
         <>
           <div className="option-control">
@@ -861,7 +855,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
       {activeTool === 'red_eye' && (
         <>
           <div className="option-control">
@@ -885,8 +878,7 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || activeTool === 'clone' || activeTool === 'pattern_stamp' || activeTool === 'eraser' || activeTool === 'background_eraser' || activeTool === 'magic_eraser' || activeTool === 'history_brush' || activeTool === 'art_history_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || activeTool === 'quick_selection' || activeTool === 'blur' || activeTool === 'sharpen' || activeTool === 'smudge' || activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sponge' || activeTool === 'healing' || activeTool === 'healing_brush' || activeTool === 'patch' || activeTool === 'red_eye' || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(brushLikeTools.includes(activeTool) || textTools.includes(activeTool) || shapeTools.includes(activeTool) || activeTool === 'quick_selection' || detailTools.includes(activeTool) || penTools.includes(activeTool)) && (
         <>
           <div className="option-control">
             <label>
@@ -901,7 +893,6 @@ const OptionsBar: React.FC = () => {
             />
             <EditableValue value={brushSize} unit="px" onCommit={setBrushSize} />
           </div>
-
           {(activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'blur' || activeTool === 'sharpen' || activeTool === 'smudge' || activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sponge' || activeTool === 'clone' || activeTool === 'history_brush') && (
             <div className="option-control">
               <label>Hardness</label>
@@ -913,7 +904,6 @@ const OptionsBar: React.FC = () => {
               <EditableValue value={toolHardness} unit="%" onCommit={setToolHardness} />
             </div>
           )}
-
           {(activeTool === 'blur' || activeTool === 'sharpen' || activeTool === 'smudge' || activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sponge' || activeTool === 'healing_brush') && (
             <div className="option-control">
               <label>Strength</label>
@@ -925,7 +915,6 @@ const OptionsBar: React.FC = () => {
               <EditableValue value={toolStrength} unit="%" onCommit={setToolStrength} />
             </div>
           )}
-
           {(activeTool === 'dodge' || activeTool === 'burn') && (
             <div className="option-control">
               <label>Range</label>
@@ -940,7 +929,6 @@ const OptionsBar: React.FC = () => {
               </select>
             </div>
           )}
-
           {activeTool === 'sponge' && (
             <div className="option-control">
               <label>Mode</label>
@@ -956,8 +944,7 @@ const OptionsBar: React.FC = () => {
           )}
         </>
       )}
-
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(shapeTools.includes(activeTool) || penTools.includes(activeTool)) && (
         <div className="option-control">
           <label>Stroke Width</label>
           <input
@@ -970,8 +957,7 @@ const OptionsBar: React.FC = () => {
           <EditableValue value={strokeWidth} unit="px" onCommit={setStrokeWidth} />
         </div>
       )}
-
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || activeTool === 'clone' || activeTool === 'pattern_stamp' || activeTool === 'history_brush' || activeTool === 'art_history_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || activeTool === 'eyedropper' || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(brushLikeTools.includes(activeTool) || textTools.includes(activeTool) || shapeTools.includes(activeTool) || activeTool === 'eyedropper' || penTools.includes(activeTool)) && (
         <ColorPicker
           label={['shape', 'ellipse_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool as string) ? 'Fill' : (activeTool === 'eyedropper' ? 'Sampled' : 'Color')}
           color={brushColor}
@@ -980,8 +966,7 @@ const OptionsBar: React.FC = () => {
           onOpacityChange={setPrimaryOpacity}
         />
       )}
-
-      {(activeTool === 'brush' || activeTool === 'pencil' || activeTool === 'color_replacement' || activeTool === 'mixer_brush' || (activeTool === 'text' || activeTool === 'vertical_text') || ['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool)) && (
+      {(shapeTools.includes(activeTool) || penTools.includes(activeTool)) && (
         <ColorPicker
           label={['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool) ? 'Stroke' : 'Secondary'}
           color={secondaryColor}
@@ -990,7 +975,6 @@ const OptionsBar: React.FC = () => {
           onOpacityChange={setSecondaryOpacity}
         />
       )}
-
       {/* Quick Actions - Very important for mobile */}
       <div className="options-divider" />
       <div className="quick-actions">
@@ -1056,5 +1040,4 @@ const OptionsBar: React.FC = () => {
     </div>
   );
 };
-
 export default OptionsBar;

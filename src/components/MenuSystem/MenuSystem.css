@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════
+   BASE — shared styles for both desktop and mobile
+   ═══════════════════════════════════════════════════════ */
+
+.menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--bg-header);
+  border: 1px solid var(--border-color);
+  min-width: 240px;
+  display: none;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  z-index: 2000;
+}
+
+.menu-item-container.active .menu-dropdown {
+  display: flex;
+}
+
+.menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 16px;
+  color: #eee;
+  cursor: pointer;
+  position: relative;
+  min-height: 32px;
+  user-select: none;
+}
+
+.menu-item:hover:not(.disabled) {
+  background: #0066cc;
+  color: #fff;
+}
+
+.menu-item.disabled {
+  color: #666;
+  cursor: default;
+}
+
+.menu-shortcut {
+  color: #888;
+  font-size: 11px;
+  margin-left: auto;
+  padding-left: 24px;
+}
+
+.menu-item:hover:not(.disabled) .menu-shortcut {
+  color: #cceeff;
+}
+
+.menu-divider {
+  height: 1px;
+  background: #444;
+  margin: 4px 0;
+  flex-shrink: 0;
+}
+
+.submenu-icon {
+  flex-shrink: 0;
+  color: #888;
+  transition: transform 0.2s ease;
+}
+
+.menu-item:hover:not(.disabled) .submenu-icon {
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════
+   DESKTOP — absolute flyout submenus triggered by :hover
+   ═══════════════════════════════════════════════════════ */
+@media (min-width: 769px) {
+  /* Submenu is hidden by default, shown on hover */
+  .submenu {
+    display: none;
+    position: absolute;
+    top: -6px;
+    left: 100%;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    min-width: 200px;
+    padding: 6px 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    z-index: 2001;
+  }
+
+  .menu-item.has-submenu {
+    position: relative;
+  }
+
+  .menu-item.has-submenu:hover > .submenu {
+    display: block;
+  }
+
+  /* The chevron points right on desktop */
+  .submenu-icon {
+    transform: rotate(0deg);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE — true in-flow accordion
+   ═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Top-level menu dropdown: flows inside the mobile sidebar */
+  .menu-dropdown {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    min-width: 0;
+    width: 100%;
+    z-index: auto;
+
+    /* Collapsed by default */
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.25s ease;
+  }
+
+  .menu-item-container.active .menu-dropdown {
+    max-height: 9999px;
+    opacity: 1;
+    pointer-events: auto;
+    overflow-y: scroll;
+  }
+
+  /* Every menu item is a full-width row */
+  .menu-item {
+    min-height: 48px;
+    padding: 0 20px;
+    font-size: 15px;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+  }
+
+  /* ── has-submenu parent row ── */
+  /* Keep it as a normal flex row (label + chevron) */
+  .menu-item.has-submenu {
+    position: relative;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .menu-item.has-submenu > .menu-label {
+    flex: 1;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Chevron points right when closed, rotates down when open */
+  .menu-item.has-submenu > .submenu-icon {
+    flex-shrink: 0;
+    transition: transform 0.25s ease;
+    transform: rotate(0deg);
+  }
+
+  .menu-item.has-submenu.submenu-active > .submenu-icon {
+    transform: rotate(90deg);
+  }
+
+  /* ── The submenu itself ─────────────────────────────── */
+  /*
+   * width: 100% + flex-basis: 100% forces the submenu onto its OWN line
+   * inside the wrapping has-submenu container
+   */
+  .submenu {
+    position: static !important;
+    display: block !important;
+    width: 100%;
+    flex-basis: 100%;
+    box-sizing: border-box;
+
+    /* Accordion styling */
+    background: transparent;
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+
+    /* Collapsed state */
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.25s ease,
+      padding 0.25s ease;
+  }
+
+  /* Expanded state — toggled by adding .active via JS */
+  .submenu.active {
+    max-height: 9999px;
+    overflow: visible;
+    opacity: 1;
+    pointer-events: auto;
+    padding: 0;
+  }
+
+  /* Submenu items indentation for tree form */
+  /* 2nd stage */
+  .submenu .menu-item {
+    padding-left: 32px;
+    font-size: 14px;
+    color: #bbb;
+  }
+
+  /* 3rd stage */
+  .submenu .submenu .menu-item {
+    padding-left: 48px;
+    font-size: 13px;
+    color: #aaa;
+  }
+
+  /* 4th stage */
+  .submenu .submenu .submenu .menu-item {
+    padding-left: 64px;
+    font-size: 13px;
+    color: #999;
+  }
+
+  /* Ensure hover isn't bright blue solid but consistent */
+  .submenu .menu-item:hover:not(.disabled) {
+    background: var(--bg-tertiary, #333);
+    color: #fff;
+  }
+
+  /* On mobile, desktop :hover must never show a submenu */
+  .menu-item.has-submenu:hover > .submenu:not(.active) {
+    max-height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    padding: 0 !important;
+  }
+}

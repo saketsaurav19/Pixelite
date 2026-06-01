@@ -3,6 +3,12 @@ import { nanoid } from 'nanoid';
 import type { EditorState, DocumentSpecificState, DocumentArchive } from '../types';
 
 export interface DocumentSlice {
+  currentProjectId: string | null;
+  setCurrentProjectId: (id: string | null) => void;
+  clipboardDataUrl: string | null;
+  clipboardDataRect: { x: number; y: number; w: number; h: number } | null;
+  setClipboardDataRect: (rect: { x: number; y: number; w: number; h: number } | null) => void;
+  setClipboardDataUrl: (url: string | null) => void;
   zoom: number;
   canvasOffset: { x: number; y: number };
   canvasRotation: number;
@@ -16,9 +22,17 @@ export interface DocumentSlice {
   cloneSource: { x: number; y: number } | null;
   customPattern: string | null;
   cropRect: { x: number; y: number; w: number; h: number } | null;
+<<<<<<< HEAD
   showRulers: boolean;
   showGrid: boolean;
   showGuides: boolean;
+=======
+  exifData: any;
+  iccProfile: string;
+
+  setExifData: (data: any) => void;
+  setIccProfile: (profile: string) => void;
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
   setZoom: (zoom: number) => void;
   setCanvasOffset: (offset: { x: number; y: number }) => void;
@@ -141,6 +155,12 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
 };
 
 export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlice> = (set) => ({
+  currentProjectId: null,
+  setCurrentProjectId: (id) => set({ currentProjectId: id }),
+  clipboardDataUrl: null,
+  clipboardDataRect: null,
+  setClipboardDataUrl: (url) => set({ clipboardDataUrl: url }),
+  setClipboardDataRect: (rect) => set({ clipboardDataRect: rect }),
   zoom: 1,
   canvasOffset: { x: 0, y: 0 },
   canvasRotation: 0,
@@ -154,6 +174,8 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   cloneSource: null,
   customPattern: null,
   cropRect: null,
+  exifData: null,
+  iccProfile: 'sRGB IEC61966-2.1',
 
   setZoom: (zoom) => set({ zoom }),
   setCanvasOffset: (offset) => set({ canvasOffset: offset }),
@@ -182,6 +204,7 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   setCropRect: (updater) => set((state) => ({
     cropRect: typeof updater === 'function' ? updater(state.cropRect) : updater
   })),
+<<<<<<< HEAD
   showRulers: true,
   showGrid: false,
   showGuides: true,
@@ -275,4 +298,8 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
       ...nextDoc.state
     };
   }),
+=======
+  setExifData: (exifData) => set({ exifData }),
+  setIccProfile: (iccProfile) => set({ iccProfile }),
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 });

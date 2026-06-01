@@ -1,12 +1,15 @@
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from './store/useStore';
+import { toolState } from './tools/toolState';
 import { hexToRgba } from './utils/canvasUtils';
 import Canvas from './components/Canvas/Canvas';
+import { GlobalRulers } from './components/Canvas/UI/GlobalRulers';
 import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
+<<<<<<< HEAD
 import MenuBar from './components/MenuBar/MenuBar';
 import { removeBackground } from '@imgly/background-removal';
 import TabBar from './components/TabBar/TabBar';
@@ -15,9 +18,24 @@ import { nanoid } from 'nanoid';
 import { CloudStorageModal } from './components/Modals/CloudStorageModal';
 import { PublicShareModal } from './components/Modals/PublicShareModal';
 import { uploadToImgur, uploadToImageBB, saveToGoogleDrive } from './utils/cloudServices';
+=======
+import { MenuBar } from './components/MenuSystem/MenuBar';
+import { OpenRecentDialog } from './components/Dialogs/OpenRecentDialog';
+import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
+import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
+import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
+import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
+import { CameraDialog } from "./components/Dialogs/CameraDialog";
+import { MobileCameraDialog } from "./components/Dialogs/MobileCameraDialog";
+import { ImportEngine } from './services/import/ImportEngine';
+import { removeBackground } from '@imgly/background-removal';
+import { AlertContainer } from './components/UI/AlertContainer';
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 import './App.css';
 
 const App: React.FC = () => {
+
+  const addAlert = useStore(state => state.addAlert);
   const {
     layers,
     activeLayerId,
@@ -32,16 +50,22 @@ const App: React.FC = () => {
     undo,
     redo,
     recordHistory,
+<<<<<<< HEAD
     inverseSelection,
     duplicateLayer,
     setZoom,
+=======
+        duplicateLayer,
+    setActiveTool,
+    setToolVariant,
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
     setSelectionRect,
     setIsInverseSelection,
     setCropRect,
     setLassoPaths,
-    setDocumentSize,
     moveLayer,
     reorderLayers,
+<<<<<<< HEAD
     documentSize,
     activeTool,
     setIsTyping,
@@ -66,18 +90,17 @@ const App: React.FC = () => {
     exportCanvas.height = h;
     const ctx = exportCanvas.getContext('2d');
     if (!ctx) return null;
+=======
+    setIsTyping,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen,
+    setActiveMobileSubmenu
+  } = useStore();
 
-    // Draw layers from bottom to top
-    [...layers].reverse().forEach(layer => {
-      if (!layer.visible) return;
-      const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-      if (layerCanvas) {
-        ctx.globalAlpha = layer.opacity || 1;
-        ctx.globalCompositeOperation = (layer.blendMode || 'source-over') as any;
-        ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
-      }
-    });
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
+
+<<<<<<< HEAD
     return exportCanvas.toDataURL(format);
   };
 
@@ -207,14 +230,24 @@ const App: React.FC = () => {
     link.click();
     URL.revokeObjectURL(link.href);
   };
+=======
+  const handleFade = () => { addAlert({ type: 'info', message: 'Fade action triggered (Placeholder)' }); };
+  const handleCopyMerged = () => { addAlert({ type: 'info', message: 'Copy Merged action triggered (Placeholder)' }); };
+          const handleFreeTransform = () => { addAlert({ type: 'info', message: 'Free Transform action triggered (Placeholder)' }); };
+                const handlePreferences = () => { addAlert({ type: 'info', message: 'Preferences action triggered (Placeholder)' }); };
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [processingText, setProcessingText] = React.useState('');
 
   // Mobile UI state
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
   const [isToolsOpen, setIsToolsOpen] = React.useState(false);
   const [isPanelsOpen, setIsPanelsOpen] = React.useState(false);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
   const [isFillPickerOpen, setIsFillPickerOpen] = React.useState(false);
 
 
@@ -224,8 +257,72 @@ const App: React.FC = () => {
   const [isEditingOpacity, setIsEditingOpacity] = React.useState(false);
   const [tempOpacityValue, setTempOpacityValue] = React.useState('');
 
+<<<<<<< HEAD
   const [saveModal, setSaveModal] = React.useState<{ type: 'cloud' | 'public' | null; provider?: string }>({ type: null });
   const [isLightingProcessing, setIsLightingProcessing] = React.useState(false);
+=======
+
+
+  const blobToDataUrl = React.useCallback((blob: Blob) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Failed to convert blob to data URL.'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read blob.'));
+    reader.readAsDataURL(blob);
+  }), []);
+
+  React.useEffect(() => {
+    const handleRemoveBackground = async () => {
+      const state = useStore.getState();
+      const layerId = state.activeLayerId;
+      if (!layerId) return;
+
+      const activeLayer = state.layers.find((layer) => layer.id === layerId);
+      if (!activeLayer?.dataUrl) {
+        addAlert({ type: 'warning', message: 'Please select an image layer first.' });
+        return;
+      }
+
+      try {
+        setIsProcessing(true);
+        setProcessingText('Removing background...');
+
+        const inputResponse = await fetch(activeLayer.dataUrl);
+        const inputBlob = await inputResponse.blob();
+
+        let outputBlob: Blob;
+        try {
+          outputBlob = await removeBackground(inputBlob, {
+            publicPath: '/models/',
+            output: { format: 'image/png', quality: 0.92 },
+            device: 'gpu'
+          });
+        } catch (localError) {
+          console.warn('Failed to load local background removal models, falling back to remote source:', localError);
+          outputBlob = await removeBackground(inputBlob, {
+            output: { format: 'image/png', quality: 0.92 },
+            device: 'gpu'
+          });
+        }
+
+        const outputDataUrl = await blobToDataUrl(outputBlob);
+        state.updateLayer(layerId, { dataUrl: outputDataUrl, type: 'image' });
+        state.recordHistory('Remove Background');
+      } catch (error) {
+        console.error('Background removal failed:', error);
+        addAlert({ type: 'error', message: 'Background removal failed. Please try again.' });
+      } finally {
+        setIsProcessing(false);
+        setProcessingText('');
+      }
+    };
+
+    window.addEventListener('remove-background', handleRemoveBackground);
+    return () => window.removeEventListener('remove-background', handleRemoveBackground);
+  }, [blobToDataUrl]);
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -237,13 +334,18 @@ const App: React.FC = () => {
       const isCtrl = e.ctrlKey || e.metaKey;
 
       // File operations
+      // New Document
+      if (isCtrl && e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        useStore.getState().setIsNewDocumentDialogOpen(true);
+      }
       if (isCtrl && e.key === 'o') {
         e.preventDefault();
         document.getElementById('global-file-input')?.click();
       }
       if (isCtrl && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        handleSave(e.shiftKey);
+        console.log('Save handled via menu');
       }
 
       // Undo/Redo
@@ -251,117 +353,96 @@ const App: React.FC = () => {
         e.preventDefault();
         undo();
       }
-      if (isCtrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      if ((isCtrl && e.key === 'y') || (isCtrl && e.shiftKey && e.key === 'z')) {
         e.preventDefault();
         redo();
       }
 
-      // Tool selection & Cycling
-      if (!isCtrl) {
-        const key = e.key.toLowerCase();
-        const toolGroups: Record<string, { id: string; tools: string[] }> = {
-          'v': { id: 'move', tools: ['move', 'artboard'] },
-          'm': { id: 'marquee', tools: ['marquee', 'ellipse_marquee'] },
-          'l': { id: 'lasso', tools: ['lasso', 'polygonal_lasso', 'magnetic_lasso'] },
-          'w': { id: 'selection', tools: ['quick_selection', 'magic_wand', 'object_selection'] },
-          'c': { id: 'crop', tools: ['crop', 'perspective_crop', 'slice', 'slice_select'] },
-          'i': { id: 'eyedropper', tools: ['eyedropper', 'color_sampler', 'ruler'] },
-          'j': { id: 'healing', tools: ['healing', 'healing_brush', 'patch', 'content_aware_move', 'red_eye'] },
-          'b': { id: 'brush', tools: ['brush', 'pencil', 'color_replacement', 'mixer_brush'] },
-          'y': { id: 'history', tools: ['history_brush', 'art_history_brush'] },
-          's': { id: 'clone', tools: ['clone', 'pattern_stamp'] },
-          'e': { id: 'eraser', tools: ['eraser', 'background_eraser', 'magic_eraser'] },
-          'g': { id: 'gradient', tools: ['gradient', 'paint_bucket'] },
-          'o': { id: 'dodge', tools: ['dodge', 'burn', 'sponge'] },
-          't': { id: 'text', tools: ['text', 'vertical_text'] },
-          'p': { id: 'pen', tools: ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point'] },
-          'a': { id: 'path', tools: ['path_select', 'direct_select'] },
-          'u': { id: 'shape', tools: ['shape', 'ellipse_shape', 'triangle_shape', 'polygon_shape', 'line_shape', 'custom_shape'] },
-          'h': { id: 'hand', tools: ['hand', 'rotate_view'] },
-          'z': { id: 'zoom', tools: ['zoom_tool'] }
-        };
-
-        if (toolGroups[key]) {
-          const group = toolGroups[key];
-          const toolsInGroup = group.tools;
-          const currentTool = useStore.getState().activeTool;
-          const { setToolVariant } = useStore.getState();
-
-          let nextTool = toolsInGroup[0];
-          if (toolsInGroup.includes(currentTool)) {
-            const currentIndex = toolsInGroup.indexOf(currentTool);
-            nextTool = toolsInGroup[(currentIndex + 1) % toolsInGroup.length];
-          }
-
-          setToolVariant(group.id, nextTool as any);
-        }
+      // Edit operations
+      if (isCtrl && e.shiftKey && e.key === 'f') {
+        e.preventDefault();
+        setIsFillPickerOpen(true);
       }
-
-      // Layer Selection (Alt + [ and Alt + ])
-      if (e.altKey && !isCtrl) {
-        if (e.key === '[' || e.key === ']') {
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
+         e.preventDefault();
+         handleFade();
+      }
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'c') {
+         e.preventDefault();
+         handleCopyMerged();
+      }
+      if (isCtrl && e.key.toLowerCase() === 't') {
           e.preventDefault();
-          const { layers, activeLayerId, setActiveLayer } = useStore.getState();
-          if (layers.length <= 1) return;
-
-          const currentIndex = layers.findIndex(l => l.id === activeLayerId);
-          let nextIndex = 0;
-
-          if (e.key === '[') {
-            // Select backward (visually down the list)
-            nextIndex = (currentIndex + 1) % layers.length;
-          } else if (e.key === ']') {
-            // Select forward (visually up the list)
-            nextIndex = (currentIndex - 1 + layers.length) % layers.length;
-          }
-
-          setActiveLayer(layers[nextIndex].id);
-        }
+          handleFreeTransform();
+      }
+      if (isCtrl && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          handlePreferences();
       }
 
-      // Zoom
-      if (isCtrl && (e.key === '=' || e.key === '+')) {
+      // Layer operations
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        setZoom(Math.min(32, zoom + 0.05));
+        addLayer({ name: `Layer ${useStore.getState().layers.length + 1}` });
       }
-      if (isCtrl && (e.key === '-' || e.key === '_')) {
-        e.preventDefault();
-        setZoom(Math.max(0.01, zoom - 0.05));
-      }
-      if (isCtrl && e.key === '0') {
-        e.preventDefault();
-        setZoom(1);
-      }
-
-      // Layer management
       if (isCtrl && e.key.toLowerCase() === 'j') {
         e.preventDefault();
-        if (activeLayerId) {
-          duplicateLayer(activeLayerId);
-          recordHistory('Duplicate Layer');
+        if (useStore.getState().activeLayerId) {
+            duplicateLayer(useStore.getState().activeLayerId!);
         }
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (e.shiftKey && activeLayerId) {
-          const layer = layers.find(l => l.id === activeLayerId);
-          if (layer && !layer.locked) {
-            removeLayer(activeLayerId);
-            recordHistory('Delete Layer');
-          }
-        } else if (activeTool === 'slice_select' && (window as any)._sliceLastClickedIdx !== undefined) {
-          const idx = (window as any)._sliceLastClickedIdx;
-          const { slices, setSlices } = useStore.getState();
-          const nextSlices = slices.filter((_, i) => i !== idx);
-          setSlices(nextSlices);
-          delete (window as any)._sliceLastClickedIdx;
-          recordHistory('Delete Slice');
-        } else {
-          window.dispatchEvent(new CustomEvent('delete-selection'));
-        }
+
+      // Selection operations
+      if (isCtrl && e.key === 'a') {
+        e.preventDefault();
+        setSelectionRect({ x: 0, y: 0, w: useStore.getState().documentSize.w, h: useStore.getState().documentSize.h });
+      }
+      if (isCtrl && e.key === 'd') {
+        e.preventDefault();
+        setSelectionRect(null);
+        setLassoPaths([]);
+        setCropRect(null);
+      }
+      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        setIsInverseSelection(!useStore.getState().isInverseSelection);
+      }
+
+      // Tools (single key press)
+      const keyMap: Record<string, [string, string]> = {
+        'v': ['move', 'move'],
+        'm': ['marquee', 'rectangle_marquee'],
+        'l': ['lasso', 'lasso'],
+        'w': ['selection', 'quick_selection'],
+        'c': ['crop', 'crop'],
+        'i': ['eyedropper', 'eyedropper'],
+        'j': ['healing', 'healing'],
+        'b': ['brush', 'brush'],
+        's': ['clone', 'clone'],
+        'y': ['history', 'history_brush'],
+        'e': ['eraser', 'eraser'],
+        'g': ['gradient', 'gradient'],
+        'o': ['dodge', 'dodge'],
+        'p': ['pen', 'pen'],
+        't': ['text', 'text'],
+        'a': ['path', 'path_select'],
+        'u': ['shape', 'shape'],
+        'h': ['hand', 'hand'],
+        'z': ['zoom', 'zoom_tool'],
+      };
+
+      if (!isCtrl && !e.altKey && !e.shiftKey && keyMap[e.key.toLowerCase()]) {
+        e.preventDefault();
+        const [groupId, defaultVariantId] = keyMap[e.key.toLowerCase()];
+        setActiveTool(defaultVariantId);
+        setToolVariant(groupId, defaultVariantId);
+        toolState.currentTool = defaultVariantId;
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+<<<<<<< HEAD
   }, [activeLayerId, layers]);
 
   React.useEffect(() => {
@@ -674,67 +755,64 @@ const App: React.FC = () => {
     if (!activeLayerId) return;
     const layer = layers.find(l => l.id === activeLayerId);
     if (!layer || !layer.dataUrl) return;
+=======
+  }, [undo, redo, addLayer, setSelectionRect, setLassoPaths, setCropRect, setIsInverseSelection, setActiveTool, setToolVariant, setIsFillPickerOpen, duplicateLayer]);
+
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
     try {
-      setIsProcessing(true);
-      setProcessingText('AI is removing background...');
+      const result = await ImportEngine.importFile(file);
+      if (result.type !== 'image' || !result.dataUrl) return;
 
-      const blob = await removeBackground(layer.dataUrl);
+      const currentState = useStore.getState();
+      const isDefaultBackground =
+        currentState.layers.length === 1 &&
+        currentState.layers[0].name === 'Background' &&
+        currentState.layers[0].type === 'paint';
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        updateLayer(activeLayerId, { dataUrl: result });
-        recordHistory('Remove Background');
-        setIsProcessing(false);
-      };
-      reader.readAsDataURL(blob);
-    } catch (error) {
-      console.error('Failed to remove background:', error);
-      setIsProcessing(false);
-      alert('Failed to remove background. Please try again.');
-    }
-  };
-
-  const handleSelectSubject = () => {
-    if (!activeLayerId) return;
-    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-
-    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-    let found = false;
-
-    // Fast scan
-    for (let y = 0; y < canvas.height; y += 2) {
-      for (let x = 0; x < canvas.width; x += 2) {
-        const alpha = data[(y * canvas.width + x) * 4 + 3];
-        if (alpha > 20) {
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-          found = true;
-        }
+      if (currentState.layers.length === 0 || isDefaultBackground) {
+        currentState.setDocumentSize({ w: result.width, h: result.height });
+        currentState.setLayers([{
+          id: Math.random().toString(36).substring(7),
+          name: result.name,
+          type: 'image',
+          dataUrl: result.dataUrl,
+          position: { x: 0, y: 0 },
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'source-over'
+        }]);
+      } else {
+        currentState.setLayers([...
+          currentState.layers,
+          {
+            id: Math.random().toString(36).substring(7),
+            name: result.name,
+            type: 'image',
+            dataUrl: result.dataUrl,
+            position: {
+              x: (currentState.documentSize.w - result.width) / 2,
+              y: (currentState.documentSize.h - result.height) / 2
+            },
+            visible: true,
+            locked: false,
+            opacity: 1,
+            blendMode: 'source-over'
+          }
+        ]);
       }
-    }
 
-    if (found) {
-      // Add a small 2px padding
-      setSelectionRect({
-        x: Math.max(0, minX - 2),
-        y: Math.max(0, minY - 2),
-        w: Math.min(canvas.width - minX, maxX - minX + 4),
-        h: Math.min(canvas.height - minY, maxY - minY + 4)
-      });
-      setIsInverseSelection(false);
-      setLassoPaths([]); // Clear lasso paths if using rect
-      recordHistory('Select Subject');
-    } else {
-      alert('No subject found on this layer.');
+      currentState.recordHistory(`Open ${result.name}`);
+    } catch (err) {
+      console.error(err);
+      addAlert({ type: 'error', message: 'Failed to open image.' });
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -1052,8 +1130,12 @@ const App: React.FC = () => {
 
   return (
     <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''}`}>
+<<<<<<< HEAD
       <input type="file" id="global-file-input" accept="image/*,.psd" hidden onChange={handleImageUpload} />
       <input type="file" id="place-file-input" accept="image/*,.psd" hidden onChange={handlePlaceUpload} />
+=======
+      <input type="file" id="global-file-input" hidden onChange={handleImageUpload} />
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
       {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
         <div
@@ -1078,6 +1160,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
+<<<<<<< HEAD
         <MenuBar
           onFileOpen={() => document.getElementById('global-file-input')?.click()}
           onPlaceFile={() => document.getElementById('place-file-input')?.click()}
@@ -1140,6 +1223,10 @@ const App: React.FC = () => {
         />
 
 
+=======
+        <AlertContainer />
+        <MenuBar />
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
         <div className="header-right">
           {/* Mobile toggle buttons */}
@@ -1157,8 +1244,13 @@ const App: React.FC = () => {
           </button>
         </div>
       </header>
+
       <OptionsBar />
+<<<<<<< HEAD
       <TabBar />
+=======
+
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
       <div className="app-body">
         <div className={`toolbar-wrapper ${isToolsOpen ? 'mobile-open' : ''}`}>
           {isToolsOpen && (
@@ -1171,7 +1263,8 @@ const App: React.FC = () => {
         </div>
 
         <main className="workspace">
-          <div className="canvas-viewport">
+          <div className="canvas-viewport" style={{ position: "relative" }}>
+            <GlobalRulers />
             <Canvas />
           </div>
 
@@ -1416,6 +1509,7 @@ const App: React.FC = () => {
         <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
       )}
 
+<<<<<<< HEAD
       {saveModal.type === 'cloud' && (
         <CloudStorageModal
           isOpen={true}
@@ -1471,6 +1565,16 @@ const App: React.FC = () => {
         />
       )}
     </div>
+=======
+            <NewDocumentDialog />
+      <OpenRecentDialog />
+      <OpenFromCloudDialog />
+      <ExportAsDialog />
+      <FileInfoDialog />
+      <CameraDialog />
+      <MobileCameraDialog />
+</div>
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
   );
 };
 

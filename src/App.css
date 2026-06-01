@@ -48,6 +48,78 @@ body {
   /* Increased to be above mobile-backdrop (1200) */
 }
 
+<<<<<<< HEAD
+=======
+.main-nav {
+  display: flex;
+  height: 100%;
+}
+
+.menu-item-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  cursor: pointer;
+  height: 100%;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.menu-item-container:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+
+
+
+
+.menu-option {
+  padding: 8px 16px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.menu-option:hover {
+  background-color: var(--accent-primary);
+}
+
+.menu-option .shortcut {
+  color: var(--text-muted);
+}
+
+.menu-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+/* Submenus */
+.menu-option.submenu-parent {
+  position: relative;
+  justify-content: space-between;
+}
+
+.menu-submenu {
+  position: absolute;
+  top: -4px;
+  left: 100%;
+  background: var(--bg-header);
+  border: 1px solid var(--border-color);
+  min-width: 180px;
+  display: none;
+  flex-direction: column;
+  box-shadow: 10px 10px 30px rgba(0, 0, 0, 0.5);
+  padding: 4px 0;
+  z-index: 1000;
+}
+
+.menu-option.submenu-parent:hover .menu-submenu {
+  display: flex;
+}
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
 /* Options Bar */
 
@@ -62,7 +134,14 @@ body {
   padding: 6px 10px;
   gap: 15px;
   font-size: 11px;
+<<<<<<< HEAD
   overflow: visible;
+=======
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 }
 
 .tool-indicator {
@@ -135,7 +214,11 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+<<<<<<< HEAD
   min-height: 28px;
+=======
+  flex-shrink: 0;
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 }
 
 /* Main Body */
@@ -427,6 +510,7 @@ body {
 
 .layers-panel {
   flex: 2;
+<<<<<<< HEAD
   min-height: 200px;
 }
 
@@ -441,6 +525,9 @@ body {
   color: var(--text-secondary);
   font-size: 11px;
   font-style: italic;
+=======
+  overflow-y: scroll;
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 }
 
 .panel-tab {
@@ -1142,6 +1229,7 @@ body {
     transition: left 0.3s ease;
     box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
     padding: 20px 0;
+    overflow-y: auto;
   }
 
   .main-nav.mobile-open {
@@ -1177,33 +1265,12 @@ body {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
-  .menu-dropdown {
-    position: static;
-    display: flex;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    padding-left: 10px;
-    width: 100%;
-    max-height: 0;
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    flex-direction: column;
-    gap: 4px;
-    opacity: 0;
-  }
 
-  .menu-item-container.active .menu-dropdown {
-    max-height: 500px;
-    opacity: 1;
-    margin-top: 10px;
-    margin-bottom: 5px;
-  }
 
-  .options-bar {
+    .options-bar {
     padding: 8px 15px;
     overflow-x: auto;
     overflow-y: visible;
@@ -1320,6 +1387,7 @@ body {
 
   .layers-panel {
     flex: 1;
+    overflow-y: scroll;
   }
 
   .status-bar {
@@ -1347,18 +1415,15 @@ body {
     animation: simpleFadeIn 0.3s ease;
   }
 
-  .menu-item-container.active .menu-dropdown {
-    max-height: 500px;
-    display: flex;
   }
-}
 
 /* Hide desktop elements on mobile and vice versa */
 @media (min-width: 769px) {
 
   .mobile-menu-btn,
   .header-right,
-  .mobile-panel-header {
+  .mobile-panel-header,
+  .mobile-menu-header {
     display: none;
   }
 
@@ -1370,6 +1435,18 @@ body {
     font-size: 14px;
     color: var(--text-primary);
     margin-right: 15px;
+  }
+
+  .toolbar-wrapper,
+  .side-panels {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    height: auto;
+    width: auto;
+    border-radius: 0;
+    box-shadow: none;
+    transition: none;
   }
 }
 

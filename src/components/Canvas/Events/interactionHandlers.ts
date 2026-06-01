@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import type { CanvasContext, Point, Rect, CanvasRefs } from '../types';
 import { getToolModule } from '../../../tools';
 import { useStore } from '../../../store/useStore';
+import { toolState } from '../../../tools/toolState';
 
 export const startAction = (
   clientX: number,
@@ -27,6 +28,7 @@ export const startAction = (
     hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>;
   }
 ) => {
+<<<<<<< HEAD
   const { coords, activeTool, canvasOffset, lassoPaths, primaryOpacity, isLightingEnabled, setLightingEnabled } = context;
 
   if (activeTool === 'lighting') {
@@ -34,6 +36,15 @@ export const startAction = (
       if (setLightingEnabled) setLightingEnabled(true);
       window.dispatchEvent(new CustomEvent('generate-depth-map'));
     }
+=======
+  const { coords, activeTool, canvasOffset, lassoPaths, activeLayerId, layers } = context;
+
+  // Check if tool requires active layer
+  const toolsRequiringLayer = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'patch', 'smudge', 'clone', 'pattern_stamp', 'mixer_brush', 'color_replacement', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush', 'marquee', 'ellipse_marquee', 'lasso', 'polygonal_lasso', 'magnetic_lasso', 'quick_selection', 'magic_wand', 'object_selection', 'paint_bucket', 'gradient'];
+  if (toolsRequiringLayer.includes(activeTool) && !activeLayerId && layers.length > 0) {
+    useStore.getState().addAlert({ type: 'error', message: 'Please select a layer first.' });
+    return;
+>>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
   }
 
   const isAltPressedLocal = (e as any).altKey || context.isAlt;
@@ -56,10 +67,10 @@ export const startAction = (
       }
     }
     if (isInsideQuad) {
-      (window as any)._pcPoints = quad.map(point => ({ ...point }));
-      (window as any)._pcDragIdx = 8;
-      (window as any)._pcStartPoint = { ...coords };
-      (window as any)._pcOrigPoints = quad.map(point => ({ ...point }));
+      toolState._pcPoints = quad.map(point => ({ ...point }));
+      toolState._pcDragIdx = 8;
+      toolState._pcStartPoint = { ...coords };
+      toolState._pcOrigPoints = quad.map(point => ({ ...point }));
       handlers.setIsInteracting(true);
       refs.lastPointRef.current = coords;
       refs.startMouseRef.current = { x: clientX, y: clientY };
@@ -67,8 +78,6 @@ export const startAction = (
       return;
     }
   }
-
-  (window as any)._primaryOpacity = primaryOpacity;
 
   const activeToolModule = getToolModule(currentTool);
   // Allow start without ctx for tools that don't need it (crop, hand, etc)
@@ -91,7 +100,7 @@ export const startAction = (
     flushSync(() => {
       handlers.setTextEditor({ ...coords, value: '' });
     });
-    (window as any)._lastTextTool = activeTool;
+    toolState._lastTextTool = activeTool;
     const input = refs.hiddenTextInputRef.current;
     if (input) {
       input.focus();
@@ -214,7 +223,7 @@ export const endAction = (
     const w = Math.abs(state.draftShape.w);
     const h = Math.abs(state.draftShape.h);
     if (w > 1 || h > 1) {
-      let shapeType: any = activeTool === 'ellipse_shape' ? 'ellipse' : (activeTool === 'line_shape' ? 'path' : (activeTool === 'shape' ? 'rect' : 'path'));
+      const shapeType: any = activeTool === 'ellipse_shape' ? 'ellipse' : (activeTool === 'line_shape' ? 'path' : (activeTool === 'shape' ? 'rect' : 'path'));
       let points: any[] = [];
       let name = 'Shape';
 

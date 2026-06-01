@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Point } from '../types';
+import { toolState } from '../../../tools/toolState';
 
 interface RulerOverlayProps {
   rulerData: { start: Point, end: Point } | null;
@@ -18,7 +19,7 @@ export const RulerOverlay: React.FC<RulerOverlayProps> = ({
       {slices && slices.length > 0 && (
         <div className="slices-overlay" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1500 }}>
           {slices.map((slice, i) => {
-            const isSelected = (window as any)._sliceLastClickedIdx === i;
+            const isSelected = toolState._sliceLastClickedIdx === i;
             return (
               <div
                 key={slice.id}

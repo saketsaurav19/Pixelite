@@ -14,6 +14,7 @@ import { getCursor as getCursorUtil } from './Core/cursorUtils';
 import { startAction as startActionHandler, moveAction as moveActionHandler, endAction as endActionHandler, handleDoubleClick as handleDoubleClickUtil } from './Events/interactionHandlers';
 import { handleTouchStart as handleTouchStartUtil, handleTouchMove as handleTouchMoveUtil } from './Events/touchHandlers';
 import { BRUSH_TOOLS } from './Core/toolUtils';
+import { toolState } from '../../tools/toolState';
 import { useLayerRendering } from './Rendering/useLayerRendering';
 import { useThumbnailGeneration } from './Rendering/useThumbnailGeneration';
 import { useSelectionAnimation } from './Rendering/useSelectionAnimation';
@@ -232,12 +233,12 @@ const Canvas: React.FC = () => {
     const handleClearLasso = () => setDraftLasso(null);
     const handleSetGradStart = (e: any) => {
       setGradientStart(e.detail);
-      (window as any)._gradientStart = e.detail;
+      toolState._gradientStart = e.detail;
     };
     const handleSetGradEnd = (e: any) => setCurrentMousePos(e.detail);
     const handleClearGrad = () => {
       setGradientStart(null);
-      delete (window as any)._gradientStart;
+      delete toolState._gradientStart;
     };
 
     window.addEventListener('draw-draft-rect', handleDrawDraft);
@@ -598,7 +599,7 @@ const Canvas: React.FC = () => {
       ctx.setLineDash([5, 5]);
       ctx.strokeRect(textEditor.x - padding, textEditor.y, maxWidth + padding * 2 + 10, lines.length * fs + padding);
       ctx.setLineDash([]);
-      const isVertical = (window as any)._lastTextTool === 'vertical_text';
+      const isVertical = toolState._lastTextTool === 'vertical_text';
       lines.forEach((line, i) => {
         if (isVertical) {
           const chars = line.split('');
@@ -812,8 +813,8 @@ const Canvas: React.FC = () => {
           </div>
         )}
 
-        {(window as any)._healingSource && activeTool === 'healing_brush' && (
-          <div className="source-cursor" style={{ position: 'absolute', left: (window as any)._healingSource.x / 2, top: (window as any)._healingSource.y / 2, width: '20px', height: '20px', border: '1px solid #00ff00', borderRadius: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1000 }}>
+        {toolState._healingSource && activeTool === 'healing_brush' && (
+          <div className="source-cursor" style={{ position: 'absolute', left: toolState._healingSource.x / 2, top: toolState._healingSource.y / 2, width: '20px', height: '20px', border: '1px solid #00ff00', borderRadius: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1000 }}>
             <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '1px', background: '#00ff00' }} />
             <div style={{ position: 'absolute', left: '50%', top: 0, width: '1px', height: '100%', background: '#00ff00' }} />
           </div>

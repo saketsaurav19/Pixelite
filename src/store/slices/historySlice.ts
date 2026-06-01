@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { EditorState, HistoryEntry } from '../types';
+import { RecentProjectsStorage } from '../../services/storage/RecentProjectsStorage';
 
 export interface HistorySlice {
   history: HistoryEntry[];
@@ -8,11 +9,14 @@ export interface HistorySlice {
   undo: () => void;
   redo: () => void;
   recordHistory: (actionName: string) => void;
+  setHistory: (history: HistoryEntry[], index: number) => void;
 }
 
 export const createHistorySlice: StateCreator<EditorState, [], [], HistorySlice> = (set) => ({
   history: [], // Will be initialized in the main store
   historyIndex: 0,
+
+  setHistory: (history, index) => set({ history, historyIndex: index }),
 
   undo: () => set((state) => {
     if (state.historyIndex <= 0) return state;
@@ -70,6 +74,48 @@ export const createHistorySlice: StateCreator<EditorState, [], [], HistorySlice>
       },
     };
     const newHistory = state.history.slice(0, state.historyIndex + 1);
+
+    // Autosave debounced
+    if (typeof window !== 'undefined') {
+      if ((window as any)._autosaveTimeout) {
+        clearTimeout((window as any)._autosaveTimeout);
+      }
+      (window as any)._autosaveTimeout = setTimeout(async () => {
+        // Find main canvas to generate thumbnail
+        const canvas = document.querySelector('canvas.layer-canvas') as HTMLCanvasElement;
+        let thumbnail = '';
+        if (canvas) {
+           try {
+             // Create a small 200px thumbnail
+             const offscreen = document.createElement('canvas');
+             const ctx = offscreen.getContext('2d');
+             if (ctx) {
+                const ratio = canvas.width / canvas.height;
+                offscreen.width = 200;
+                offscreen.height = 200 / ratio;
+
+                // We need to draw all visible layers since .layer-canvas might just be one layer
+                // However, as a simple approximation we can draw the viewport or first layer if possible
+                // Alternatively, just grab document.querySelector('.canvas-stack') and render it
+                // We'll just generate an empty thumbnail for now, since generating a proper combined thumbnail
+                // in the background is complex without DOM-to-image.
+                // We will rely on RecentProjectsStorage to manage states.
+                thumbnail = canvas.toDataURL('image/jpeg', 0.5);
+             }
+           } catch(e) {
+             console.error('Failed to generate thumbnail', e);
+           }
+        }
+        const savedId = await RecentProjectsStorage.saveProjectState(state as unknown as EditorState, thumbnail, state.currentProjectId, [...newHistory, newEntry], newHistory.length);
+        if (savedId && state.currentProjectId !== savedId) {
+          // We need to set it on the actual store instance since we are in a timeout
+          // For this we can use an action if available, but the slice itself only sets state for history.
+          // Because we only have set(), we'll use that.
+          set({ currentProjectId: savedId } as Partial<EditorState>);
+        }
+      }, 2000); // 2 second debounce
+    }
+
     return {
       history: [...newHistory, newEntry],
       historyIndex: newHistory.length,
