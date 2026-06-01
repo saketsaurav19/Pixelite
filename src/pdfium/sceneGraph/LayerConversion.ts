@@ -61,13 +61,10 @@ export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0
         opacity: node.opacity ?? 1,
         blendMode: (node.blendMode as any) || 'source-over',
         position,
-        textData: {
-          text: node.geometry.text,
-          fontSize: node.geometry.fontSize,
-          fontFamily: node.geometry.fontFamily || 'Arial',
-          color: node.style.fillColor || '#000000',
-        }
-      } as any;
+        textContent: node.geometry.text,
+        fontSize: node.geometry.fontSize,
+        color: node.style.fillColor || '#000000',
+      };
 
     case 'group':
     case 'page':

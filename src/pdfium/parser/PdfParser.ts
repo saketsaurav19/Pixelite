@@ -1,5 +1,5 @@
 import type { PDFiumPage } from '@hyzyla/pdfium';
-import type { SceneNode, ImageNode } from '../types/SceneNode';
+import type { SceneNode, ImageNode, TextNode } from '../types/SceneNode';
 import { nanoid } from 'nanoid';
 
 type PdfBitmapRenderOptions = {
@@ -52,6 +52,31 @@ export class PdfParser {
   async parseObjects(): Promise<SceneNode[]> {
     const nodes: SceneNode[] = [];
 
+    const text = this.page.getText().trim();
+    if (text) {
+      const textNode: TextNode = {
+        id: nanoid(),
+        name: 'Editable Text',
+        type: 'text',
+        transform: { a: 1, b: 0, c: 0, d: 1, e: 8, f: 8 },
+        opacity: 1,
+        blendMode: 'source-over',
+        // Keep extracted page text available for editing without drawing a
+        // duplicate, approximately positioned text block over the PDF preview.
+        visible: false,
+        locked: false,
+        geometry: {
+          text,
+          fontSize: 16,
+          fontFamily: 'Arial'
+        },
+        style: {
+          fillColor: '#000000'
+        }
+      };
+      nodes.push(textNode);
+    }
+
     // Render the page as a single raster node. PDFium returns raw bitmap bytes by
     // default, so we provide a render callback that turns those bytes into a PNG
     // data URL before passing the image back to the main thread.
@@ -63,13 +88,13 @@ export class PdfParser {
 
     const imageNode: ImageNode = {
       id: nanoid(),
-      name: `Page Image`,
+      name: 'PDF Preview',
       type: 'image',
       transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
       opacity: 1,
       blendMode: 'source-over',
       visible: true,
-      locked: false,
+      locked: true,
       geometry: {
         dataUrl,
         width: rendered.width,
