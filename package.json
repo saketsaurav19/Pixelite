@@ -26,7 +26,6 @@
     "lucide-react": "^1.11.0",
     "nanoid": "^5.1.9",
     "onnxruntime-web": "^1.21.0",
-    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174",
     "piexifjs": "^1.0.6",
     "react": "^19.2.5",
