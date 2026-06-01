@@ -1,6 +1,6 @@
-import { PdfiumAdapter } from '../engine/PdfiumAdapter';
+import { PdfjsEngineAdapter } from './engines/PdfjsEngineAdapter';
 
-const adapter = new PdfiumAdapter();
+const adapter = new PdfjsEngineAdapter();
 
 self.onmessage = async (e: MessageEvent) => {
   const { type, payload, id } = e.data;

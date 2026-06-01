@@ -125,7 +125,7 @@ export class ImportEngine {
   // layers extracted from pdf-lib content streams, with PDF.js raster fallback.
   // ───────────────────────────────────────────────────────────────────────────
   static async importPdf(file: File): Promise<ImportResult> {
-    const { PdfImportManager } = await import('../../pdfium/PdfImportManager');
+    const { PdfImportManager } = await import('../../pdf/PdfImportManager');
     const arrayBuffer = await file.arrayBuffer();
     const result = await PdfImportManager.importPdf(arrayBuffer);
     return {
