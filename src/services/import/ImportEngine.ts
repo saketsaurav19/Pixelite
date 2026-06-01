@@ -106,7 +106,7 @@ function segmentsToSvgD(segs: PathSegment[], vph: number): string {
 async function extractPageLayers(
   page: any,
   viewport: any,
-  pageIndex: number
+  _pageIndex: number
 ): Promise<Layer[]> {
   const vph = viewport.height; // for y-flip
   const vpw = viewport.width;
@@ -131,10 +131,6 @@ async function extractPageLayers(
   let pathSegs: PathSegment[] = [];
   let vectorGroupCounter = 0;
 
-  const getOrCreateVectorGroup = () => {
-    vectorGroupCounter++;
-    return vectorGroupCounter;
-  };
 
   // Helper: build a shape Layer from accumulated path + current paint state
   const flushPath = (paint: 'fill' | 'stroke' | 'both') => {
@@ -151,7 +147,6 @@ async function extractPageLayers(
     const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${vpw}" height="${vph}">
   <path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" fill-opacity="${currentState.alpha}" stroke-opacity="${currentState.strokeAlpha}"/>
 </svg>`;
-    const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgMarkup);
 
     layers.push({
       id: nanoid(),
