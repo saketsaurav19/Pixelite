@@ -502,6 +502,20 @@ function buildPdfVectorLayers(contentStreams: string[], viewportTransform: numbe
         operands.push(token);
       }
     }
+  };
+
+  for (const content of contentStreams) {
+    const tokens = tokenizePdfContent(content);
+    let operands: PdfOperand[] = [];
+
+    for (const token of tokens) {
+      if (typeof token === 'string' && PDF_CONTENT_OPERATORS.has(token)) {
+        handleOperator(token, operands);
+        operands = [];
+      } else if (typeof token === 'number' || (typeof token === 'object' && token.type === 'name')) {
+        operands.push(token);
+      }
+    }
   }
 
   if (pathSegs.length > 0 && !clippingPathPending) flushPath('fill');
