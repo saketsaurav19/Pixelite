@@ -57,8 +57,8 @@ const PDF_CONTENT_OPERATORS = new Set([
   'm', 'l', 'c', 'v', 'y', 'h', 're', 'f', 'F', 'f*', 'S', 's',
   'B', 'B*', 'b', 'b*', 'n', 'W', 'W*', 'BT', 'ET', 'Tf', 'Tj',
   'TJ', "'", '"', 'Td', 'TD', 'Tm', 'T*', 'Do', 'sh', 'BI', 'ID',
-  'EI', 'CS', 'cs', 'SC', 'SCN', 'sc', 'scn', 'd', 'i', 'j', 'J',
-  'M', 'ri', 'Tr', 'Ts', 'Tw', 'Tz', 'TL', 'Tc', 'BX', 'EX', 'BMC',
+  'EI', 'BX', 'EX', 'CS', 'cs', 'SC', 'SCN', 'sc', 'scn', 'd', 'i', 'j', 'J',
+  'M', 'ri', 'Tr', 'Ts', 'Tw', 'Tz', 'TL', 'Tc', 'BMC',
   'BDC', 'EMC', 'DP', 'MP',
 ]);
 
@@ -116,21 +116,60 @@ function transformPoint(matrix: number[], x: number, y: number): [number, number
   return [a * x + c * y + e, b * x + d * y + f];
 }
 
-function segmentsToSvgD(segs: PathSegment[], pageHeight: number): string {
-  const flip = (y: number) => pageHeight - y;
 
+function transformPdfPoint(state: PdfGraphicsState, viewportTransform: number[], x: number, y: number): [number, number] {
+  const pagePoint = transformPoint(state.ctm, x, y);
+  return transformPoint(viewportTransform, pagePoint[0], pagePoint[1]);
+}
+
+function normalizePathBounds(segs: PathSegment[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const xs: number[] = [];
+  const ys: number[] = [];
+
+  for (const seg of segs) {
+    for (let i = 0; i < seg.args.length; i += 2) {
+      const x = seg.args[i];
+      const y = seg.args[i + 1];
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        xs.push(x);
+        ys.push(y);
+      }
+    }
+  }
+
+  if (xs.length === 0) return null;
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+}
+
+function pathIntersectsPage(segs: PathSegment[], pageWidth: number, pageHeight: number): boolean {
+  const bounds = normalizePathBounds(segs);
+  if (!bounds) return false;
+
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxY - bounds.minY;
+  if (width < 0.01 && height < 0.01) return false;
+
+  return bounds.maxX >= 0 && bounds.maxY >= 0 && bounds.minX <= pageWidth && bounds.minY <= pageHeight;
+}
+
+function segmentsToSvgD(segs: PathSegment[]): string {
   let d = '';
   for (const seg of segs) {
     const a = seg.args;
     switch (seg.op) {
       case 'm':
-        d += `M ${a[0]} ${flip(a[1])} `;
+        d += `M ${a[0]} ${a[1]} `;
         break;
       case 'l':
-        d += `L ${a[0]} ${flip(a[1])} `;
+        d += `L ${a[0]} ${a[1]} `;
         break;
       case 'c':
-        d += `C ${a[0]} ${flip(a[1])} ${a[2]} ${flip(a[3])} ${a[4]} ${flip(a[5])} `;
+        d += `C ${a[0]} ${a[1]} ${a[2]} ${a[3]} ${a[4]} ${a[5]} `;
         break;
       case 'h':
         d += 'Z ';
@@ -147,7 +186,7 @@ function bytesToString(bytes: Uint8Array): string {
 }
 
 function decodePdfStream(stream: unknown): string {
-  if (stream instanceof PDFContentStream) return bytesToString(stream.getUnencodedContents());
+  if (stream instanceof PDFContentStream) return bytesToString((stream as PDFContentStream).getUnencodedContents());
   if (stream instanceof PDFRawStream) return bytesToString(decodePDFRawStream(stream).decode());
 
   const candidate = stream as {
@@ -168,15 +207,18 @@ function getPdfContentStreams(pdfDoc: PDFDocument, pageIndex: number): string[] 
   const contents = page.node.Contents?.();
   if (!contents) return [];
 
+  return resolvePdfContentStreams(pdfDoc, contents);
+}
+
+function resolvePdfContentStreams(pdfDoc: PDFDocument, contents: unknown): string[] {
   const context = (pdfDoc as unknown as { context: { lookup: (object: unknown) => unknown } }).context;
   const resolve = (object: unknown) => context.lookup(object);
 
   if (contents instanceof PDFArray) {
+    const contentArray = contents as PDFArray;
     const streams: string[] = [];
-    for (let i = 0; i < contents.size(); i++) {
-      const resolved = resolve(contents.get(i));
-      const decoded = decodePdfStream(resolved);
-      if (decoded) streams.push(decoded);
+    for (let i = 0; i < contentArray.size(); i++) {
+      streams.push(...resolvePdfContentStreams(pdfDoc, contentArray.get(i)));
     }
     return streams;
   }
@@ -269,15 +311,15 @@ function tokenizePdfContent(source: string): Array<number | string | { type: 'na
   return tokens;
 }
 
-function addRectPath(pathSegs: PathSegment[], state: PdfGraphicsState, operands: PdfOperand[]) {
+function addRectPath(pathSegs: PathSegment[], state: PdfGraphicsState, viewportTransform: number[], operands: PdfOperand[]) {
   const x = operandNumber(operands, 0);
   const y = operandNumber(operands, 1);
   const width = operandNumber(operands, 2);
   const height = operandNumber(operands, 3);
-  const p1 = transformPoint(state.ctm, x, y);
-  const p2 = transformPoint(state.ctm, x + width, y);
-  const p3 = transformPoint(state.ctm, x + width, y + height);
-  const p4 = transformPoint(state.ctm, x, y + height);
+  const p1 = transformPdfPoint(state, viewportTransform, x, y);
+  const p2 = transformPdfPoint(state, viewportTransform, x + width, y);
+  const p3 = transformPdfPoint(state, viewportTransform, x + width, y + height);
+  const p4 = transformPdfPoint(state, viewportTransform, x, y + height);
 
   pathSegs.push({ op: 'm', args: p1 });
   pathSegs.push({ op: 'l', args: p2 });
@@ -286,7 +328,7 @@ function addRectPath(pathSegs: PathSegment[], state: PdfGraphicsState, operands:
   pathSegs.push({ op: 'h', args: [] });
 }
 
-function buildPdfVectorLayers(contentStreams: string[], pageHeight: number): Layer[] {
+function buildPdfVectorLayers(contentStreams: string[], viewportTransform: number[], pageWidth: number, pageHeight: number): Layer[] {
   const layers: Layer[] = [];
   const stateStack: PdfGraphicsState[] = [];
   let currentState: PdfGraphicsState = {
@@ -298,13 +340,21 @@ function buildPdfVectorLayers(contentStreams: string[], pageHeight: number): Lay
     strokeAlpha: 1,
   };
   let pathSegs: PathSegment[] = [];
+  let clippingPathPending = false;
   let currentPoint: [number, number] = [0, 0];
+
+  const clearClippingPath = () => {
+    pathSegs = [];
+    clippingPathPending = false;
+  };
 
   const flushPath = (paint: 'fill' | 'stroke' | 'both') => {
     if (pathSegs.length === 0) return;
-    const d = segmentsToSvgD(pathSegs, pageHeight);
+    clippingPathPending = false;
+    const paintedPath = pathSegs;
+    const d = segmentsToSvgD(paintedPath);
     pathSegs = [];
-    if (!d) return;
+    if (!d || !pathIntersectsPage(paintedPath, pageWidth, pageHeight)) return;
 
     const fill = paint === 'stroke' ? '' : colorToHex(currentState.fillColor);
     const stroke = paint === 'fill' ? '' : colorToHex(currentState.strokeColor);
@@ -368,30 +418,30 @@ function buildPdfVectorLayers(contentStreams: string[], pageHeight: number): Lay
         currentState.strokeColor = [operandNumber(operands, 0), operandNumber(operands, 1), operandNumber(operands, 2), operandNumber(operands, 3)];
         break;
       case 'm':
-        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
+        currentPoint = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 0), operandNumber(operands, 1));
         pathSegs.push({ op: 'm', args: currentPoint });
         break;
       case 'l':
-        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
+        currentPoint = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 0), operandNumber(operands, 1));
         pathSegs.push({ op: 'l', args: currentPoint });
         break;
       case 'c': {
-        const cp1 = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
-        const cp2 = transformPoint(currentState.ctm, operandNumber(operands, 2), operandNumber(operands, 3));
-        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 4), operandNumber(operands, 5));
+        const cp1 = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 0), operandNumber(operands, 1));
+        const cp2 = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 2), operandNumber(operands, 3));
+        currentPoint = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 4), operandNumber(operands, 5));
         pathSegs.push({ op: 'c', args: [...cp1, ...cp2, ...currentPoint] });
         break;
       }
       case 'v': {
         const cp1 = currentPoint;
-        const cp2 = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
-        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 2), operandNumber(operands, 3));
+        const cp2 = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 0), operandNumber(operands, 1));
+        currentPoint = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 2), operandNumber(operands, 3));
         pathSegs.push({ op: 'c', args: [...cp1, ...cp2, ...currentPoint] });
         break;
       }
       case 'y': {
-        const cp1 = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
-        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 2), operandNumber(operands, 3));
+        const cp1 = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 0), operandNumber(operands, 1));
+        currentPoint = transformPdfPoint(currentState, viewportTransform, operandNumber(operands, 2), operandNumber(operands, 3));
         pathSegs.push({ op: 'c', args: [...cp1, ...currentPoint, ...currentPoint] });
         break;
       }
@@ -399,31 +449,41 @@ function buildPdfVectorLayers(contentStreams: string[], pageHeight: number): Lay
         pathSegs.push({ op: 'h', args: [] });
         break;
       case 're':
-        addRectPath(pathSegs, currentState, operands);
+        addRectPath(pathSegs, currentState, viewportTransform, operands);
+        break;
+      case 'W':
+      case 'W*':
+        clippingPathPending = true;
         break;
       case 'f':
       case 'F':
       case 'f*':
-        flushPath('fill');
+        if (clippingPathPending) clearClippingPath();
+        else flushPath('fill');
         break;
       case 'S':
-        flushPath('stroke');
+        if (clippingPathPending) clearClippingPath();
+        else flushPath('stroke');
         break;
       case 's':
         pathSegs.push({ op: 'h', args: [] });
-        flushPath('stroke');
+        if (clippingPathPending) clearClippingPath();
+        else flushPath('stroke');
         break;
       case 'B':
       case 'B*':
-        flushPath('both');
+        if (clippingPathPending) clearClippingPath();
+        else flushPath('both');
         break;
       case 'b':
       case 'b*':
         pathSegs.push({ op: 'h', args: [] });
-        flushPath('both');
+        if (clippingPathPending) clearClippingPath();
+        else flushPath('both');
         break;
       case 'n':
         pathSegs = [];
+        clippingPathPending = false;
         break;
       default:
         break;
@@ -442,9 +502,23 @@ function buildPdfVectorLayers(contentStreams: string[], pageHeight: number): Lay
         operands.push(token);
       }
     }
+  };
+
+  for (const content of contentStreams) {
+    const tokens = tokenizePdfContent(content);
+    let operands: PdfOperand[] = [];
+
+    for (const token of tokens) {
+      if (typeof token === 'string' && PDF_CONTENT_OPERATORS.has(token)) {
+        handleOperator(token, operands);
+        operands = [];
+      } else if (typeof token === 'number' || (typeof token === 'object' && token.type === 'name')) {
+        operands.push(token);
+      }
+    }
   }
 
-  if (pathSegs.length > 0) flushPath('fill');
+  if (pathSegs.length > 0 && !clippingPathPending) flushPath('fill');
   return layers;
 }
 
@@ -478,7 +552,7 @@ async function extractPageLayers(
   const pageHeight = viewport.height;
   let layers: Layer[] = [];
   try {
-    layers = buildPdfVectorLayers(getPdfContentStreams(pdfDoc, pageIndex), pageHeight);
+    layers = buildPdfVectorLayers(getPdfContentStreams(pdfDoc, pageIndex), viewport.transform, pageWidth, pageHeight);
   } catch (error) {
     console.warn('PDF vector extraction failed; rasterizing page instead:', error);
   }
