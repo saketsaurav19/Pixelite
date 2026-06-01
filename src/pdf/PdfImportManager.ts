@@ -1,4 +1,4 @@
-import { WorkerClient } from './workers/WorkerClient';
+import { WorkerClient } from './worker/PdfWorkerClient';
 import { convertSceneNodeToLayer } from './sceneGraph/LayerConversion';
 import type { Layer } from '../store/types';
 import { nanoid } from 'nanoid';
