@@ -26,7 +26,7 @@ export interface ImportResult {
   iccProfile?: string;
 }
 
-async function rasterizePdfPage(page: any, viewport: any, pageWidth: number, pageHeight: number): Promise<Layer> {
+async function rasterizePdfPage(page: any, viewport: any, pageWidth: number, pageHeight: number, offsetX: number = 0, offsetY: number = 0): Promise<Layer> {
   const fallbackCanvas = document.createElement('canvas');
   fallbackCanvas.width = Math.round(pageWidth);
   fallbackCanvas.height = Math.round(pageHeight);
@@ -41,14 +41,31 @@ async function rasterizePdfPage(page: any, viewport: any, pageWidth: number, pag
     locked: false,
     opacity: 1,
     blendMode: 'source-over',
-    position: { x: 0, y: 0 },
+    position: { x: offsetX, y: offsetY },
     dataUrl: fallbackCanvas.toDataURL('image/png'),
   } as Layer;
 }
 
+
+function applyOffsetToLayers(layers: Layer[], dx: number, dy: number): void {
+  for (const layer of layers) {
+    if (layer.position) {
+      layer.position.x += dx;
+      layer.position.y += dy;
+    } else {
+      layer.position = { x: dx, y: dy };
+    }
+    if (layer.children) {
+      applyOffsetToLayers(layer.children, dx, dy);
+    }
+  }
+}
+
 async function extractPageLayers(
   pdfJsPage: any,
-  viewport: any
+  viewport: any,
+  offsetX: number = 0,
+  offsetY: number = 0
 ): Promise<Layer[]> {
   const pageWidth = viewport.width;
   const pageHeight = viewport.height;
@@ -59,6 +76,9 @@ async function extractPageLayers(
     const svgElement = await svgGfx.getSVG(opList, viewport);
     const svgString = (svgElement as any).outerHTML;
     layers = await parseSVG(svgString);
+    if (offsetX !== 0 || offsetY !== 0) {
+      applyOffsetToLayers(layers, offsetX, offsetY);
+    }
   } catch (error) {
     console.warn('PDF vector extraction failed; rasterizing page instead:', error);
   }
@@ -66,7 +86,7 @@ async function extractPageLayers(
   // Keep PDF.js as a raster-only safety net for pages whose vector content
   // cannot be represented as editable shape layers (text-only pages, images,
   // shadings, unsupported operators, or unusually encoded streams).
-  if (layers.length === 0) layers.push(await rasterizePdfPage(pdfJsPage, viewport, pageWidth, pageHeight));
+  if (layers.length === 0) layers.push(await rasterizePdfPage(pdfJsPage, viewport, pageWidth, pageHeight, offsetX, offsetY));
 
   return layers;
 }
@@ -208,15 +228,35 @@ export class ImportEngine {
           maxDocWidth = currentX - padding;
         }
 
+        // Create a white background shape for the page "artboard"
+        const artboardBg: Layer = {
+          id: nanoid(),
+          name: `Background`,
+          type: 'shape',
+          visible: true,
+          locked: true,
+          opacity: 1,
+          blendMode: 'source-over',
+          position: { x: pageX, y: pageY },
+          shapeData: {
+            type: 'rect',
+            w: viewport.width,
+            h: viewport.height,
+            fill: '#ffffff',
+            stroke: '',
+            strokeWidth: 0,
+          }
+        };
+
         // Extract per-element sub-layers
-        const subLayers = await extractPageLayers(page, viewport);
+        const subLayers = await extractPageLayers(page, viewport, pageX, pageY);
 
         // Wrap in a group named "Page N"
         const pageGroup: Layer = {
           id: nanoid(),
           name: `Page ${i}`,
           type: 'group',
-          children: subLayers,
+          children: [artboardBg, ...subLayers],
           collapsed: false,
           position: { x: pageX, y: pageY },
           visible: true,
