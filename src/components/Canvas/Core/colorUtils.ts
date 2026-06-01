@@ -1,6 +1,6 @@
 import type { CanvasRefs } from '../types';
 import type { Layer } from '../../../store/useStore';
-import { findLayerById } from '../../../utils/layerUtils';
+import { findLayerById } from '../../../utils/layerUtils.ts';
 
 export const colorDistance = (data: Uint8ClampedArray, idx: number, r: number, g: number, b: number, a: number): number => {
   return Math.abs(data[idx] - r) + Math.abs(data[idx + 1] - g) + Math.abs(data[idx + 2] - b) + Math.abs(data[idx + 3] - a);
