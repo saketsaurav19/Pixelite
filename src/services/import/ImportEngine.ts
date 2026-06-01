@@ -2,17 +2,23 @@ import heic2any from 'heic2any';
 import piexif from 'piexifjs';
 import { parseGIF, decompressFrames } from 'gifuct-js';
 
-// Setup pdf.js
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.js`;
-(pdfjsLib.GlobalWorkerOptions as any).standardFontDataUrl = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`;
-
+import {
+  PDFArray,
+  PDFContentStream,
+  PDFDocument,
+  PDFRawStream,
+  decodePDFRawStream,
+} from 'pdf-lib';
 import exifr from 'exifr';
 import { mapExifrToPiexif } from './../../utils/exifUtils';
 import { parseSVG } from '../../utils/svgUtils';
 import type { Layer } from '../../store/types';
 import { nanoid } from 'nanoid';
+
+// Setup pdf.js for raster fallback rendering only.
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.js`;
+(pdfjsLib.GlobalWorkerOptions as any).standardFontDataUrl = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`;
 
 export interface ImportResult {
   name: string;
@@ -28,47 +34,90 @@ export interface ImportResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PDF operator codes from PDF.js OPS enum
+// PDF vector extraction via pdf-lib content streams
 // ─────────────────────────────────────────────────────────────────────────────
-const OPS = pdfjsLib.OPS as Record<string, number>;
+type PdfOperand = number | { type: 'name'; value: string };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Convert a PDF.js color array to a CSS hex string
-// ─────────────────────────────────────────────────────────────────────────────
-function colorToHex(color: number[]): string {
-  if (!color || color.length === 0) return '#000000';
-  if (color.length === 1) {
-    // Gray
-    const v = Math.round(color[0] * 255);
-    return `#${v.toString(16).padStart(2, '0').repeat(3)}`;
-  }
-  if (color.length === 3) {
-    const [r, g, b] = color.map((c) => Math.round(c * 255));
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-  }
-  // CMYK fallback – crude conversion
-  if (color.length === 4) {
-    const [c, m, y, k] = color;
-    const r = Math.round(255 * (1 - c) * (1 - k));
-    const g = Math.round(255 * (1 - m) * (1 - k));
-    const b2 = Math.round(255 * (1 - y) * (1 - k));
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b2.toString(16).padStart(2, '0')}`;
-  }
-  return '#000000';
+interface PdfGraphicsState {
+  fillColor: number[];
+  strokeColor: number[];
+  lineWidth: number;
+  ctm: number[];
+  alpha: number;
+  strokeAlpha: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Build SVG path data from PDF path operators accumulated in a stack
-// ─────────────────────────────────────────────────────────────────────────────
 interface PathSegment {
-  op: string; // 'm' | 'l' | 'c' | 'v' | 'y' | 'h'
+  op: 'm' | 'l' | 'c' | 'h';
   args: number[];
 }
 
-function segmentsToSvgD(segs: PathSegment[], vph: number): string {
-  // PDF y-axis grows upward; SVG y-axis grows downward.
-  // We flip: svgY = vph - pdfY
-  const flip = (y: number) => vph - y;
+const PDF_CONTENT_OPERATORS = new Set([
+  'q', 'Q', 'cm', 'w', 'rg', 'RG', 'g', 'G', 'k', 'K', 'gs',
+  'm', 'l', 'c', 'v', 'y', 'h', 're', 'f', 'F', 'f*', 'S', 's',
+  'B', 'B*', 'b', 'b*', 'n', 'W', 'W*', 'BT', 'ET', 'Tf', 'Tj',
+  'TJ', "'", '"', 'Td', 'TD', 'Tm', 'T*', 'Do', 'sh', 'BI', 'ID',
+  'EI', 'CS', 'cs', 'SC', 'SCN', 'sc', 'scn', 'd', 'i', 'j', 'J',
+  'M', 'ri', 'Tr', 'Ts', 'Tw', 'Tz', 'TL', 'Tc', 'BX', 'EX', 'BMC',
+  'BDC', 'EMC', 'DP', 'MP',
+]);
+
+function isNumberOperand(value: PdfOperand | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function operandNumber(operands: PdfOperand[], index: number, fallback = 0): number {
+  const value = operands[index];
+  return isNumberOperand(value) ? value : fallback;
+}
+
+// Convert a PDF color array to a CSS hex string.
+function colorToHex(color: number[]): string {
+  if (!color || color.length === 0) return '#000000';
+  const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+  const channel = (value: number) => clamp(value * 255).toString(16).padStart(2, '0');
+
+  if (color.length === 1) return `#${channel(color[0]).repeat(3)}`;
+  if (color.length === 3) return `#${channel(color[0])}${channel(color[1])}${channel(color[2])}`;
+
+  // CMYK fallback.
+  if (color.length === 4) {
+    const [c, m, y, k] = color;
+    return `#${channel((1 - c) * (1 - k))}${channel((1 - m) * (1 - k))}${channel((1 - y) * (1 - k))}`;
+  }
+
+  return '#000000';
+}
+
+function cloneGraphicsState(state: PdfGraphicsState): PdfGraphicsState {
+  return {
+    ...state,
+    ctm: [...state.ctm],
+    fillColor: [...state.fillColor],
+    strokeColor: [...state.strokeColor],
+  };
+}
+
+function multiplyMatrix(left: number[], right: number[]): number[] {
+  const [a1, b1, c1, d1, e1, f1] = left;
+  const [a2, b2, c2, d2, e2, f2] = right;
+  return [
+    a1 * a2 + c1 * b2,
+    b1 * a2 + d1 * b2,
+    a1 * c2 + c1 * d2,
+    b1 * c2 + d1 * d2,
+    a1 * e2 + c1 * f2 + e1,
+    b1 * e2 + d1 * f2 + f1,
+  ];
+}
+
+function transformPoint(matrix: number[], x: number, y: number): [number, number] {
+  const [a, b, c, d, e, f] = matrix;
+  return [a * x + c * y + e, b * x + d * y + f];
+}
+
+function segmentsToSvgD(segs: PathSegment[], pageHeight: number): string {
+  const flip = (y: number) => pageHeight - y;
 
   let d = '';
   for (const seg of segs) {
@@ -83,12 +132,6 @@ function segmentsToSvgD(segs: PathSegment[], vph: number): string {
       case 'c':
         d += `C ${a[0]} ${flip(a[1])} ${a[2]} ${flip(a[3])} ${a[4]} ${flip(a[5])} `;
         break;
-      case 'v': // cp1 = current point
-        d += `S ${a[0]} ${flip(a[1])} ${a[2]} ${flip(a[3])} `;
-        break;
-      case 'y': // cp2 = end point
-        d += `Q ${a[0]} ${flip(a[1])} ${a[2]} ${flip(a[3])} `;
-        break;
       case 'h':
         d += 'Z ';
         break;
@@ -99,48 +142,172 @@ function segmentsToSvgD(segs: PathSegment[], vph: number): string {
   return d.trim();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Extract sub-layers from one PDF page via its operator list
-// Returns vector shape layers + raster image layers
-// ─────────────────────────────────────────────────────────────────────────────
-async function extractPageLayers(
-  page: any,
-  viewport: any,
-  _pageIndex: number
-): Promise<Layer[]> {
-  const vph = viewport.height; // for y-flip
-  const vpw = viewport.width;
+function bytesToString(bytes: Uint8Array): string {
+  return new TextDecoder('latin1').decode(bytes);
+}
 
-  const opList = await page.getOperatorList();
-  const { fnArray, argsArray } = opList;
+function decodePdfStream(stream: unknown): string {
+  if (stream instanceof PDFContentStream) return bytesToString(stream.getUnencodedContents());
+  if (stream instanceof PDFRawStream) return bytesToString(decodePDFRawStream(stream).decode());
 
+  const candidate = stream as {
+    getUnencodedContents?: () => Uint8Array;
+    getContents?: () => Uint8Array;
+    getContentsString?: () => string;
+  };
+
+  if (candidate.getUnencodedContents) return bytesToString(candidate.getUnencodedContents());
+  if (candidate.getContentsString) return candidate.getContentsString();
+  if (candidate.getContents) return bytesToString(candidate.getContents());
+
+  return '';
+}
+
+function getPdfContentStreams(pdfDoc: PDFDocument, pageIndex: number): string[] {
+  const page = pdfDoc.getPage(pageIndex) as unknown as { node: { Contents?: () => unknown } };
+  const contents = page.node.Contents?.();
+  if (!contents) return [];
+
+  const context = (pdfDoc as unknown as { context: { lookup: (object: unknown) => unknown } }).context;
+  const resolve = (object: unknown) => context.lookup(object);
+
+  if (contents instanceof PDFArray) {
+    const streams: string[] = [];
+    for (let i = 0; i < contents.size(); i++) {
+      const resolved = resolve(contents.get(i));
+      const decoded = decodePdfStream(resolved);
+      if (decoded) streams.push(decoded);
+    }
+    return streams;
+  }
+
+  const decoded = decodePdfStream(resolve(contents));
+  return decoded ? [decoded] : [];
+}
+
+function readLiteralString(source: string, start: number): number {
+  let depth = 1;
+  let index = start + 1;
+  while (index < source.length && depth > 0) {
+    const char = source[index];
+    if (char === '\\') {
+      index += 2;
+      continue;
+    }
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    index += 1;
+  }
+  return index;
+}
+
+function readBalanced(source: string, start: number, open: string, close: string): number {
+  let depth = 1;
+  let index = start + 1;
+  while (index < source.length && depth > 0) {
+    if (source[index] === open) depth += 1;
+    if (source[index] === close) depth -= 1;
+    index += 1;
+  }
+  return index;
+}
+
+function tokenizePdfContent(source: string): Array<number | string | { type: 'name'; value: string }> {
+  const tokens: Array<number | string | { type: 'name'; value: string }> = [];
+  let index = 0;
+
+  while (index < source.length) {
+    const char = source[index];
+
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+
+    if (char === '%') {
+      while (index < source.length && source[index] !== '\n' && source[index] !== '\r') index += 1;
+      continue;
+    }
+
+    if (char === '(') {
+      index = readLiteralString(source, index);
+      continue;
+    }
+
+    if (char === '<' && source[index + 1] === '<') {
+      index = readBalanced(source, index + 1, '<', '>');
+      continue;
+    }
+
+    if (char === '[') {
+      index = readBalanced(source, index, '[', ']');
+      continue;
+    }
+
+    if (char === '<') {
+      const closeIndex = source.indexOf('>', index + 1);
+      index = closeIndex === -1 ? source.length : closeIndex + 1;
+      continue;
+    }
+
+    if (char === '/') {
+      let end = index + 1;
+      while (end < source.length && !/[\s\[\]()<>/%]/.test(source[end])) end += 1;
+      tokens.push({ type: 'name', value: source.slice(index + 1, end) });
+      index = end;
+      continue;
+    }
+
+    let end = index + 1;
+    while (end < source.length && !/[\s\[\]()<>/%]/.test(source[end])) end += 1;
+    const token = source.slice(index, end);
+    const numeric = Number(token);
+    tokens.push(Number.isFinite(numeric) && token !== '' ? numeric : token);
+    index = end;
+  }
+
+  return tokens;
+}
+
+function addRectPath(pathSegs: PathSegment[], state: PdfGraphicsState, operands: PdfOperand[]) {
+  const x = operandNumber(operands, 0);
+  const y = operandNumber(operands, 1);
+  const width = operandNumber(operands, 2);
+  const height = operandNumber(operands, 3);
+  const p1 = transformPoint(state.ctm, x, y);
+  const p2 = transformPoint(state.ctm, x + width, y);
+  const p3 = transformPoint(state.ctm, x + width, y + height);
+  const p4 = transformPoint(state.ctm, x, y + height);
+
+  pathSegs.push({ op: 'm', args: p1 });
+  pathSegs.push({ op: 'l', args: p2 });
+  pathSegs.push({ op: 'l', args: p3 });
+  pathSegs.push({ op: 'l', args: p4 });
+  pathSegs.push({ op: 'h', args: [] });
+}
+
+function buildPdfVectorLayers(contentStreams: string[], pageHeight: number): Layer[] {
   const layers: Layer[] = [];
-
-  // Graphics state stack
-  const stateStack: any[] = [];
-  let currentState = {
-    fillColor: [0] as number[],
-    strokeColor: [0] as number[],
+  const stateStack: PdfGraphicsState[] = [];
+  let currentState: PdfGraphicsState = {
+    fillColor: [0],
+    strokeColor: [0],
     lineWidth: 1,
-    ctm: [1, 0, 0, 1, 0, 0] as number[], // current transform matrix
+    ctm: [1, 0, 0, 1, 0, 0],
     alpha: 1,
     strokeAlpha: 1,
   };
-
-  // Current path accumulator
   let pathSegs: PathSegment[] = [];
+  let currentPoint: [number, number] = [0, 0];
 
-
-  // Helper: build a shape Layer from accumulated path + current paint state
   const flushPath = (paint: 'fill' | 'stroke' | 'both') => {
     if (pathSegs.length === 0) return;
-    const d = segmentsToSvgD(pathSegs, vph);
+    const d = segmentsToSvgD(pathSegs, pageHeight);
     pathSegs = [];
     if (!d) return;
 
-    const fill = paint === 'stroke' ? 'none' : colorToHex(currentState.fillColor);
-    const stroke = paint === 'fill' ? 'none' : colorToHex(currentState.strokeColor);
-    const sw = currentState.lineWidth;
+    const fill = paint === 'stroke' ? '' : colorToHex(currentState.fillColor);
+    const stroke = paint === 'fill' ? '' : colorToHex(currentState.strokeColor);
 
     layers.push({
       id: nanoid(),
@@ -148,190 +315,178 @@ async function extractPageLayers(
       type: 'shape',
       visible: true,
       locked: false,
-      opacity: currentState.alpha,
+      opacity: paint === 'stroke' ? currentState.strokeAlpha : currentState.alpha,
       blendMode: 'source-over',
       position: { x: 0, y: 0 },
       shapeData: {
         type: 'path',
         svgPath: d,
-        fill: fill === 'none' ? '' : fill,
-        stroke: stroke === 'none' ? '' : stroke,
-        strokeWidth: sw,
+        fill,
+        stroke,
+        strokeWidth: currentState.lineWidth,
       },
     } as Layer);
   };
 
-  // Walk operator list
-  for (let i = 0; i < fnArray.length; i++) {
-    const fn = fnArray[i];
-    const args = argsArray[i] || [];
-
-    switch (fn) {
-      // ── Graphics state ──────────────────────────────────────────────────────
-      case OPS.save:
-        stateStack.push({ ...currentState, ctm: [...currentState.ctm], fillColor: [...currentState.fillColor], strokeColor: [...currentState.strokeColor] });
+  const handleOperator = (operator: string, operands: PdfOperand[]) => {
+    switch (operator) {
+      case 'q':
+        stateStack.push(cloneGraphicsState(currentState));
         break;
-      case OPS.restore:
+      case 'Q':
         if (stateStack.length > 0) currentState = stateStack.pop()!;
         break;
-      case OPS.setLineWidth:
-        currentState.lineWidth = args[0];
+      case 'cm':
+        currentState.ctm = multiplyMatrix(currentState.ctm, [
+          operandNumber(operands, 0, 1),
+          operandNumber(operands, 1),
+          operandNumber(operands, 2),
+          operandNumber(operands, 3, 1),
+          operandNumber(operands, 4),
+          operandNumber(operands, 5),
+        ]);
         break;
-      case OPS.setFillRGBColor:
-        currentState.fillColor = [args[0], args[1], args[2]];
+      case 'w':
+        currentState.lineWidth = operandNumber(operands, 0, currentState.lineWidth);
         break;
-      case OPS.setStrokeRGBColor:
-        currentState.strokeColor = [args[0], args[1], args[2]];
+      case 'rg':
+        currentState.fillColor = [operandNumber(operands, 0), operandNumber(operands, 1), operandNumber(operands, 2)];
         break;
-      case OPS.setFillGray:
-        currentState.fillColor = [args[0]];
+      case 'RG':
+        currentState.strokeColor = [operandNumber(operands, 0), operandNumber(operands, 1), operandNumber(operands, 2)];
         break;
-      case OPS.setStrokeGray:
-        currentState.strokeColor = [args[0]];
+      case 'g':
+        currentState.fillColor = [operandNumber(operands, 0)];
         break;
-      case OPS.setFillCMYKColor:
-        currentState.fillColor = [args[0], args[1], args[2], args[3]];
+      case 'G':
+        currentState.strokeColor = [operandNumber(operands, 0)];
         break;
-      case OPS.setStrokeCMYKColor:
-        currentState.strokeColor = [args[0], args[1], args[2], args[3]];
+      case 'k':
+        currentState.fillColor = [operandNumber(operands, 0), operandNumber(operands, 1), operandNumber(operands, 2), operandNumber(operands, 3)];
         break;
-      case OPS.setGState: {
-        // args[0] is a dict name; alpha values come later via individual ops
+      case 'K':
+        currentState.strokeColor = [operandNumber(operands, 0), operandNumber(operands, 1), operandNumber(operands, 2), operandNumber(operands, 3)];
+        break;
+      case 'm':
+        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
+        pathSegs.push({ op: 'm', args: currentPoint });
+        break;
+      case 'l':
+        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
+        pathSegs.push({ op: 'l', args: currentPoint });
+        break;
+      case 'c': {
+        const cp1 = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
+        const cp2 = transformPoint(currentState.ctm, operandNumber(operands, 2), operandNumber(operands, 3));
+        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 4), operandNumber(operands, 5));
+        pathSegs.push({ op: 'c', args: [...cp1, ...cp2, ...currentPoint] });
         break;
       }
-      case OPS.setFillAlpha:
-        currentState.alpha = args[0];
+      case 'v': {
+        const cp1 = currentPoint;
+        const cp2 = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
+        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 2), operandNumber(operands, 3));
+        pathSegs.push({ op: 'c', args: [...cp1, ...cp2, ...currentPoint] });
         break;
-      case OPS.setStrokeAlpha:
-        currentState.strokeAlpha = args[0];
+      }
+      case 'y': {
+        const cp1 = transformPoint(currentState.ctm, operandNumber(operands, 0), operandNumber(operands, 1));
+        currentPoint = transformPoint(currentState.ctm, operandNumber(operands, 2), operandNumber(operands, 3));
+        pathSegs.push({ op: 'c', args: [...cp1, ...currentPoint, ...currentPoint] });
         break;
-
-      // ── Path construction ────────────────────────────────────────────────────
-      case OPS.moveTo:
-        pathSegs.push({ op: 'm', args: [args[0], args[1]] });
-        break;
-      case OPS.lineTo:
-        pathSegs.push({ op: 'l', args: [args[0], args[1]] });
-        break;
-      case OPS.curveTo:
-        pathSegs.push({ op: 'c', args: [args[0], args[1], args[2], args[3], args[4], args[5]] });
-        break;
-      case OPS.curveTo2: // v operator: first control point = current
-        pathSegs.push({ op: 'v', args: [args[0], args[1], args[2], args[3]] });
-        break;
-      case OPS.curveTo3: // y operator: second control point = endpoint
-        pathSegs.push({ op: 'y', args: [args[0], args[1], args[2], args[3]] });
-        break;
-      case OPS.closePath:
+      }
+      case 'h':
         pathSegs.push({ op: 'h', args: [] });
         break;
-      case OPS.rectangle:
-        pathSegs.push({ op: 'm', args: [args[0], args[1]] });
-        pathSegs.push({ op: 'l', args: [args[0] + args[2], args[1]] });
-        pathSegs.push({ op: 'l', args: [args[0] + args[2], args[1] + args[3]] });
-        pathSegs.push({ op: 'l', args: [args[0], args[1] + args[3]] });
-        pathSegs.push({ op: 'h', args: [] });
+      case 're':
+        addRectPath(pathSegs, currentState, operands);
         break;
-
-      // ── Path painting ────────────────────────────────────────────────────────
-      case OPS.fill:
-      case OPS.eoFill:
+      case 'f':
+      case 'F':
+      case 'f*':
         flushPath('fill');
         break;
-      case OPS.stroke:
+      case 'S':
         flushPath('stroke');
         break;
-      case OPS.fillStroke:
-      case OPS.eoFillStroke:
+      case 's':
+        pathSegs.push({ op: 'h', args: [] });
+        flushPath('stroke');
+        break;
+      case 'B':
+      case 'B*':
         flushPath('both');
         break;
-      case OPS.endPath:
-        pathSegs = []; // clip-only, discard
+      case 'b':
+      case 'b*':
+        pathSegs.push({ op: 'h', args: [] });
+        flushPath('both');
         break;
-
-      // ── Raster images ────────────────────────────────────────────────────────
-      case OPS.paintImageXObject:
-      case OPS.paintImageMaskXObject:
-      case OPS.paintInlineImageXObject: {
-        // args[0] is the image object (has width, height, data, bitmap…)
-        const imgObj = args[0];
-        if (!imgObj) break;
-
-        try {
-          let imageCanvas: HTMLCanvasElement | null = null;
-
-          // If PDF.js resolved it to an ImageBitmap
-          if (imgObj instanceof ImageBitmap) {
-            imageCanvas = document.createElement('canvas');
-            imageCanvas.width = imgObj.width;
-            imageCanvas.height = imgObj.height;
-            imageCanvas.getContext('2d')!.drawImage(imgObj, 0, 0);
-          } else if (imgObj.bitmap instanceof ImageBitmap) {
-            imageCanvas = document.createElement('canvas');
-            imageCanvas.width = imgObj.bitmap.width;
-            imageCanvas.height = imgObj.bitmap.height;
-            imageCanvas.getContext('2d')!.drawImage(imgObj.bitmap, 0, 0);
-          } else if (imgObj.data && imgObj.width && imgObj.height) {
-            // Raw RGBA data
-            imageCanvas = document.createElement('canvas');
-            imageCanvas.width = imgObj.width;
-            imageCanvas.height = imgObj.height;
-            const ctx2d = imageCanvas.getContext('2d')!;
-            const idata = ctx2d.createImageData(imgObj.width, imgObj.height);
-            const src = imgObj.data instanceof Uint8ClampedArray
-              ? imgObj.data
-              : new Uint8ClampedArray(imgObj.data.buffer ?? imgObj.data);
-            idata.data.set(src.subarray(0, imgObj.width * imgObj.height * 4));
-            ctx2d.putImageData(idata, 0, 0);
-          }
-
-          if (imageCanvas) {
-            layers.push({
-              id: nanoid(),
-              name: `Image ${layers.length + 1}`,
-              type: 'image',
-              visible: true,
-              locked: false,
-              opacity: 1,
-              blendMode: 'source-over',
-              position: { x: 0, y: 0 },
-              dataUrl: imageCanvas.toDataURL('image/png'),
-            } as Layer);
-          }
-        } catch (e) {
-          console.warn('PDF image extraction skipped:', e);
-        }
+      case 'n':
+        pathSegs = [];
         break;
-      }
-
       default:
         break;
     }
+  };
+
+  for (const content of contentStreams) {
+    const tokens = tokenizePdfContent(content);
+    let operands: PdfOperand[] = [];
+
+    for (const token of tokens) {
+      if (typeof token === 'string' && PDF_CONTENT_OPERATORS.has(token)) {
+        handleOperator(token, operands);
+        operands = [];
+      } else if (typeof token === 'number' || (typeof token === 'object' && token.type === 'name')) {
+        operands.push(token);
+      }
+    }
   }
 
-  // Any unflushed path (shouldn't normally happen, but be safe)
   if (pathSegs.length > 0) flushPath('fill');
+  return layers;
+}
 
-  // If we got zero sub-layers (e.g. text-only page, or complex shading),
-  // fall back to a full raster render of the page so nothing is empty.
-  if (layers.length === 0) {
-    const fallbackCanvas = document.createElement('canvas');
-    fallbackCanvas.width = Math.round(vpw);
-    fallbackCanvas.height = Math.round(vph);
-    const ctx2d = fallbackCanvas.getContext('2d')!;
-    await page.render({ canvasContext: ctx2d, viewport }).promise;
-    layers.push({
-      id: nanoid(),
-      name: 'Rasterized Page',
-      type: 'image',
-      visible: true,
-      locked: false,
-      opacity: 1,
-      blendMode: 'source-over',
-      position: { x: 0, y: 0 },
-      dataUrl: fallbackCanvas.toDataURL('image/png'),
-    } as Layer);
+async function rasterizePdfPage(page: any, viewport: any, pageWidth: number, pageHeight: number): Promise<Layer> {
+  const fallbackCanvas = document.createElement('canvas');
+  fallbackCanvas.width = Math.round(pageWidth);
+  fallbackCanvas.height = Math.round(pageHeight);
+  const ctx2d = fallbackCanvas.getContext('2d')!;
+  await page.render({ canvasContext: ctx2d, viewport }).promise;
+
+  return {
+    id: nanoid(),
+    name: 'Rasterized Page',
+    type: 'image',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    blendMode: 'source-over',
+    position: { x: 0, y: 0 },
+    dataUrl: fallbackCanvas.toDataURL('image/png'),
+  } as Layer;
+}
+
+async function extractPageLayers(
+  pdfDoc: PDFDocument,
+  pageIndex: number,
+  pdfJsPage: any,
+  viewport: any
+): Promise<Layer[]> {
+  const pageWidth = viewport.width;
+  const pageHeight = viewport.height;
+  let layers: Layer[] = [];
+  try {
+    layers = buildPdfVectorLayers(getPdfContentStreams(pdfDoc, pageIndex), pageHeight);
+  } catch (error) {
+    console.warn('PDF vector extraction failed; rasterizing page instead:', error);
   }
+
+  // Keep PDF.js as a raster-only safety net for pages whose vector content
+  // cannot be represented as editable shape layers (text-only pages, images,
+  // shadings, unsupported operators, or unusually encoded streams).
+  if (layers.length === 0) layers.push(await rasterizePdfPage(pdfJsPage, viewport, pageWidth, pageHeight));
 
   return layers;
 }
@@ -436,11 +591,12 @@ export class ImportEngine {
 
   // ───────────────────────────────────────────────────────────────────────────
   // PDF import: each page becomes a group; inside each group are vector shape
-  // layers and raster image layers extracted from the page's operator list.
+  // layers extracted from pdf-lib content streams, with PDF.js raster fallback.
   // ───────────────────────────────────────────────────────────────────────────
   static async importPdf(file: File): Promise<ImportResult> {
     const arrayBuffer = await file.arrayBuffer();
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdfLibDoc = await PDFDocument.load(arrayBuffer);
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) });
     const pdf = await loadingTask.promise;
 
     const numPages = pdf.numPages;
@@ -458,7 +614,7 @@ export class ImportEngine {
         if (viewport.height > maxHeight) maxHeight = viewport.height;
 
         // Extract per-element sub-layers
-        const subLayers = await extractPageLayers(page, viewport, i - 1);
+        const subLayers = await extractPageLayers(pdfLibDoc, i - 1, page, viewport);
 
         // Wrap in a group named "Page N"
         const pageGroup: Layer = {
