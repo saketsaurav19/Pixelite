@@ -373,7 +373,7 @@ export class PdfParser {
       opacity: 1,
       blendMode: 'source-over',
       visible: true,
-      locked: false,
+      locked: true,
       geometry: {
         segments: pathSegments,
         isClosed: pathSegments.some((segment) => segment.type === 'closePath')
