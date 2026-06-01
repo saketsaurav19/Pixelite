@@ -70,7 +70,7 @@ export const useFileImporter = () => {
         const newLayers: Layer[] = result.frames.map((frame, index) => ({
           id: Math.random().toString(36).substring(7),
           name: frame.name || `Frame ${index + 1}`,
-          type: 'image',
+          type: 'image' as any,
           dataUrl: frame.dataUrl,
           position: isPlace ? {
             x: (documentSize.w - result.width) / 2,
@@ -101,7 +101,7 @@ export const useFileImporter = () => {
           setLayers([...layers, ...result.layers.reverse()]);
         }
         recordHistory(isPlace ? `Place SVG ${result.name}` : `Open SVG ${result.name}`);
-      } else if (result.type === 'pdf' && result.layers) {
+      } else if (result.type === 'pdf' && result.frames) {
         if (!isPlace) {
           setCurrentProjectId(null);
           setHistory([], 0);
@@ -112,7 +112,17 @@ export const useFileImporter = () => {
           id: Math.random().toString(36).substring(7),
           name: 'PDF Pages',
           type: 'group',
-          children: result.layers.reverse(), // stack pages bottom to top
+          children: result.frames.map((frame, index) => ({
+            id: Math.random().toString(36).substring(7),
+            name: frame.name || `Page ${index + 1}`,
+            type: 'image' as any,
+            dataUrl: frame.dataUrl,
+            position: { x: 0, y: 0 },
+            visible: true,
+            locked: false,
+            opacity: 1,
+            blendMode: 'source-over' as any
+          })).reverse(), // stack pages bottom to top
           collapsed: false,
           position: isPlace ? {
             x: (documentSize.w - result.width) / 2,
@@ -148,19 +158,19 @@ export const useFileImporter = () => {
           setLayers([{
             id: Math.random().toString(36).substring(7),
             name: result.name,
-            type: 'image',
+            type: 'image' as any,
             dataUrl: result.dataUrl,
             position: { x: 0, y: 0 },
             visible: true,
             locked: false,
             opacity: 1,
-            blendMode: 'source-over'
+            blendMode: 'source-over' as any
           }]);
         } else {
           setLayers([...layers, {
             id: Math.random().toString(36).substring(7),
             name: result.name,
-            type: 'image',
+            type: 'image' as any,
             dataUrl: result.dataUrl,
             position: {
               x: (documentSize.w - result.width) / 2,
@@ -169,7 +179,7 @@ export const useFileImporter = () => {
             visible: true,
             locked: false,
             opacity: 1,
-            blendMode: 'source-over'
+            blendMode: 'source-over' as any
           }]);
         }
         recordHistory(isPlace ? `Place ${result.name}` : `Open ${result.name}`);
