@@ -73,7 +73,9 @@ export class PdfImportManager {
           id: nanoid(),
           name: `Page ${i + 1}`,
           type: 'group',
-          children: [artboardBg, ...subLayers],
+          // CanvasLayer gives lower child indexes a higher z-index, so keep the
+          // locked white artboard after imported page content so it stays behind.
+          children: [...subLayers, artboardBg],
           collapsed: false,
           position: { x: pageX, y: pageY },
           visible: true,
