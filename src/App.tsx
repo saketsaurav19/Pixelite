@@ -1,3 +1,5 @@
+import { findLayerById } from './utils/layerUtils';
+import { Application } from "./scripting/Application";
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from './store/useStore';
@@ -9,16 +11,13 @@ import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
-<<<<<<< HEAD
-import MenuBar from './components/MenuBar/MenuBar';
-import { removeBackground } from '@imgly/background-removal';
 import TabBar from './components/TabBar/TabBar';
 import { writePsd, readPsd } from 'ag-psd';
 import { nanoid } from 'nanoid';
 import { CloudStorageModal } from './components/Modals/CloudStorageModal';
 import { PublicShareModal } from './components/Modals/PublicShareModal';
 import { uploadToImgur, uploadToImageBB, saveToGoogleDrive } from './utils/cloudServices';
-=======
+import { useFileImporter } from './hooks/useFileImporter';
 import { MenuBar } from './components/MenuSystem/MenuBar';
 import { OpenRecentDialog } from './components/Dialogs/OpenRecentDialog';
 import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
@@ -27,13 +26,137 @@ import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
 import { CameraDialog } from "./components/Dialogs/CameraDialog";
 import { MobileCameraDialog } from "./components/Dialogs/MobileCameraDialog";
-import { ImportEngine } from './services/import/ImportEngine';
 import { removeBackground } from '@imgly/background-removal';
 import { AlertContainer } from './components/UI/AlertContainer';
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 import './App.css';
+import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
 
 const App: React.FC = () => {
+  const [layerContextMenu, setLayerContextMenu] = React.useState<{ layerId: string; x: number; y: number } | null>(null);
+  const [renamingLayerId, setRenamingLayerId] = React.useState<string | null>(null);
+  const [newLayerName, setNewLayerName] = React.useState<string>('');
+  const [longPressTimer, setLongPressTimer] = React.useState<NodeJS.Timeout | null>(null);
+  const [longPressActiveLayerId, setLongPressActiveLayerId] = React.useState<string | null>(null);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setLongPressActiveLayerId(null);
+  };
+
+// RECURSIVE LAYER COMPONENT
+const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
+  return layerList.map((layer) => (
+    <div key={layer.id} style={{ marginLeft: depth * 12 + 'px' }}>
+      <div
+        className={`layer-node ${draggedIndex === layer.id ? 'dragging' : ''}`}
+        draggable={true}
+        onDragStart={(e) => {
+           e.stopPropagation();
+           setDraggedIndex(layer.id);
+        }}
+        onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (draggedIndex && draggedIndex !== layer.id) {
+            // Very simple target logic for now: insert before
+            useStore.getState().reorderNodesAction?.(draggedIndex, layer.id, 'before');
+            recordHistory('Reorder Layers');
+          }
+          setDraggedIndex(null);
+        }}
+        onDragEnd={() => setDraggedIndex(null)}
+      >
+        <div
+          className={`layer-row ${activeLayerId === layer.id ? 'active' : ''} ${longPressActiveLayerId === layer.id ? 'long-press-active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveLayer(layer.id);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setLayerContextMenu({ layerId: layer.id, x: e.clientX, y: e.clientY });
+          }}
+          onPointerDown={(e) => {
+            if (e.pointerType === 'mouse') return;
+            const timer = setTimeout(() => {
+              setLayerContextMenu({ layerId: layer.id, x: e.clientX, y: e.clientY });
+              setLongPressActiveLayerId(null);
+            }, 300);
+            setLongPressTimer(timer);
+            setLongPressActiveLayerId(layer.id);
+          }}
+          onPointerUp={clearLongPressTimer}
+          onPointerCancel={clearLongPressTimer}
+          onPointerMove={clearLongPressTimer}
+          onPointerLeave={clearLongPressTimer}
+        >
+          {layer.type === 'group' && (
+             <div className="layer-collapse" onClick={(e) => {
+                 e.stopPropagation();
+                 updateLayer(layer.id, { collapsed: !layer.collapsed });
+             }}>
+                {layer.collapsed ? <LucideIcons.ChevronRight size={12} /> : <LucideIcons.ChevronDown size={12} />}
+             </div>
+          )}
+          <div className="layer-eye" onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}>
+            {layer.visible ? <LucideIcons.Eye size={12} /> : <LucideIcons.EyeOff size={12} />}
+          </div>
+          <div className="layer-thumb">
+            {layer.thumbnail ? <img src={layer.thumbnail} alt="" /> : (layer.type === 'group' ? <LucideIcons.Folder size={16} /> : null)}
+          </div>
+          {renamingLayerId === layer.id ? (
+            <input
+              type="text"
+              autoFocus
+              className="layer-rename-input"
+              value={newLayerName}
+              onChange={(e) => setNewLayerName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateLayer(layer.id, { name: newLayerName });
+                  setRenamingLayerId(null);
+                  e.currentTarget.blur();
+                } else if (e.key === 'Escape') {
+                  setRenamingLayerId(null);
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={() => {
+                updateLayer(layer.id, { name: newLayerName });
+                setRenamingLayerId(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="layer-title">{layer.name}</span>
+          )}
+          <div className="layer-order-btns">
+            <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); recordHistory('Move Layer Up'); }} title="Move Up"><LucideIcons.ChevronUp size={12} /></button>
+            <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); recordHistory('Move Layer Down'); }} title="Move Down"><LucideIcons.ChevronDown size={12} /></button>
+          </div>
+        </div>
+      </div>
+      {layer.type === 'group' && !layer.collapsed && layer.children && (
+        <div className="layer-children">
+          {renderLayerTree(layer.children, depth + 1)}
+        </div>
+      )}
+    </div>
+  ));
+};
+
+  React.useEffect(() => {
+    (window as any).app = new Application();
+  }, []);
 
   const addAlert = useStore(state => state.addAlert);
   const {
@@ -50,22 +173,17 @@ const App: React.FC = () => {
     undo,
     redo,
     recordHistory,
-<<<<<<< HEAD
     inverseSelection,
     duplicateLayer,
     setZoom,
-=======
-        duplicateLayer,
     setActiveTool,
     setToolVariant,
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
     setSelectionRect,
     setIsInverseSelection,
     setCropRect,
     setLassoPaths,
     moveLayer,
     reorderLayers,
-<<<<<<< HEAD
     documentSize,
     activeTool,
     setIsTyping,
@@ -80,8 +198,12 @@ const App: React.FC = () => {
     showGuides,
     lights,
     removeLight,
-    activeLightId
+    activeLightId,
+    isMobileMenuOpen,
+    setIsMobileMenuOpen,
+    setActiveMobileSubmenu
   } = useStore();
+  const { handleFileImport } = useFileImporter();
 
   const getMergedImageData = (format: string = 'image/png') => {
     const { w, h } = documentSize;
@@ -90,17 +212,6 @@ const App: React.FC = () => {
     exportCanvas.height = h;
     const ctx = exportCanvas.getContext('2d');
     if (!ctx) return null;
-=======
-    setIsTyping,
-    isMobileMenuOpen,
-    setIsMobileMenuOpen,
-    setActiveMobileSubmenu
-  } = useStore();
-
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
-
-
-<<<<<<< HEAD
     return exportCanvas.toDataURL(format);
   };
 
@@ -230,12 +341,11 @@ const App: React.FC = () => {
     link.click();
     URL.revokeObjectURL(link.href);
   };
-=======
+
   const handleFade = () => { addAlert({ type: 'info', message: 'Fade action triggered (Placeholder)' }); };
   const handleCopyMerged = () => { addAlert({ type: 'info', message: 'Copy Merged action triggered (Placeholder)' }); };
           const handleFreeTransform = () => { addAlert({ type: 'info', message: 'Free Transform action triggered (Placeholder)' }); };
                 const handlePreferences = () => { addAlert({ type: 'info', message: 'Preferences action triggered (Placeholder)' }); };
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [processingText, setProcessingText] = React.useState('');
@@ -244,10 +354,7 @@ const App: React.FC = () => {
 
   const [isToolsOpen, setIsToolsOpen] = React.useState(false);
   const [isPanelsOpen, setIsPanelsOpen] = React.useState(false);
-<<<<<<< HEAD
-=======
 
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
   const [isFillPickerOpen, setIsFillPickerOpen] = React.useState(false);
 
 
@@ -257,11 +364,8 @@ const App: React.FC = () => {
   const [isEditingOpacity, setIsEditingOpacity] = React.useState(false);
   const [tempOpacityValue, setTempOpacityValue] = React.useState('');
 
-<<<<<<< HEAD
   const [saveModal, setSaveModal] = React.useState<{ type: 'cloud' | 'public' | null; provider?: string }>({ type: null });
   const [isLightingProcessing, setIsLightingProcessing] = React.useState(false);
-=======
-
 
   const blobToDataUrl = React.useCallback((blob: Blob) => new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -322,7 +426,6 @@ const App: React.FC = () => {
     window.addEventListener('remove-background', handleRemoveBackground);
     return () => window.removeEventListener('remove-background', handleRemoveBackground);
   }, [blobToDataUrl]);
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -442,8 +545,7 @@ const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-<<<<<<< HEAD
-  }, [activeLayerId, layers]);
+  }, [undo, redo, addLayer, setSelectionRect, setLassoPaths, setCropRect, setIsInverseSelection, setActiveTool, setToolVariant, setIsFillPickerOpen, duplicateLayer]);
 
   React.useEffect(() => {
     const handleStart = () => setIsLightingProcessing(true);
@@ -456,204 +558,56 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const handleFile = (file: File | Blob, name?: string, skipResize: boolean = false) => {
-    const isOpening = !skipResize;
-
-    // 1. Handle Native Project File (.psd)
-    if ((file as File).name?.toLowerCase().endsWith('.psd')) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const result = e.target?.result;
-        if (!result) return;
-
-        try {
-          // Try loading as a real PSD first
-          const psd = readPsd(result as ArrayBuffer);
-          if (psd && psd.children) {
-            // Extract lighting metadata if it exists
-            const metadataLayer = psd.children.find((c: any) => c.name === '__pixelite_metadata__');
-            let lightingMetadata: any = {};
-            
-            if (metadataLayer) {
-              const meta = metadataLayer as any;
-              if (meta.annotations && meta.annotations[0]) {
-                try {
-                  lightingMetadata = JSON.parse(meta.annotations[0].data);
-                  console.log('[Lighting] Restored metadata from PSD:', lightingMetadata);
-                } catch (e) {
-                  console.warn('[Lighting] Failed to parse PSD metadata', e);
-                }
-              }
-            }
-
-            const loadedLayers = psd.children
-              .filter((child: any) => child.name !== '__pixelite_metadata__')
-              .map((child: any) => ({
-                id: nanoid(),
-                name: child.name || 'Layer',
-                visible: child.visible !== false,
-                opacity: child.opacity !== undefined ? child.opacity : 1,
-                blendMode: child.blendMode || 'normal',
-                locked: false,
-                type: 'image' as const,
-                position: { x: child.left || 0, y: child.top || 0 },
-                dataUrl: child.canvas ? child.canvas.toDataURL() : null
-              })).reverse();
-
-            const projectState = {
-              layers: loadedLayers,
-              documentSize: { w: psd.width, h: psd.height },
-              ...lightingMetadata, // Restore lights, ambient settings, etc.
-              isLightingEnabled: !!lightingMetadata?.lights?.length
-            };
-
-            if (isOpening) {
-              addDocument((file as File).name, { w: psd.width, h: psd.height }, {
-                ...projectState,
-                zoom: 1,
-                canvasOffset: { x: 0, y: 0 },
-                history: [{ name: 'Open PSD', state: projectState }],
-                historyIndex: 0
-              });
-            } else {
-              setDocumentSize({ w: psd.width, h: psd.height });
-              setLayers(loadedLayers);
-              if (lightingMetadata.lights) {
-                useStore.getState().updateLighting(lightingMetadata);
-              }
-              recordHistory(`Import PSD: ${(file as File).name}`);
-            }
-            return;
-          }
-        } catch (err) {
-          // If real PSD parsing fails, check if it's our custom JSON
-          try {
-            const text = new TextDecoder().decode(result as ArrayBuffer);
-            const project = JSON.parse(text);
-            if (project && project.layers && project.documentSize) {
-              if (isOpening) {
-                addDocument((file as File).name, project.documentSize, project);
-              } else {
-                setDocumentSize(project.documentSize);
-                setLayers(project.layers);
-                if (project.activeLayerId) setActiveLayer(project.activeLayerId);
-                recordHistory(`Open Project: ${project.name || 'Untitled'}`);
-              }
-              return;
-            }
-          } catch (jsonErr) {
-            loadAsImage(file, name, skipResize);
-          }
-        }
-      };
-      reader.readAsArrayBuffer(file);
-      return;
+    try {
+      await handleFileImport(file, false);
+    } catch (err) {
+      console.error(err);
+      addAlert({ type: 'error', message: 'Failed to open image.' });
+    } finally {
+      e.target.value = '';
     }
-
-    loadAsImage(file, name, skipResize);
   };
 
-  const loadAsImage = (file: File | Blob, name?: string, skipResize: boolean = false) => {
-    if (!file.type.startsWith('image/') && !(file as File).name?.toLowerCase().endsWith('.psd')) return;
-    const isOpening = !skipResize;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        if (isOpening) {
-          const newLayers = [{
-            id: nanoid(),
-            name: name || (file as File).name || 'Pasted Image',
-            type: 'image' as const,
-            dataUrl,
-            visible: true,
-            opacity: 1,
-            position: { x: 0, y: 0 },
-            locked: false
-          }];
-
-          // Calculate initial zoom to fit
-          const viewportW = window.innerWidth - 240 - 44 - 60; // 60px padding
-          const viewportH = window.innerHeight - 38 - 32 - 24 - 40; // 40px padding
-          const zoomW = viewportW / img.width;
-          const zoomH = viewportH / img.height;
-          const initialZoom = Math.min(1, Math.min(zoomW, zoomH));
-
-          addDocument((file as File).name, { w: img.width, h: img.height }, {
-            layers: newLayers,
-            documentSize: { w: img.width, h: img.height },
-            zoom: initialZoom,
-            canvasOffset: { x: 0, y: 0 },
-            history: [{ name: 'Open Image', state: { layers: newLayers, documentSize: { w: img.width, h: img.height } } }],
-            historyIndex: 0
-          });
-        } else {
-          const isDefaultBackground = layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
-          if (layers.length === 0 || isDefaultBackground) {
-            setDocumentSize({ w: img.width, h: img.height });
-          }
-          addLayer({
-            name: name || (file as File).name || 'Pasted Image',
-            type: 'image',
-            dataUrl,
-            position: (layers.length === 0 || isDefaultBackground || skipResize) ? { x: 0, y: 0 } : { x: (documentSize.w - img.width) / 2, y: (documentSize.h - img.height) / 2 }
-          });
-          recordHistory(`Import ${name || 'Image'}`);
-        }
-      };
-      img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePlaceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  };
+    if (!file) return;
 
-  const handlePlaceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file, undefined, true); // true = skipResize
+    try {
+      await handleFileImport(file, true);
+    } catch (err) {
+      console.error(err);
+      addAlert({ type: 'error', message: 'Failed to place image.' });
+    }
   };
 
   React.useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile();
-          if (blob) handleFile(blob, 'Pasted Image');
+          if (blob) {
+            const file = new File([blob], 'Pasted Image.png', { type: 'image/png' });
+            try {
+              await handleFileImport(file, false);
+            } catch (err) {
+              console.error(err);
+            }
+          }
         }
       }
-    };
-
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-          handleFile(files[i]);
-        }
-      }
-    };
-
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
     };
 
     window.addEventListener('paste', handlePaste);
-    window.addEventListener('drop', handleDrop);
-    window.addEventListener('dragover', handleDragOver);
     return () => {
       window.removeEventListener('paste', handlePaste);
-      window.removeEventListener('drop', handleDrop);
-      window.removeEventListener('dragover', handleDragOver);
     };
-  }, [layers, documentSize, addLayer, recordHistory, setDocumentSize]);
+  }, [handleFileImport]);
 
   const handleInvert = () => {
     if (!activeLayerId) return;
@@ -710,19 +664,68 @@ const App: React.FC = () => {
       data[i + 2] = 255 - data[i + 2];
     }
 
-    // We need to only apply the inverted data to the clipped area
-    // A simple way is to use putImageData on the whole thing while clipped
-    // But putImageData ignores clipping! 
-    // So we put it on the temp canvas and then draw that back to the original with the clip active.
     tempCtx.putImageData(imageData, 0, 0);
-
-    // Clear the clipped area first (optional but safer for some blend modes)
-    // Then draw the inverted version from the temp canvas
     ctx.drawImage(tempCanvas, 0, 0);
 
     ctx.restore();
     updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
     recordHistory('Invert Colors');
+  };
+
+  const handleSelectSubject = async () => {
+    if (!activeLayerId) {
+      addAlert({ type: 'warning', message: 'Please select a layer first.' });
+      return;
+    }
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    try {
+      setIsProcessing(true);
+      setProcessingText('Analyzing subject...');
+      // Get the bounding box of non-transparent pixels
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+      let found = false;
+
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const alpha = data[(y * canvas.width + x) * 4 + 3];
+          if (alpha > 10) { // arbitrary threshold for non-transparent pixel
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+            found = true;
+          }
+        }
+      }
+
+      if (found) {
+        const layer = layers.find(l => l.id === activeLayerId);
+        const offX = layer?.position.x || 0;
+        const offY = layer?.position.y || 0;
+        setSelectionRect({
+          x: minX + offX,
+          y: minY + offY,
+          w: maxX - minX + 1,
+          h: maxY - minY + 1
+        });
+        recordHistory('Select Subject');
+        addAlert({ type: 'success', message: 'Subject selected!' });
+      } else {
+        addAlert({ type: 'info', message: 'No clear subject detected in active layer.' });
+      }
+    } catch (err) {
+      console.error(err);
+      addAlert({ type: 'error', message: 'Select subject failed.' });
+    } finally {
+      setIsProcessing(false);
+      setProcessingText('');
+    }
   };
 
   React.useEffect(() => {
@@ -751,72 +754,6 @@ const App: React.FC = () => {
     };
   }, [activeLayerId, layers, updateLayer, recordHistory, documentSize]);
 
-  const handleRemoveBackground = async () => {
-    if (!activeLayerId) return;
-    const layer = layers.find(l => l.id === activeLayerId);
-    if (!layer || !layer.dataUrl) return;
-=======
-  }, [undo, redo, addLayer, setSelectionRect, setLassoPaths, setCropRect, setIsInverseSelection, setActiveTool, setToolVariant, setIsFillPickerOpen, duplicateLayer]);
-
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
-
-    try {
-      const result = await ImportEngine.importFile(file);
-      if (result.type !== 'image' || !result.dataUrl) return;
-
-      const currentState = useStore.getState();
-      const isDefaultBackground =
-        currentState.layers.length === 1 &&
-        currentState.layers[0].name === 'Background' &&
-        currentState.layers[0].type === 'paint';
-
-      if (currentState.layers.length === 0 || isDefaultBackground) {
-        currentState.setDocumentSize({ w: result.width, h: result.height });
-        currentState.setLayers([{
-          id: Math.random().toString(36).substring(7),
-          name: result.name,
-          type: 'image',
-          dataUrl: result.dataUrl,
-          position: { x: 0, y: 0 },
-          visible: true,
-          locked: false,
-          opacity: 1,
-          blendMode: 'source-over'
-        }]);
-      } else {
-        currentState.setLayers([...
-          currentState.layers,
-          {
-            id: Math.random().toString(36).substring(7),
-            name: result.name,
-            type: 'image',
-            dataUrl: result.dataUrl,
-            position: {
-              x: (currentState.documentSize.w - result.width) / 2,
-              y: (currentState.documentSize.h - result.height) / 2
-            },
-            visible: true,
-            locked: false,
-            opacity: 1,
-            blendMode: 'source-over'
-          }
-        ]);
-      }
-
-      currentState.recordHistory(`Open ${result.name}`);
-    } catch (err) {
-      console.error(err);
-      addAlert({ type: 'error', message: 'Failed to open image.' });
-    } finally {
-      e.target.value = '';
-    }
-  };
-
-  // ... (inside App component)
 
   const handleNewDocument = () => {
     addDocument();
@@ -1129,13 +1066,36 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''}`}>
-<<<<<<< HEAD
-      <input type="file" id="global-file-input" accept="image/*,.psd" hidden onChange={handleImageUpload} />
-      <input type="file" id="place-file-input" accept="image/*,.psd" hidden onChange={handlePlaceUpload} />
-=======
-      <input type="file" id="global-file-input" hidden onChange={handleImageUpload} />
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
+    <div
+      className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const file = e.dataTransfer.files?.[0];
+        if (!file) return;
+
+        try {
+          await handleFileImport(file, false);
+        } catch (err) {
+          console.error(err);
+          addAlert({ type: 'error', message: 'Failed to open dragged image.' });
+        }
+      }}
+    >
+      <input type="file" id="global-file-input" hidden accept="image/*,application/pdf,.psd" onChange={handleImageUpload} />
+      <input type="file" id="place-file-input" hidden accept="image/*,application/pdf,.psd" onChange={handlePlaceUpload} />
 
       {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
         <div
@@ -1160,73 +1120,8 @@ const App: React.FC = () => {
           </div>
         </div>
 
-<<<<<<< HEAD
-        <MenuBar
-          onFileOpen={() => document.getElementById('global-file-input')?.click()}
-          onPlaceFile={() => document.getElementById('place-file-input')?.click()}
-          onSave={handleSave}
-          undo={undo}
-          redo={redo}
-          historyIndex={historyIndex}
-          historyLength={history.length}
-          canUndo={historyIndex > 0}
-          canRedo={historyIndex < history.length - 1}
-          onInvert={handleInvert}
-          onDuplicateLayer={() => activeLayerId && duplicateLayer(activeLayerId)}
-          onDeleteLayer={() => activeLayerId && removeLayer(activeLayerId)}
-          onFillLayer={() => setIsFillPickerOpen(true)}
-          onSelectSubject={handleSelectSubject}
-          onRemoveBackground={handleRemoveBackground}
-          onInverseSelection={() => {
-            inverseSelection();
-            recordHistory('Inverse Selection');
-          }}
-          isMobileOpen={isMobileMenuOpen}
-          onCloseMobile={() => setIsMobileMenuOpen(false)}
-          onNewDocument={handleNewDocument}
-          onExport={handleExport}
-          onCut={handleCut}
-          onCopy={handleCopy}
-          onPaste={handlePaste}
-          onTransformLayer={handleTransformLayer}
-          onCanvasSize={() => {
-            const w = prompt('New Canvas Width:', documentSize.w.toString());
-            const h = prompt('New Canvas Height:', documentSize.h.toString());
-            if (w && h) setDocumentSize({ w: parseInt(w), h: parseInt(h) });
-          }}
-          onImageSize={() => {
-            const w = prompt('New Image Width:', documentSize.w.toString());
-            const h = prompt('New Image Height:', documentSize.h.toString());
-            if (w && h) setDocumentSize({ w: parseInt(w), h: parseInt(h) });
-          }}
-          onAddEmptyLayer={() => addLayer({ name: `Layer ${layers.length + 1}` })}
-          onSelectAll={handleSelectAll}
-          onDeselect={handleDeselect}
-          onZoomIn={() => setZoom(Math.min(32, zoom + 0.1))}
-          onZoomOut={() => setZoom(Math.max(0.01, zoom - 0.1))}
-          onZoomFit={() => {
-            const viewportW = window.innerWidth - 240 - 44 - 60;
-            const viewportH = window.innerHeight - 38 - 32 - 24 - 40;
-            const zoomW = viewportW / documentSize.w;
-            const zoomH = viewportH / documentSize.h;
-            setZoom(Math.min(zoomW, zoomH));
-          }}
-          onToggleRulers={() => setShowRulers(!useStore.getState().showRulers)}
-          onToggleGrid={() => setShowGrid(!useStore.getState().showGrid)}
-          onToggleGuides={() => setShowGuides(!useStore.getState().showGuides)}
-          onOpenURL={handleOpenURL}
-          onTakeSnapshot={handleTakeSnapshot}
-          onPrint={handlePrint}
-          onScript={handleScript}
-          onSaveToStorage={(provider) => setSaveModal({ type: 'cloud', provider })}
-          onSaveToPublic={(service) => setSaveModal({ type: 'public', provider: service })}
-        />
-
-
-=======
         <AlertContainer />
         <MenuBar />
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
         <div className="header-right">
           {/* Mobile toggle buttons */}
@@ -1246,11 +1141,7 @@ const App: React.FC = () => {
       </header>
 
       <OptionsBar />
-<<<<<<< HEAD
       <TabBar />
-=======
-
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
       <div className="app-body">
         <div className={`toolbar-wrapper ${isToolsOpen ? 'mobile-open' : ''}`}>
           {isToolsOpen && (
@@ -1315,7 +1206,7 @@ const App: React.FC = () => {
 
             {/* Global Layer Properties - Only visible if a layer is active */}
             {activeLayerId && (() => {
-              const activeLayer = layers.find(l => l.id === activeLayerId);
+              const activeLayer = findLayerById(layers, activeLayerId);
               if (!activeLayer) return null;
               return (
                 <div className="layer-global-properties">
@@ -1383,38 +1274,16 @@ const App: React.FC = () => {
               );
             })()}
 
-            <div className="panel-content">
-              {layers.map((layer, idx) => (
-                <div
-                  key={layer.id}
-                  className={`layer-node ${draggedIndex === idx ? 'dragging' : ''}`}
-                  draggable={true}
-                  onDragStart={() => setDraggedIndex(idx)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (draggedIndex !== null && draggedIndex !== idx) {
-                      reorderLayers(draggedIndex, idx);
-                      recordHistory('Reorder Layers');
-                    }
-                    setDraggedIndex(null);
-                  }}
-                  onDragEnd={() => setDraggedIndex(null)}
-                >
-                  <div className={`layer-row ${activeLayerId === layer.id ? 'active' : ''}`} onClick={() => setActiveLayer(layer.id)}>
-                    <div className="layer-eye" onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}>
-                      {layer.visible ? <LucideIcons.Eye size={12} /> : <LucideIcons.EyeOff size={12} />}
-                    </div>
-                    <div className="layer-thumb">
-                      {layer.thumbnail && <img src={layer.thumbnail} alt="" />}
-                    </div>
-                    <span className="layer-title">{layer.name}</span>
-                    <div className="layer-order-btns">
-                      <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); recordHistory('Move Layer Up'); }} title="Move Up"><LucideIcons.ChevronUp size={12} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); recordHistory('Move Layer Down'); }} title="Move Down"><LucideIcons.ChevronDown size={12} /></button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="panel-content" onDrop={(e) => {
+              e.preventDefault();
+              if (draggedIndex && layers.length > 0) {
+                 // Drop on empty space in panel -> move to root bottom
+                 useStore.getState().reorderNodesAction?.(draggedIndex, layers[layers.length - 1].id, 'after');
+                 recordHistory('Reorder Layers');
+              }
+              setDraggedIndex(null);
+            }} onDragOver={(e) => e.preventDefault()}>
+              {renderLayerTree(layers)}
             </div>
             <div className="panel-footer">
               <button onClick={() => addLayer({ name: `Layer ${layers.length + 1}` })}><LucideIcons.Plus size={14} /></button>
@@ -1509,7 +1378,6 @@ const App: React.FC = () => {
         <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
       )}
 
-<<<<<<< HEAD
       {saveModal.type === 'cloud' && (
         <CloudStorageModal
           isOpen={true}
@@ -1521,8 +1389,6 @@ const App: React.FC = () => {
 
             try {
               if (provider === 'google_drive') {
-                // In a real app, you'd handle OAuth here. 
-                // For now, we'll prompt for a token if not found, or use a mock flow if preferred.
                 const token = localStorage.getItem('google_drive_token') || prompt('Please enter your Google Drive Access Token (for testing):');
                 if (token) {
                   localStorage.setItem('google_drive_token', token);
@@ -1530,7 +1396,6 @@ const App: React.FC = () => {
                   alert('Saved to Google Drive!');
                 }
               } else {
-                // Mock other providers for now as they require different OAuth flows
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 console.log(`Mock saved ${filename} to ${provider}`);
               }
@@ -1557,24 +1422,42 @@ const App: React.FC = () => {
             } else if (service === 'imagebb') {
               return await uploadToImageBB(dataUrl);
             } else {
-              // Fallback for others
               await new Promise(resolve => setTimeout(resolve, 2000));
               return `https://${service}.com/share/a7b2c9d${Math.floor(Math.random() * 10000)}`;
             }
           }}
         />
       )}
-    </div>
-=======
-            <NewDocumentDialog />
+
+      <NewDocumentDialog />
       <OpenRecentDialog />
       <OpenFromCloudDialog />
       <ExportAsDialog />
       <FileInfoDialog />
       <CameraDialog />
       <MobileCameraDialog />
-</div>
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
+
+      {layerContextMenu && (
+        <LayerContextMenu
+          position={{ x: layerContextMenu.x, y: layerContextMenu.y }}
+          layerId={layerContextMenu.layerId}
+          onClose={() => setLayerContextMenu(null)}
+          onRename={(id) => {
+            const layer = findLayerById(useStore.getState().layers, id);
+            if (layer) {
+              setNewLayerName(layer.name);
+              setRenamingLayerId(id);
+            }
+            setLayerContextMenu(null);
+          }}
+          onDelete={(id) => {
+            useStore.getState().removeLayer(id);
+            useStore.getState().recordHistory('Delete Layer');
+            setLayerContextMenu(null);
+          }}
+        />
+      )}
+    </div>
   );
 };
 

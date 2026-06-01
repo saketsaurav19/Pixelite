@@ -1,5 +1,6 @@
 import type { Point, CanvasRefs } from '../types';
 import type { Layer } from '../../../store/useStore';
+import { findLayerById } from '../../../utils/layerUtils';
 
 export const applyGradient = (
   start: Point,
@@ -11,16 +12,17 @@ export const applyGradient = (
   secondaryColor: string,
   recordHistory: (label: string) => void
 ) => {
-  const id = activeLayerId || layers[0]?.id;
+  const id = activeLayerId || (layers.length > 0 ? layers[0].id : null);
+  if (!id) return;
   const canvas = canvasRefs.current[id];
   const ctx = canvas?.getContext('2d');
   if (!ctx) return;
 
-  const layer = layers.find(l => l.id === id);
-  const lx1 = start.x - (layer?.position.x || 0);
-  const ly1 = start.y - (layer?.position.y || 0);
-  const lx2 = end.x - (layer?.position.x || 0);
-  const ly2 = end.y - (layer?.position.y || 0);
+  const layer = findLayerById(layers, id);
+  const lx1 = start.x - (layer?.position?.x || 0);
+  const ly1 = start.y - (layer?.position?.y || 0);
+  const lx2 = end.x - (layer?.position?.x || 0);
+  const ly2 = end.y - (layer?.position?.y || 0);
 
   const grad = ctx.createLinearGradient(lx1, ly1, lx2, ly2);
   grad.addColorStop(0, brushColor);

@@ -141,15 +141,9 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
               stopOverlayEvent(e);
               const c = getCoordinates(e.clientX, e.clientY);
               if (c) lastPointRef.current = c;
-<<<<<<< HEAD
-              (window as any)._pcDragIdx = i + 4;
-              (window as any)._pcStartPoint = { ...c };
-              (window as any)._pcOrigPoints = p.map(pt => ({ ...pt }));
-=======
               toolState._pcDragIdx = i + 4; // Midpoint indices are 4-7
               toolState._pcStartPoint = { ...c };
               toolState._pcOrigPoints = p.map(pt => ({ ...pt }));
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
               setIsInteracting(true);
             }}
             onTouchStart={(e) => {

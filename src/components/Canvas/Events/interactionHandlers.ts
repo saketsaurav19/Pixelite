@@ -28,23 +28,20 @@ export const startAction = (
     hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>;
   }
 ) => {
-<<<<<<< HEAD
-  const { coords, activeTool, canvasOffset, lassoPaths, primaryOpacity, isLightingEnabled, setLightingEnabled } = context;
+  const { coords, activeTool, canvasOffset, lassoPaths, primaryOpacity, isLightingEnabled, setLightingEnabled, activeLayerId, layers } = context;
 
   if (activeTool === 'lighting') {
     if (!isLightingEnabled) {
       if (setLightingEnabled) setLightingEnabled(true);
       window.dispatchEvent(new CustomEvent('generate-depth-map'));
     }
-=======
-  const { coords, activeTool, canvasOffset, lassoPaths, activeLayerId, layers } = context;
+  }
 
   // Check if tool requires active layer
   const toolsRequiringLayer = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'patch', 'smudge', 'clone', 'pattern_stamp', 'mixer_brush', 'color_replacement', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush', 'marquee', 'ellipse_marquee', 'lasso', 'polygonal_lasso', 'magnetic_lasso', 'quick_selection', 'magic_wand', 'object_selection', 'paint_bucket', 'gradient'];
   if (toolsRequiringLayer.includes(activeTool) && !activeLayerId && layers.length > 0) {
     useStore.getState().addAlert({ type: 'error', message: 'Please select a layer first.' });
     return;
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
   }
 
   const isAltPressedLocal = (e as any).altKey || context.isAlt;
@@ -62,7 +59,7 @@ export const startAction = (
     let isInsideQuad = false;
     for (let i = 0, j = quad.length - 1; i < quad.length; j = i++) {
       if (((quad[i].y > coords.y) !== (quad[j].y > coords.y)) &&
-          (coords.x < (quad[j].x - quad[i].x) * (coords.y - quad[i].y) / (quad[j].y - quad[i].y) + quad[i].x)) {
+        (coords.x < (quad[j].x - quad[i].x) * (coords.y - quad[i].y) / (quad[j].y - quad[i].y) + quad[i].x)) {
         isInsideQuad = !isInsideQuad;
       }
     }

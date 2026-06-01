@@ -5,11 +5,8 @@ import { createSelectionSlice } from './slices/selectionSlice';
 import { createToolSlice } from './slices/toolSlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createDocumentSlice } from './slices/documentSlice';
-<<<<<<< HEAD
 import { createLightingSlice } from './slices/lightingSlice';
-=======
 import { createUISlice } from './slices/uiSlice';
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
 export type { EditorState, Layer, Tool } from './types';
 
@@ -19,25 +16,17 @@ export const useStore = create<EditorState>()((...a) => ({
   ...createToolSlice(...a),
   ...createHistorySlice(...a),
   ...createDocumentSlice(...a),
-<<<<<<< HEAD
   ...createLightingSlice(...a),
+  ...createUISlice(...a),
   documents: [],
   activeDocumentId: '',
   activeDocumentName: '',
-=======
-  ...createUISlice(...a),
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 }));
 
 import { nanoid } from 'nanoid';
 // Initialize history with initial state
-<<<<<<< HEAD
 const initialDocId = nanoid();
 const initialState = {
-=======
-useStore.setState({
-  alerts: [],
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
   layers: [],
   activeLayerId: null,
   history: [
@@ -88,7 +77,6 @@ useStore.setState({
     },
   ],
   historyIndex: 0,
-<<<<<<< HEAD
   documentSize: { w: 1920, h: 1080 },
   zoom: 1,
   canvasOffset: { x: 0, y: 0 },
@@ -138,17 +126,6 @@ useStore.setState({
   activeDocumentId: initialDocId,
   activeDocumentName: 'Untitled-1',
   ...initialState
-=======
-  currentProjectId: null,
-  isNewDocumentDialogOpen: false,
-  exportFormat: 'image/png',
-  isMobileMenuOpen: false,
-  isCameraDialogOpen: false,
-  mobileCapturedImage: null,
-  activeMobileSubmenu: null,
-  isExportDialogOpen: false,
-  isFileInfoDialogOpen: false,
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 });
 
 // Expose for E2E testing

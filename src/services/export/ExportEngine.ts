@@ -1,6 +1,7 @@
 import { FileSystemService } from '../file/FileSystemService';
 
 import piexif from 'piexifjs';
+import { insertExifToPng, insertExifToWebp } from '../../utils/metadataInjectors';
 
 export interface ExportOptions {
   format: 'image/png' | 'image/jpeg' | 'image/webp';
@@ -48,19 +49,26 @@ export class ExportEngine {
     const ext = options.format === 'image/jpeg' ? 'jpg' : options.format.split('/')[1];
     const filename = options.filename || `export.${ext}`;
 
-    if (options.format === 'image/jpeg' && options.exifData) {
+    if (options.exifData) {
       try {
         const reader = new FileReader();
         const blobWithExif = await new Promise<Blob>((resolve) => {
           reader.onload = (e) => {
             if (e.target?.result && typeof e.target.result === 'string') {
               try {
-                const exifStr = piexif.dump(options.exifData);
-                const newJpeg = piexif.insert(exifStr, e.target.result);
+                let newDataUrl = e.target.result;
+                if (options.format === 'image/jpeg') {
+                  const exifStr = piexif.dump(options.exifData);
+                  newDataUrl = piexif.insert(exifStr, e.target.result as string);
+                } else if (options.format === 'image/png') {
+                  newDataUrl = insertExifToPng(e.target.result as string, options.exifData);
+                } else if (options.format === 'image/webp') {
+                  newDataUrl = insertExifToWebp(e.target.result as string, options.exifData);
+                }
 
                 // Convert back to blob
-                const byteString = atob(newJpeg.split(',')[1]);
-                const mimeString = newJpeg.split(',')[0].split(':')[1].split(';')[0];
+                const byteString = atob(newDataUrl.split(',')[1]);
+                const mimeString = newDataUrl.split(',')[0].split(':')[1].split(';')[0];
                 const ab = new ArrayBuffer(byteString.length);
                 const ia = new Uint8Array(ab);
                 for (let i = 0; i < byteString.length; i++) {

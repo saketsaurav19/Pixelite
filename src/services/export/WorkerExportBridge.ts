@@ -1,3 +1,21 @@
+import { readPsd, writePsdUint8Array, initializeCanvas } from 'ag-psd';
+
+let canvasInitialized = false;
+function ensureCanvasInitialized() {
+  if (!canvasInitialized) {
+    initializeCanvas(
+      (width: number, height: number) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        return canvas as any;
+      },
+      (width: number, height: number) => new ImageData(width, height)
+    );
+    canvasInitialized = true;
+  }
+}
+
 export class WorkerExportBridge {
   private worker: Worker | null = null;
   private messageCallbacks = new Map<string, { resolve: (val: any) => void, reject: (err: any) => void }>();
@@ -29,13 +47,10 @@ export class WorkerExportBridge {
     }
   }
 
-    async generatePSD(layers: any[], width: number, height: number): Promise<Uint8Array> {
-    if (!this.worker) throw new Error("Worker not initialized");
-
-    const id = Math.random().toString(36).substring(7);
-
-    // Rasterize layers into ImageData in the main thread to pass to the worker
-    const rasterizedChildren = await Promise.all(layers.map(async (layer) => {
+      async generatePSD(layers: any[], width: number, height: number): Promise<Uint8Array> {
+    ensureCanvasInitialized();
+    const reversedLayers = [...layers].reverse();
+    const rasterizedChildren = await Promise.all(reversedLayers.map(async (layer) => {
       let imageData: ImageData;
 
       const canvas = document.createElement('canvas');
@@ -63,9 +78,6 @@ export class WorkerExportBridge {
                   ctx.drawImage(img, layer.position.x, layer.position.y);
               }
           }
-          // We could add support for text/shape rendering here in the future if needed,
-          // but for now, ag-psd takes composite ImageData per layer.
-
           imageData = ctx.getImageData(0, 0, width, height);
       }
 
@@ -80,55 +92,47 @@ export class WorkerExportBridge {
       };
     }));
 
-    return new Promise((resolve, reject) => {
-      this.messageCallbacks.set(id, { resolve: (res) => resolve(res.buffer), reject });
-      this.worker!.postMessage({ type: 'GENERATE_PSD', children: rasterizedChildren, width, height, id });
-    });
+    const psdData = {
+      width,
+      height,
+      children: rasterizedChildren
+    };
+
+    return writePsdUint8Array(psdData as any);
   }
-    async parsePSD(buffer: ArrayBuffer): Promise<any> {
-    if (!this.worker) throw new Error("Worker not initialized");
+      async parsePSD(buffer: ArrayBuffer): Promise<any> {
+    ensureCanvasInitialized();
+    const psd = readPsd(buffer);
 
-    const id = Math.random().toString(36).substring(7);
+    // Now convert the returned ImageData/Canvas objects to DataUrls
+    const processLayer = async (layer: any) => {
+      if (layer.canvas) {
+        layer.dataUrl = layer.canvas.toDataURL('image/png');
+        delete layer.canvas;
+      } else if (layer.imageData) {
+        const canvas = document.createElement('canvas');
+        canvas.width = layer.imageData.width || psd.width;
+        canvas.height = layer.imageData.height || psd.height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.putImageData(layer.imageData, 0, 0);
+        layer.dataUrl = canvas.toDataURL('image/png');
+        delete layer.imageData; // save memory
+      }
 
-    return new Promise((resolve, reject) => {
-      this.messageCallbacks.set(id, {
-        resolve: (res) => {
-          // Convert blobs to Object URLs in the main thread
-          const processLayer = (layer: any) => {
-            if (layer.blob) {
-              layer.dataUrl = URL.createObjectURL(layer.blob);
-              delete layer.blob;
-            }
-            if (layer.children) {
-              layer.children.forEach(processLayer);
-            }
-          };
-          if (res.psd && res.psd.children) {
-            res.psd.children.forEach(processLayer);
-          }
-
-          resolve(res.psd);
-        },
-        reject
-      });
-      this.worker!.postMessage({ type: 'PARSE_PSD', buffer, id }, [buffer]);
-    });
-
-    // Now convert the returned ImageData objects back to DataUrls
-    if (parsedPsd && parsedPsd.children) {
-        for (const layer of parsedPsd.children) {
-             if (layer.imageData) {
-                  const canvas = document.createElement('canvas');
-                  canvas.width = layer.imageData.width || parsedPsd.width;
-                  canvas.height = layer.imageData.height || parsedPsd.height;
-                  const ctx = canvas.getContext('2d')!;
-                  ctx.putImageData(layer.imageData, 0, 0);
-                  layer.dataUrl = canvas.toDataURL('image/png');
-                  delete layer.imageData; // save memory
-             }
+      if (layer.children) {
+        for (const child of layer.children) {
+          await processLayer(child);
         }
+      }
+    };
+
+    if (psd && psd.children) {
+      for (const layer of psd.children) {
+        await processLayer(layer);
+      }
     }
-    return parsedPsd;
+
+    return psd;
   }
   terminate() {
       if(this.worker) {

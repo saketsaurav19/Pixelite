@@ -48,8 +48,6 @@ body {
   /* Increased to be above mobile-backdrop (1200) */
 }
 
-<<<<<<< HEAD
-=======
 .main-nav {
   display: flex;
   height: 100%;
@@ -119,7 +117,6 @@ body {
 .menu-option.submenu-parent:hover .menu-submenu {
   display: flex;
 }
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
 /* Options Bar */
 
@@ -134,14 +131,11 @@ body {
   padding: 6px 10px;
   gap: 15px;
   font-size: 11px;
-<<<<<<< HEAD
   overflow: visible;
-=======
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
   scrollbar-width: thin;
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 }
 
 .tool-indicator {
@@ -214,11 +208,8 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-<<<<<<< HEAD
   min-height: 28px;
-=======
   flex-shrink: 0;
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 }
 
 /* Main Body */
@@ -510,7 +501,6 @@ body {
 
 .layers-panel {
   flex: 2;
-<<<<<<< HEAD
   min-height: 200px;
 }
 
@@ -525,9 +515,7 @@ body {
   color: var(--text-secondary);
   font-size: 11px;
   font-style: italic;
-=======
   overflow-y: scroll;
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 }
 
 .panel-tab {
@@ -682,7 +670,8 @@ body {
   cursor: text;
 }
 
-.opacity-input, .value-input {
+.opacity-input,
+.value-input {
   width: 38px;
   height: 18px;
   background: var(--bg-tertiary);
@@ -1270,7 +1259,7 @@ body {
 
 
 
-    .options-bar {
+  .options-bar {
     padding: 8px 15px;
     overflow-x: auto;
     overflow-y: visible;
@@ -1415,7 +1404,7 @@ body {
     animation: simpleFadeIn 0.3s ease;
   }
 
-  }
+}
 
 /* Hide desktop elements on mobile and vice versa */
 @media (min-width: 769px) {
@@ -1657,4 +1646,25 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Layer Context Menu and Inline Renaming */
+.layer-rename-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  outline: none;
+  width: 100%;
+  flex-grow: 1;
+}
+
+.layer-row.long-press-active {
+  background-color: var(--bg-tertiary);
+  opacity: 0.8;
+  transform: scale(0.98);
+  transition: all 0.1s ease;
 }

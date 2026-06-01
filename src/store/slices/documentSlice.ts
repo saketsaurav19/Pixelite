@@ -22,17 +22,14 @@ export interface DocumentSlice {
   cloneSource: { x: number; y: number } | null;
   customPattern: string | null;
   cropRect: { x: number; y: number; w: number; h: number } | null;
-<<<<<<< HEAD
   showRulers: boolean;
   showGrid: boolean;
   showGuides: boolean;
-=======
   exifData: any;
   iccProfile: string;
 
   setExifData: (data: any) => void;
   setIccProfile: (profile: string) => void;
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 
   setZoom: (zoom: number) => void;
   setCanvasOffset: (offset: { x: number; y: number }) => void;
@@ -204,7 +201,8 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   setCropRect: (updater) => set((state) => ({
     cropRect: typeof updater === 'function' ? updater(state.cropRect) : updater
   })),
-<<<<<<< HEAD
+  setExifData: (exifData) => set({ exifData }),
+  setIccProfile: (iccProfile) => set({ iccProfile }),
   showRulers: true,
   showGrid: false,
   showGuides: true,
@@ -298,8 +296,4 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
       ...nextDoc.state
     };
   }),
-=======
-  setExifData: (exifData) => set({ exifData }),
-  setIccProfile: (iccProfile) => set({ iccProfile }),
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
 });

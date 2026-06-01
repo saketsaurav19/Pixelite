@@ -140,27 +140,15 @@ const OptionsBar: React.FC = () => {
                 if (paths.length > 0) {
                   const subdividedPaths = paths.map(path => {
                     if (!path.smooth || path.points.length < 3) return path.points;
-<<<<<<< HEAD
-
-=======
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                     const result: { x: number, y: number }[] = [];
                     const steps = 12; // High resolution for selection
                     const points = path.points;
                     const len = points.length;
-<<<<<<< HEAD
-
-=======
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                     for (let i = 0; i < (path.closed ? len : len - 1); i++) {
                       const p0 = points[(i - 1 + len) % len];
                       const p1 = points[i % len];
                       const p2 = points[(i + 1) % len];
                       const p3 = points[(i + 2) % len];
-<<<<<<< HEAD
-
-=======
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                       for (let t = 0; t < steps; t++) {
                         const u = t / steps;
                         const x = 0.5 * (
@@ -181,10 +169,6 @@ const OptionsBar: React.FC = () => {
                     if (!path.closed) result.push(points[len - 1]);
                     return result;
                   });
-<<<<<<< HEAD
-
-=======
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
                   setLassoPaths(subdividedPaths);
                   setVectorPaths([]);
                   setActivePathIndex(null);
@@ -440,8 +424,6 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-<<<<<<< HEAD
-
       {activeTool === 'lighting' && (
         <>
           <div className="options-divider" />
@@ -621,9 +603,6 @@ const OptionsBar: React.FC = () => {
 
         </>
       )}
-
-=======
->>>>>>> 734602a4eff0a2c33dd75c49b5bcff07f2544a7f
       {activeTool === 'zoom_tool' && (
         <>
           <div className="option-control">

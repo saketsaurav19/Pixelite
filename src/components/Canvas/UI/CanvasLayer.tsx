@@ -1,27 +1,57 @@
 import React from 'react';
-import type { Layer } from '../../../store/useStore';
+import type { Layer } from '../../../store/types';
 
-/**
- * Props for the CanvasLayer component.
- */
 interface CanvasLayerProps {
-  layer: Layer; // The layer data object from the store
-  documentSize: { w: number, h: number }; // Dimensions of the Photoshop document
-  canvasRef: (el: HTMLCanvasElement | null) => void; // Callback to register this canvas in the parent's ref object
-  layersCount: number; // Total number of layers (used for z-index calculation)
-  layerIndex: number; // Current layer's index in the stack
+  layer: Layer;
+  documentSize: { w: number, h: number };
+  canvasRefs: React.MutableRefObject<Record<string, HTMLCanvasElement | null>>;
+  layersCount: number;
+  layerIndex: number;
+  depth?: number;
 }
 
-/**
- * Renders an individual layer as a canvas element wrapped in a div for positioning and blending.
- */
 export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   layer,
   documentSize,
-  canvasRef,
+  canvasRefs,
   layersCount,
-  layerIndex
+  layerIndex,
+  depth = 0
 }) => {
+  // If it's a group, we wrap the children in an isolated div for compositing
+  if (layer.type === 'group') {
+    return (
+      <div
+        className={`layer-group ${layer.visible ? 'visible' : 'hidden'}`}
+        style={{
+          position: 'absolute',
+          top: 0, left: 0,
+          width: '100%', height: '100%',
+          zIndex: layersCount - layerIndex,
+          pointerEvents: 'none',
+          isolation: 'isolate',
+          mixBlendMode: (layer.blendMode === 'source-over' || (layer.blendMode as string) === 'pass through' ? 'normal' : (layer.blendMode || 'normal')) as any,
+          opacity: layer.opacity,
+          // Group doesn't have a specific transform if we treat its children absolutely
+          // If we want group positioning, we could apply transform here, but Photoshop typically handles child transforms relative to document unless dragged
+        }}
+      >
+        {layer.children?.map((childLayer, childIndex) => (
+          <CanvasLayer
+            key={childLayer.id}
+            layer={childLayer}
+            documentSize={documentSize}
+            canvasRefs={canvasRefs}
+            layersCount={layer.children!.length}
+            layerIndex={childIndex}
+            depth={depth + 1}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // Regular layer
   return (
     <div
       className={`layer-wrapper ${layer.visible ? 'visible' : 'hidden'}`}
@@ -33,11 +63,11 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         pointerEvents: 'none',
         mixBlendMode: (layer.blendMode === 'source-over' ? 'normal' : (layer.blendMode || 'normal')) as any,
         opacity: layer.opacity,
-        transform: `translate(${layer.position.x / 2}px, ${layer.position.y / 2}px)`
+        transform: `translate(${(layer.position?.x || 0) / 2}px, ${(layer.position?.y || 0) / 2}px)`
       }}
     >
       <canvas
-        ref={canvasRef}
+        ref={(el) => { if (canvasRefs && canvasRefs.current) canvasRefs.current[layer.id] = el; }}
         data-layer-id={layer.id}
         width={documentSize.w}
         height={documentSize.h}
