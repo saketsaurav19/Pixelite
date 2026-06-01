@@ -27,13 +27,13 @@ export class PdfiumAdapter implements PdfEngineAdapter {
     const count = this.doc.getPageCount();
     for (let i = 0; i < count; i++) {
 
-      // Since sizes are not immediately accessible without render, use a default for now
-      const size = { width: 1000, height: 1000 };
+      const page = this.doc.getPage(i);
+      const { originalWidth, originalHeight } = page.getOriginalSize();
 
       pages.push({
         pageIndex: i,
-        width: size.width,
-        height: size.height,
+        width: Math.floor(originalWidth * 2),
+        height: Math.floor(originalHeight * 2),
         nodes: [] // Extracted later
       });
     }
