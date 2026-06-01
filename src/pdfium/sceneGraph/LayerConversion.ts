@@ -1,6 +1,24 @@
-import type { SceneNode, SceneNodeTransform } from '../types/SceneNode';
+import type { PathSegment, SceneNode, SceneNodeTransform } from '../types/SceneNode';
 import type { Layer } from '../../store/types';
 import { nanoid } from 'nanoid';
+
+
+function pathSegmentsToSvgPath(segments: PathSegment[]): string {
+  return segments.map((segment) => {
+    switch (segment.type) {
+      case 'moveTo':
+        return `M ${segment.points[0].x} ${segment.points[0].y}`;
+      case 'lineTo':
+        return `L ${segment.points[0].x} ${segment.points[0].y}`;
+      case 'bezierCurveTo':
+        return `C ${segment.points.map((point) => `${point.x} ${point.y}`).join(' ')}`;
+      case 'closePath':
+        return 'Z';
+      default:
+        return '';
+    }
+  }).filter(Boolean).join(' ');
+}
 
 function applyTransformToPosition(transform: SceneNodeTransform | undefined, x: number, y: number): { x: number, y: number } {
   if (!transform) return { x, y };
@@ -43,13 +61,14 @@ export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0
         blendMode: (node.blendMode as any) || 'source-over',
         position,
         shapeData: {
-          type: 'custom',
-          pathSegments: node.geometry.segments, // Needs mapping if Pixelite supports arbitrary path rendering
+          type: 'path',
+          svgPath: pathSegmentsToSvgPath(node.geometry.segments),
           fill: node.style.fillColor || 'transparent',
           stroke: node.style.strokeColor || 'transparent',
           strokeWidth: node.style.strokeWidth || 0,
+          closed: node.geometry.isClosed,
         }
-      } as any;
+      };
 
     case 'text':
       return {
@@ -61,13 +80,10 @@ export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0
         opacity: node.opacity ?? 1,
         blendMode: (node.blendMode as any) || 'source-over',
         position,
-        textData: {
-          text: node.geometry.text,
-          fontSize: node.geometry.fontSize,
-          fontFamily: node.geometry.fontFamily || 'Arial',
-          color: node.style.fillColor || '#000000',
-        }
-      } as any;
+        textContent: node.geometry.text,
+        fontSize: node.geometry.fontSize,
+        color: node.style.fillColor || '#000000',
+      };
 
     case 'group':
     case 'page':
