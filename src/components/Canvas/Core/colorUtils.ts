@@ -1,5 +1,6 @@
 import type { CanvasRefs } from '../types';
 import type { Layer } from '../../../store/useStore';
+import { findLayerById } from '../../../utils/layerUtils';
 
 export const colorDistance = (data: Uint8ClampedArray, idx: number, r: number, g: number, b: number, a: number): number => {
   return Math.abs(data[idx] - r) + Math.abs(data[idx + 1] - g) + Math.abs(data[idx + 2] - b) + Math.abs(data[idx + 3] - a);
@@ -13,12 +14,13 @@ export const handleEyedropper = (
   canvasRefs: CanvasRefs,
   setBrushColor: (color: string) => void
 ) => {
-  const id = activeLayerId || layers[0]?.id;
+  const id = activeLayerId || (layers.length > 0 ? layers[0].id : null);
+  if (!id) return;
   const canvas = canvasRefs.current[id];
   const ctx = canvas?.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
 
-  const layer = layers.find(l => l.id === id);
+  const layer = findLayerById(layers, id);
   const lx = x - (layer?.position.x || 0);
   const ly = y - (layer?.position.y || 0);
 
