@@ -96,8 +96,8 @@ export const useFileImporter = () => {
           const offsetLayers = result.layers.map((pg) => ({
             ...pg,
             position: {
-              x: (documentSize.w - result.width) / 2,
-              y: (documentSize.h - result.height) / 2,
+              x: (pg.position?.x || 0) + (documentSize.w - result.width) / 2,
+              y: (pg.position?.y || 0) + (documentSize.h - result.height) / 2,
             },
           }));
           setLayers([...offsetLayers, ...layers]);
