@@ -59,6 +59,14 @@ export type Layer = BaseLayer & {
   children?: Layer[];
   collapsed?: boolean;
 
+  // Artboard properties
+  backgroundColor?: string;
+  backgroundTransparent?: boolean;
+  exportSettings?: any;
+  clippingEnabled?: boolean;
+  dpi?: number;
+  guides?: any[];
+
   // LayerData fields directly on Layer for easier migration
   dataUrl?: string;
   textContent?: string;
