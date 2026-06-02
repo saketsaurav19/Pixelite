@@ -104,7 +104,7 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
             {layer.visible ? <LucideIcons.Eye size={12} /> : <LucideIcons.EyeOff size={12} />}
           </div>
           <div className="layer-thumb">
-            {layer.thumbnail ? <img src={layer.thumbnail} alt="" /> : ((layer.type === 'group' || layer.type === 'artboard') ? <LucideIcons.Folder size={16} /> : null)}
+            {layer.thumbnail ? <img src={layer.thumbnail} alt="" /> : (layer.type === 'artboard' ? <LucideIcons.Layout size={16} /> : layer.type === 'group' ? <LucideIcons.Folder size={16} /> : null)}
           </div>
           {renamingLayerId === layer.id ? (
             <input
@@ -131,7 +131,12 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
               onPointerDown={(e) => e.stopPropagation()}
             />
           ) : (
-            <span className="layer-title">{layer.name}</span>
+            <span className="layer-title">
+              {layer.name}
+              {layer.type === 'artboard' && layer.width && layer.height && (
+                <span style={{ opacity: 0.5, fontSize: '10px', marginLeft: '6px' }}>({layer.width} × {layer.height})</span>
+              )}
+            </span>
           )}
           <div className="layer-order-btns">
             <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); recordHistory('Move Layer Up'); }} title="Move Up"><LucideIcons.ChevronUp size={12} /></button>

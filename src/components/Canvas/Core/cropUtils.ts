@@ -3,7 +3,7 @@ import type { Layer } from '../../../store/useStore';
 
 export const isCropUiTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof Element)) return false;
-  return !!target.closest('.crop-marquee, .crop-handle, .crop-actions-bar, .perspective-crop-ui, .perspective-actions-bar');
+  return !!target.closest('.crop-marquee, .crop-handle, .crop-actions-bar, .perspective-crop-ui, .perspective-actions-bar') || (target.classList && target.classList.contains('crop-handle'));
 };
 
 export const applyCrop = (
