@@ -38,6 +38,7 @@ export interface ToolContext {
   addLayer: (layer: any) => void;
   setDocumentSize: (size: { w: number, h: number }) => void;
   canvasOffset: { x: number; y: number };
+  documentSize: { w: number; h: number };
   setSlices: (slices: any[]) => void;
   addSlice: (rect: { x: number, y: number, w: number, h: number }) => void;
   addColorSampler: (coords: { x: number; y: number }, color: string) => void;
