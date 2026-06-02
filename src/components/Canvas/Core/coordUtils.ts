@@ -9,8 +9,8 @@ export const getCoordinates = (
   if (!stackElement) return null;
   const rect = stackElement.getBoundingClientRect();
 
-  const nx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+  const nx = (clientX - rect.left) / rect.width;
+  const ny = (clientY - rect.top) / rect.height;
 
   return {
     x: nx * documentSize.w,
