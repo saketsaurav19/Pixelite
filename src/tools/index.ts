@@ -6,6 +6,7 @@ import { utilityTools } from './Utility/utilityTools';
 import { healingTools } from './Retouching/healingTools';
 import { retouchingTools } from './Retouching/retouchingTools';
 import { exposureTools } from './Retouching/exposureTools';
+import { artboardTool } from './Artboard/artboardTool';
 
 const allTools: ToolModule[] = [
   ...selectionTools,
@@ -15,6 +16,7 @@ const allTools: ToolModule[] = [
   ...healingTools,
   ...retouchingTools,
   ...exposureTools,
+  artboardTool,
 ];
 
 export const getToolModule = (id: string) => allTools.find(t => t.id === id);

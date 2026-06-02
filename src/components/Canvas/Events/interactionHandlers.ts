@@ -208,6 +208,31 @@ export const endAction = (
     }
   }
 
+  // --- Artboard creation ---
+  if (activeTool === 'artboard' && state.draftShape) {
+    const w = Math.abs(state.draftShape.w);
+    const h = Math.abs(state.draftShape.h);
+    if (w > 10 && h > 10) {
+      const x = state.draftShape.w >= 0 ? state.draftShape.x : state.draftShape.x + state.draftShape.w;
+      const y = state.draftShape.h >= 0 ? state.draftShape.y : state.draftShape.y + state.draftShape.h;
+      handlers.addLayer({
+        name: 'Artboard',
+        type: 'artboard',
+        visible: true,
+        opacity: 1,
+        position: { x, y },
+        width: w,
+        height: h,
+        backgroundColor: '#ffffff',
+        backgroundTransparent: false,
+        clippingEnabled: true,
+        children: [],
+      });
+      handlers.recordHistory('New Artboard');
+    }
+    handlers.setDraftShape(null);
+  }
+
   // Shape tools legacy handling
   if (['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool as string) && state.draftShape) {
     const w = Math.abs(state.draftShape.w);
