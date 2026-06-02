@@ -629,6 +629,47 @@ const Canvas: React.FC = () => {
 
   const [mouseClientPos, setMouseClientPos] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    const coords = getCoordinates(e.clientX, e.clientY);
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const x = coords ? coords.x - img.width / 2 : documentSize.w / 2 - img.width / 2;
+          const y = coords ? coords.y - img.height / 2 : documentSize.h / 2 - img.height / 2;
+
+          addLayer({
+            name: file.name,
+            type: 'image',
+            visible: true,
+            opacity: 1,
+            position: { x, y },
+            dataUrl: dataUrl,
+          });
+          recordHistory(`Drop ${file.name}`);
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div
       className="canvas-container"
@@ -651,6 +692,8 @@ const Canvas: React.FC = () => {
         }
       }}
       onDoubleClick={handleDoubleClick}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       {/* Brush Size Preview Cursor */}
       {BRUSH_TOOLS.includes(activeTool as string) && (
