@@ -62,7 +62,7 @@ const OptionsBar: React.FC = () => {
     brushColor, setBrushColor, primaryOpacity, setPrimaryOpacity,
     secondaryColor, setSecondaryColor, secondaryOpacity, setSecondaryOpacity,
     penMode, setPenMode, setVectorPaths, setActivePathIndex, setLassoPaths,
-    recordHistory, addLayer,
+    recordHistory, addLayer, updateLayer,
     undo, redo, activeLayerId, removeLayer, duplicateLayer,
     zoom, setZoom,
     setSelectionRect, setIsInverseSelection, inverseSelection,
@@ -263,6 +263,57 @@ const OptionsBar: React.FC = () => {
               Anti-alias
             </label>
           </div>
+          <div className="options-divider" />
+        </>
+      )}
+      {activeTool === 'artboard' && (
+        <>
+          <div className="option-control">
+            <label>Preset</label>
+            <select
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px', width: '110px' }}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const [w, h] = e.target.value.split('x').map(Number);
+                if (activeLayerId) {
+                   const artboard = useStore.getState().layers.find(l => l.id === activeLayerId);
+                   if (artboard && artboard.type === 'artboard') {
+                       updateLayer(activeLayerId, { width: w, height: h });
+                       recordHistory('Resize Artboard');
+                   }
+                } else {
+                   // If no artboard selected, we might want to store pending sizes, but we'll leave it as apply to active for now
+                }
+              }}
+              value=""
+            >
+              <option value="">Presets...</option>
+              <option value="390x844">iPhone 14 (390x844)</option>
+              <option value="1080x1920">Instagram Story (1080x1920)</option>
+              <option value="1920x1080">1080p (1920x1080)</option>
+              <option value="1440x900">MacBook (1440x900)</option>
+              <option value="595x842">A4 Print (595x842)</option>
+            </select>
+          </div>
+          {activeLayerId && (() => {
+             const artboard = useStore.getState().layers.find(l => l.id === activeLayerId);
+             if (artboard && artboard.type === 'artboard') {
+                 return (
+                   <>
+                     <div className="options-divider" />
+                     <div className="option-control" style={{ gap: '2px' }}>
+                       <label>W:</label>
+                       <EditableValue value={artboard.width || 0} unit="" onCommit={(val) => updateLayer(activeLayerId, { width: val })} />
+                     </div>
+                     <div className="option-control" style={{ gap: '2px' }}>
+                       <label>H:</label>
+                       <EditableValue value={artboard.height || 0} unit="" onCommit={(val) => updateLayer(activeLayerId, { height: val })} />
+                     </div>
+                   </>
+                 );
+             }
+             return null;
+          })()}
           <div className="options-divider" />
         </>
       )}
