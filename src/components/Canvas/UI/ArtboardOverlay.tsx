@@ -8,7 +8,14 @@ export const ArtboardOverlay: React.FC = () => {
   if (activeTool !== 'artboard') return null;
 
   const artboards = layers.filter(layer => layer.type === 'artboard');
-  if (artboards.length === 0) return null;
+
+  const displayArtboards = artboards.length > 0 ? artboards : [{
+    id: 'document-artboard',
+    type: 'artboard',
+    position: { x: 0, y: 0 },
+    width: documentSize.w,
+    height: documentSize.h
+  }];
 
   const handleAddArtboard = (x: number, y: number, w: number, h: number) => {
     addLayer({
@@ -40,7 +47,7 @@ export const ArtboardOverlay: React.FC = () => {
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10000 }}>
-      {artboards.map(artboard => {
+      {displayArtboards.map(artboard => {
         const x = (artboard.position?.x || 0) / 2;
         const y = (artboard.position?.y || 0) / 2;
         const w = (artboard.width || 0) / 2;
