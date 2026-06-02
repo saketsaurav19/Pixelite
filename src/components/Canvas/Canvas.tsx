@@ -694,6 +694,7 @@ const Canvas: React.FC = () => {
       onDoubleClick={handleDoubleClick}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+ref={stackRef}
     >
       {/* Brush Size Preview Cursor */}
       {BRUSH_TOOLS.includes(activeTool as string) && (
@@ -716,7 +717,6 @@ const Canvas: React.FC = () => {
         />
       )}
       <div
-        ref={stackRef}
         className="canvas-stack"
         style={{
           transform: `scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
