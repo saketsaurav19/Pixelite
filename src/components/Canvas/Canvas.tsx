@@ -679,7 +679,7 @@ const Canvas: React.FC = () => {
           transform: `scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
           width: `${documentSize.w / 2}px`,
           height: `${documentSize.h / 2}px`,
-          overflow: 'hidden'
+          overflow: activeTool === 'artboard' ? 'visible' : 'hidden'
         }}
         onTouchStart={handleTouchStart}
       >
