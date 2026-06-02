@@ -92,7 +92,7 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
           onPointerMove={clearLongPressTimer}
           onPointerLeave={clearLongPressTimer}
         >
-          {layer.type === 'group' && (
+          {(layer.type === 'group' || layer.type === 'artboard') && (
              <div className="layer-collapse" onClick={(e) => {
                  e.stopPropagation();
                  updateLayer(layer.id, { collapsed: !layer.collapsed });
@@ -104,7 +104,7 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
             {layer.visible ? <LucideIcons.Eye size={12} /> : <LucideIcons.EyeOff size={12} />}
           </div>
           <div className="layer-thumb">
-            {layer.thumbnail ? <img src={layer.thumbnail} alt="" /> : (layer.type === 'group' ? <LucideIcons.Folder size={16} /> : null)}
+            {layer.thumbnail ? <img src={layer.thumbnail} alt="" /> : ((layer.type === 'group' || layer.type === 'artboard') ? <LucideIcons.Folder size={16} /> : null)}
           </div>
           {renamingLayerId === layer.id ? (
             <input
@@ -139,7 +139,7 @@ const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
           </div>
         </div>
       </div>
-      {layer.type === 'group' && !layer.collapsed && layer.children && (
+      {(layer.type === 'group' || layer.type === 'artboard') && !layer.collapsed && layer.children && (
         <div className="layer-children">
           {renderLayerTree(layer.children, depth + 1)}
         </div>

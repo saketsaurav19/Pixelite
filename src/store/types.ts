@@ -26,7 +26,7 @@ export interface BaseLayer {
   opacity: number;
   blendMode: BlendMode;
   position?: { x: number; y: number }; // Top level position property to avoid widespread refactoring errors for now
-  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer';
+  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard';
 }
 
 export type LayerData = {
@@ -53,7 +53,9 @@ export type LayerData = {
 
 // We keep Layer as an interface mimicking the old one but with new properties to be backward-compatible while we migrate
 export type Layer = BaseLayer & {
-  type: 'image' | 'paint' | 'text' | 'shape' | 'group';
+  type: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'artboard';
+  width?: number;
+  height?: number;
   children?: Layer[];
   collapsed?: boolean;
 

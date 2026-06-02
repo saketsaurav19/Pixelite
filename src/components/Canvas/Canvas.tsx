@@ -28,6 +28,7 @@ import { RulerOverlay } from './UI/RulerOverlay';
 import { DraftOverlay } from './UI/DraftOverlay';
 import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
 import { SVGFilters } from './UI/SVGFilters';
+import { ArtboardOverlay } from './UI/ArtboardOverlay';
 import { findLayerById } from '../../utils/layerUtils';
 
 /**
@@ -733,6 +734,7 @@ const Canvas: React.FC = () => {
           setLassoPaths={setLassoPaths}
         />
 
+        <ArtboardOverlay />
         <DraftOverlay
           draftShape={draftShape}
           draftLasso={draftLasso}
