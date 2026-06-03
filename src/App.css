@@ -389,9 +389,6 @@ body {
   flex: 1;
   position: relative;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background-color: #1a1a1a;
   background-image:
     linear-gradient(45deg, #222 25%, transparent 25%),
