@@ -70,7 +70,13 @@ body {
 }
 
 
-
+.workspace-surface {
+  position: absolute;
+  width: 100000px;
+  height: 100000px;
+  left: -50000px;
+  top: -50000px;
+}
 
 
 .menu-option {
