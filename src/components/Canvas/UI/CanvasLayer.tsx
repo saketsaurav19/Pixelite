@@ -66,7 +66,7 @@ height: layer.type === 'artboard' && layer.height ? `${layer.height}px` : '100%'
         pointerEvents: 'none',
         mixBlendMode: (layer.blendMode === 'source-over' ? 'normal' : (layer.blendMode || 'normal')) as any,
         opacity: layer.opacity,
-        transform: `translate(${(layer.position?.x || 0) / 2}px, ${(layer.position?.y || 0) / 2}px)`
+        transform: `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px)`
       }}
     >
       <canvas
