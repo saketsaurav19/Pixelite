@@ -694,7 +694,6 @@ const Canvas: React.FC = () => {
       onDoubleClick={handleDoubleClick}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-ref={stackRef}
     >
       {/* Brush Size Preview Cursor */}
       {BRUSH_TOOLS.includes(activeTool as string) && (
@@ -725,6 +724,7 @@ ref={stackRef}
           overflow: activeTool === 'artboard' ? 'visible' : 'hidden'
         }}
         onTouchStart={handleTouchStart}
+        ref={stackRef}
       >
         {layers.map((layer, index) => (
           <CanvasLayer
