@@ -262,11 +262,10 @@ const startAction = useCallback((clientX: number, clientY: number, e: React.Mous
     const rawCoords = getCoordinates(clientX, clientY);
     // For artboard tool, allow starting drag even outside canvas bounds
     if (!rawCoords && activeTool !== 'artboard') return;
-    // Fallback coords at canvas edge if artboard drag starts outside
-    const safeCoords = rawCoords ?? { x: 0, y: 0 };
 
-  const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-    const coords = isVectorTool ? getSnappedCoords(safeCoords) : safeCoords;
+    const isStartVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+    const resolvedCoords = rawCoords ?? { x: 0, y: 0 };
+    const coords = isStartVectorTool ? getSnappedCoords(resolvedCoords) : resolvedCoords;
 
     const context: any = {
       canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
@@ -348,7 +347,7 @@ const startAction = useCallback((clientX: number, clientY: number, e: React.Mous
                 setIsInteracting(false);
               }
               return next;
-            });
+                      });
           }
         }
       } else if (e.key === 'Escape') {
@@ -383,10 +382,10 @@ const moveAction = useCallback((clientX: number, clientY: number) => {
     const rawCoords = getCoordinates(clientX, clientY);
     // For artboard tool, allow dragging outside canvas
     if (!rawCoords && activeTool !== 'artboard') return;
-    const safeCoords = rawCoords ?? { x: 0, y: 0 };
 
-    const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-    const coords = isVectorTool ? getSnappedCoords(safeCoords) : safeCoords;
+    const isMoveVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+    const resolvedMoveCoords = rawCoords ?? { x: 0, y: 0 };
+    const coords = isMoveVectorTool ? getSnappedCoords(resolvedMoveCoords) : resolvedMoveCoords;
 
     const context: any = {
       canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
@@ -725,7 +724,7 @@ const moveAction = useCallback((clientX: number, clientY: number) => {
       <div
         className="canvas-stack"
         style={{
-          transform: `scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
+          transform: `translate(-50%, -50%) scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
           width: `${documentSize.w / 2}px`,
           height: `${documentSize.h / 2}px`,
           overflow: activeTool === 'artboard' ? 'visible' : 'hidden'
