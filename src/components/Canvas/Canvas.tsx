@@ -388,10 +388,6 @@ const moveAction = useCallback((clientX: number, clientY: number) => {
     const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
     const coords = isVectorTool ? getSnappedCoords(safeCoords) : safeCoords;
 
-
-    const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-    const coords = isVectorTool ? getSnappedCoords(rawCoords) : rawCoords;
-
     const context: any = {
       canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
       ctx: (activeLayerId ? canvasRefs.current[activeLayerId]?.getContext('2d', { willReadFrequently: true }) : null),
