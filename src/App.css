@@ -407,11 +407,12 @@ body {
 }
 
 .canvas-stack {
-  position: relative;
+  position: absolute;
+  left: 50000px;
+  top: 50000px;
   background-color: white;
+  transform-origin: top left;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-  transform-origin: center center;
-  flex-shrink: 0;
 }
 
 .layer-canvas {
