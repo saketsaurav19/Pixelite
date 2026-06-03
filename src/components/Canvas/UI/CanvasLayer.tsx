@@ -32,7 +32,7 @@ height: layer.type === 'artboard' && layer.height ? `${layer.height}px` : '100%'
           backgroundColor: layer.type === 'artboard' ? (layer.backgroundTransparent ? 'transparent' : (layer.backgroundColor || '#ffffff')) : 'transparent',
           overflow: layer.type === 'artboard' && layer.clippingEnabled !== false ? 'hidden' : 'visible',
           zIndex: layersCount - layerIndex,
-          pointerEvents: 'none',
+          pointerEvents: layer.type === 'artboard' ? 'auto' : 'none',
           isolation: 'isolate',
           mixBlendMode: (layer.blendMode === 'source-over' || layer.blendMode === 'pass through' ? 'normal' : (layer.blendMode || 'normal')) as any,
           opacity: layer.opacity,
