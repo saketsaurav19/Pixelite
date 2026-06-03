@@ -715,6 +715,7 @@ const Canvas: React.FC = () => {
           }}
         />
       )}
+<div className="workspace-surface">
       <div
         className="canvas-stack"
         style={{
@@ -831,6 +832,7 @@ const Canvas: React.FC = () => {
         {/* Other cursors and indicators */}
         <SVGFilters />
       </div>
+</div>
     </div>
   );
 };
