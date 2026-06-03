@@ -266,9 +266,6 @@ const startAction = useCallback((clientX: number, clientY: number, e: React.Mous
     const safeCoords = rawCoords ?? { x: 0, y: 0 };
 
     const isStartToolVector = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-    const coords = isStartToolVector ? getSnappedCoords(safeCoords) : safeCoords;
-
-    const isStartToolVector = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
     const coords = isStartToolVector ? getSnappedCoords(rawCoords) : rawCoords;
 
     const context: any = {
