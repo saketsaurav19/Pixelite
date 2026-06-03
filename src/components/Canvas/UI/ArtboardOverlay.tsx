@@ -15,10 +15,10 @@ export const ArtboardOverlay: React.FC = () => {
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10000 }}>
       {artboards.map(artboard => {
         const isSelected = activeLayerId === artboard.id;
-        const x = (artboard.position?.x || 0) / 2;
-        const y = (artboard.position?.y || 0) / 2;
-        const w = (artboard.width || 0) / 2;
-        const h = (artboard.height || 0) / 2;
+        const x = artboard.position?.x || 0;
+const y = artboard.position?.y || 0;
+const w = artboard.width || 0;
+const h = artboard.height || 0;
 
         return (
           <div key={artboard.id} style={{ position: 'absolute', left: x, top: y, width: w, height: h }}>
