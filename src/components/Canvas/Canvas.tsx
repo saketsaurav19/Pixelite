@@ -265,8 +265,8 @@ const startAction = useCallback((clientX: number, clientY: number, e: React.Mous
     // Fallback coords at canvas edge if artboard drag starts outside
     const safeCoords = rawCoords ?? { x: 0, y: 0 };
 
-    const isStartToolVector = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-    const coords = isStartToolVector ? getSnappedCoords(rawCoords) : rawCoords;
+  const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+    const coords = isVectorTool ? getSnappedCoords(safeCoords) : safeCoords;
 
     const context: any = {
       canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
