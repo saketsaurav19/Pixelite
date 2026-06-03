@@ -25,10 +25,10 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         className={`layer-group ${layer.visible ? 'visible' : 'hidden'}`}
         style={{
           position: 'absolute',
-          top: layer.type === 'artboard' ? (layer.position?.y || 0) / 2 : 0,
-          left: layer.type === 'artboard' ? (layer.position?.x || 0) / 2 : 0,
-          width: layer.type === 'artboard' && layer.width ? `${layer.width / 2}px` : '100%',
-          height: layer.type === 'artboard' && layer.height ? `${layer.height / 2}px` : '100%',
+          top: layer.type === 'artboard' ? (layer.position?.y || 0) : 0,
+left: layer.type === 'artboard' ? (layer.position?.x || 0) : 0,
+width: layer.type === 'artboard' && layer.width ? `${layer.width}px` : '100%',
+height: layer.type === 'artboard' && layer.height ? `${layer.height}px` : '100%',
           backgroundColor: layer.type === 'artboard' ? (layer.backgroundTransparent ? 'transparent' : (layer.backgroundColor || '#ffffff')) : 'transparent',
           overflow: layer.type === 'artboard' && layer.clippingEnabled !== false ? 'hidden' : 'visible',
           zIndex: layersCount - layerIndex,
