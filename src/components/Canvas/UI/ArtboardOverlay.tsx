@@ -12,7 +12,7 @@ export const ArtboardOverlay: React.FC = () => {
   const handleSize = 8;
 
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10000 }}>
+    <div style={{ position: 'absolute', top: -50000, left: -50000, width: '1000000', height: '100000', pointerEvents: 'none', zIndex: 10000 }}>
       {artboards.map(artboard => {
         const isSelected = activeLayerId === artboard.id;
         const x = artboard.position?.x || 0;
