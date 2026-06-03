@@ -100,9 +100,11 @@ const Canvas: React.FC = () => {
    * Converts screen (clientX/Y) coordinates to document-space coordinates.
    * Accounts for canvas zoom, rotation, and offset.
    */
-  const getCoordinates = useCallback((clientX: number, clientY: number) => 
-    getCoordsUtil(clientX, clientY, stackRef.current, documentSize), [documentSize]);
-
+  
+  const getCoordinates = useCallback((clientX: number, clientY: number) => {
+    const allowOutside = activeTool === 'artboard';
+    return getCoordsUtil(clientX, clientY, stackRef.current, documentSize, allowOutside);
+  }, [documentSize, activeTool]);
   /**
    * Snaps coordinates to nearby anchor points, edges, or paths.
    * Used by vector and selection tools for precision.
@@ -256,9 +258,15 @@ const Canvas: React.FC = () => {
    * Initiates a tool action.
    * Creates a 'CanvasContext' containing all necessary state and methods for the tool modules.
    */
-  const startAction = useCallback((clientX: number, clientY: number, e: React.MouseEvent | React.TouchEvent) => {
+const startAction = useCallback((clientX: number, clientY: number, e: React.MouseEvent | React.TouchEvent) => {
     const rawCoords = getCoordinates(clientX, clientY);
-    if (!rawCoords) return;
+    // For artboard tool, allow starting drag even outside canvas bounds
+    if (!rawCoords && activeTool !== 'artboard') return;
+    // Fallback coords at canvas edge if artboard drag starts outside
+    const safeCoords = rawCoords ?? { x: 0, y: 0 };
+
+    const isStartToolVector = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+    const coords = isStartToolVector ? getSnappedCoords(safeCoords) : safeCoords;
 
     const isStartToolVector = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
     const coords = isStartToolVector ? getSnappedCoords(rawCoords) : rawCoords;
@@ -374,9 +382,15 @@ const Canvas: React.FC = () => {
    * Manages the mouse/touch move phase of an interaction.
    * Responsible for real-time previews (drawing, resizing, moving).
    */
-  const moveAction = useCallback((clientX: number, clientY: number) => {
+const moveAction = useCallback((clientX: number, clientY: number) => {
     const rawCoords = getCoordinates(clientX, clientY);
-    if (!rawCoords) return;
+    // For artboard tool, allow dragging outside canvas
+    if (!rawCoords && activeTool !== 'artboard') return;
+    const safeCoords = rawCoords ?? { x: 0, y: 0 };
+
+    const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+    const coords = isVectorTool ? getSnappedCoords(safeCoords) : safeCoords;
+
 
     const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
     const coords = isVectorTool ? getSnappedCoords(rawCoords) : rawCoords;
@@ -715,7 +729,6 @@ const Canvas: React.FC = () => {
           }}
         />
       )}
-<div className="workspace-surface">
       <div
         className="canvas-stack"
         style={{
@@ -832,7 +845,6 @@ const Canvas: React.FC = () => {
         {/* Other cursors and indicators */}
         <SVGFilters />
       </div>
-</div>
     </div>
   );
 };
