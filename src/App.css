@@ -388,9 +388,6 @@ body {
     linear-gradient(-45deg, transparent 75%, #222 75%);
   background-size: 20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .canvas-container {
@@ -404,7 +401,7 @@ body {
 }
 
 .canvas-stack {
-  position: responsive;
+  position: relative;
   background-color: white;
   transform-origin: center center;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
