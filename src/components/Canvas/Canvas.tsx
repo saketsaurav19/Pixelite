@@ -100,7 +100,7 @@ const Canvas: React.FC = () => {
    * Converts screen (clientX/Y) coordinates to document-space coordinates.
    * Accounts for canvas zoom, rotation, and offset.
    */
-  
+
   const getCoordinates = useCallback((clientX: number, clientY: number) => {
     const allowOutside = activeTool === 'artboard';
     return getCoordsUtil(clientX, clientY, stackRef.current, documentSize, allowOutside);
@@ -123,11 +123,11 @@ const Canvas: React.FC = () => {
     handleEyedropperUtil(x, y, activeLayerId, layers, canvasRefs, setBrushColor), [activeLayerId, layers, setBrushColor]);
 
   const applyCrop = useCallback(() =>
-    applyCropUtil(cropRect, layers, lassoPaths, canvasRefs, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, setCropRect, recordHistory, setIsInverseSelection), 
+    applyCropUtil(cropRect, layers, lassoPaths, canvasRefs, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, setCropRect, recordHistory, setIsInverseSelection),
     [cropRect, layers, lassoPaths, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, recordHistory, setIsInverseSelection]);
 
   const applyGradient = useCallback((start: { x: number, y: number }, end: { x: number, y: number }) =>
-    applyGradientUtil(start, end, activeLayerId, layers, canvasRefs, brushColor, secondaryColor, recordHistory), 
+    applyGradientUtil(start, end, activeLayerId, layers, canvasRefs, brushColor, secondaryColor, recordHistory),
     [activeLayerId, layers, brushColor, secondaryColor, recordHistory]);
 
   const getSvgPathData = (points: { x: number, y: number }[], closed: boolean, smooth: boolean = false) =>
@@ -155,13 +155,13 @@ const Canvas: React.FC = () => {
     [activeLayerId, layers, brushColor, primaryOpacity, updateLayer, recordHistory]);
 
   // --- Modular Rendering Hooks ---
-  
+
   // Handles the periodic rendering of all layers to their respective canvases
   useLayerRendering(layers, documentSize, canvasRefs, isInteracting, activeLayerId);
-  
+
   // Asynchronously generates layer thumbnails for the sidebar
   useThumbnailGeneration(layers, documentSize, canvasRefs, updateLayer);
-  
+
   // Manages the high-performance animation frame for selection "marching ants"
   useSelectionAnimation(selectionCanvasRef, {
     lassoPaths, vectorPaths, selectionRect, isInverseSelection,
@@ -258,7 +258,7 @@ const Canvas: React.FC = () => {
    * Initiates a tool action.
    * Creates a 'CanvasContext' containing all necessary state and methods for the tool modules.
    */
-const startAction = useCallback((clientX: number, clientY: number, e: React.MouseEvent | React.TouchEvent) => {
+  const startAction = useCallback((clientX: number, clientY: number, e: React.MouseEvent | React.TouchEvent) => {
     const rawCoords = getCoordinates(clientX, clientY);
     // For artboard tool, allow starting drag even outside canvas bounds
     if (!rawCoords && activeTool !== 'artboard') return;
@@ -347,7 +347,7 @@ const startAction = useCallback((clientX: number, clientY: number, e: React.Mous
                 setIsInteracting(false);
               }
               return next;
-                      });
+            });
           }
         }
       } else if (e.key === 'Escape') {
@@ -378,7 +378,7 @@ const startAction = useCallback((clientX: number, clientY: number, e: React.Mous
    * Manages the mouse/touch move phase of an interaction.
    * Responsible for real-time previews (drawing, resizing, moving).
    */
-const moveAction = useCallback((clientX: number, clientY: number) => {
+  const moveAction = useCallback((clientX: number, clientY: number) => {
     const rawCoords = getCoordinates(clientX, clientY);
     // For artboard tool, allow dragging outside canvas
     if (!rawCoords && activeTool !== 'artboard') return;
@@ -724,7 +724,7 @@ const moveAction = useCallback((clientX: number, clientY: number) => {
       <div
         className="canvas-stack"
         style={{
-          transform: `translate(-50%, -50%) scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
+          transform: `scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
           width: `${documentSize.w / 2}px`,
           height: `${documentSize.h / 2}px`,
           overflow: activeTool === 'artboard' ? 'visible' : 'hidden'
@@ -783,7 +783,7 @@ const moveAction = useCallback((clientX: number, clientY: number) => {
           setLassoPaths={setLassoPaths}
         />
 
-        <ArtboardOverlay />
+
         <DraftOverlay
           draftShape={draftShape}
           draftLasso={draftLasso}
@@ -837,6 +837,7 @@ const moveAction = useCallback((clientX: number, clientY: number) => {
         {/* Other cursors and indicators */}
         <SVGFilters />
       </div>
+      <ArtboardOverlay />
     </div>
   );
 };
