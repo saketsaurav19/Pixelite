@@ -1,4 +1,4 @@
-import { WorkerClient } from './workers/WorkerClient';
+import { WorkerClient } from './worker/PdfWorkerClient';
 import { convertSceneNodeToLayer } from './sceneGraph/LayerConversion';
 import type { Layer } from '../store/types';
 import { nanoid } from 'nanoid';
@@ -67,14 +67,16 @@ export class PdfImportManager {
           }
         };
 
-        const subLayers = nodes.map(node => convertSceneNodeToLayer(node, pageX, pageY));
+        const subLayers = nodes
+          .map(node => convertSceneNodeToLayer(node, pageX, pageY))
+          .reverse();
 
         const pageGroup: Layer = {
           id: nanoid(),
           name: `Page ${i + 1}`,
           type: 'group',
-          // CanvasLayer gives lower child indexes a higher z-index, so keep the
-          // locked white artboard after imported page content so it stays behind.
+          // CanvasLayer gives lower child indexes a higher z-index, so reverse
+          // PDF paint order above and keep the artboard last/behind all content.
           children: [...subLayers, artboardBg],
           collapsed: false,
           position: { x: pageX, y: pageY },

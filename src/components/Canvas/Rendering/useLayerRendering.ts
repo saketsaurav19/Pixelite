@@ -13,7 +13,7 @@ const renderLayer = (
   if (isInteracting && layer.id === activeLayerId) return;
 
   // If it's a group, recursively render children
-  if (layer.type === 'group' && layer.children) {
+  if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
     layer.children.forEach(child => {
       renderLayer(child, documentSize, canvasRefs, isInteracting, activeLayerId);
     });

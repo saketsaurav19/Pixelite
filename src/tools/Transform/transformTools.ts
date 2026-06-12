@@ -28,12 +28,47 @@ export const transformTools: ToolModule[] = [
   },
   {
     id: 'artboard',
-    start: ({ coords, setSelectionRect, setIsInteracting }) => {
+    start: ({ coords, setSelectionRect, setIsInteracting, activeCropHandle }) => {
+      // Allow dragging handles from ArtboardOverlay
+      if (activeCropHandle) return;
+
+      // Start drawing a new artboard selection rect
       setSelectionRect({ x: coords.x, y: coords.y, w: 0, h: 0 }, 'rect');
       setIsInteracting(true);
     },
-    move: ({ coords, startCoords, setSelectionRect }) => {
+    move: ({ coords, startCoords, setSelectionRect, activeCropHandle, activeLayerId, layers, updateLayer }) => {
+      if (activeCropHandle && activeLayerId) {
+        // Manipulating an existing artboard via handles
+        const artboard = layers.find(l => l.id === activeLayerId);
+        if (artboard && startCoords) {
+           const dx = coords.x - startCoords.x;
+           const dy = coords.y - startCoords.y;
+
+           let x = artboard.position?.x || 0;
+           let y = artboard.position?.y || 0;
+           let w = artboard.width || 0;
+           let h = artboard.height || 0;
+
+           if (activeCropHandle === 'tl') { x += dx; y += dy; w -= dx; h -= dy; }
+           else if (activeCropHandle === 'tr') { y += dy; w += dx; h -= dy; }
+           else if (activeCropHandle === 'bl') { x += dx; w -= dx; h += dy; }
+           else if (activeCropHandle === 'br') { w += dx; h += dy; }
+           else if (activeCropHandle === 'tm') { y += dy; h -= dy; }
+           else if (activeCropHandle === 'bm') { h += dy; }
+           else if (activeCropHandle === 'lm') { x += dx; w -= dx; }
+           else if (activeCropHandle === 'rm') { w += dx; }
+           // For move handle (we can use 'move')
+           else if (activeCropHandle === 'move') { x += dx; y += dy; }
+
+           // Update the active layer properties
+           updateLayer(activeLayerId, { position: { x, y }, width: w, height: h });
+        }
+        return;
+      }
+
       if (!startCoords) return;
+
+      // Creating a new artboard
       setSelectionRect({
         x: Math.min(startCoords.x, coords.x),
         y: Math.min(startCoords.y, coords.y),
@@ -41,10 +76,32 @@ export const transformTools: ToolModule[] = [
         h: Math.abs(coords.y - startCoords.y)
       }, 'rect');
     },
-    end: ({ selectionRect, setDocumentSize, setSelectionRect, recordHistory, setIsInteracting }) => {
-      if (selectionRect && selectionRect.w > 10 && selectionRect.h > 10) {
-        setDocumentSize({ w: Math.round(selectionRect.w), h: Math.round(selectionRect.h) });
-        recordHistory('Resize Artboard');
+    end: ({ selectionRect, setDocumentSize, setSelectionRect, recordHistory, setIsInteracting, addLayer, documentSize, activeCropHandle }) => {
+      if (!activeCropHandle && selectionRect && selectionRect.w > 10 && selectionRect.h > 10) {
+        const w = Math.round(selectionRect.w);
+        const h = Math.round(selectionRect.h);
+        const x = Math.round(selectionRect.x);
+        const y = Math.round(selectionRect.y);
+
+        addLayer({
+          name: 'Artboard',
+          type: 'artboard',
+          position: { x, y },
+          width: w,
+          height: h,
+          children: []
+        });
+
+        // Auto-expand document if needed
+        let newDocW = documentSize.w;
+        let newDocH = documentSize.h;
+        if (x + w > documentSize.w) newDocW = x + w;
+        if (y + h > documentSize.h) newDocH = y + h;
+        if (newDocW !== documentSize.w || newDocH !== documentSize.h) {
+          setDocumentSize({ w: newDocW, h: newDocH });
+        }
+
+        recordHistory('Create Artboard');
       }
       setSelectionRect(null);
       setIsInteracting(false);

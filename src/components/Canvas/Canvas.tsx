@@ -19,6 +19,7 @@ import { useLayerRendering } from './Rendering/useLayerRendering';
 import { useThumbnailGeneration } from './Rendering/useThumbnailGeneration';
 import { useSelectionAnimation } from './Rendering/useSelectionAnimation';
 import { useTextRendering } from './Rendering/useTextRendering';
+import { useLighting } from './Rendering/useLighting';
 import { CanvasLayer } from './UI/CanvasLayer';
 import { SelectionOverlay } from './UI/SelectionOverlay';
 import { VectorOverlay } from './UI/VectorOverlay';
@@ -27,10 +28,7 @@ import { TextEditorOverlay } from './UI/TextEditorOverlay';
 import { RulerOverlay } from './UI/RulerOverlay';
 import { DraftOverlay } from './UI/DraftOverlay';
 import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
-import { LightingOverlay } from './UI/LightingOverlay';
-import { WorkflowStatus } from './UI/WorkflowStatus';
 import { SVGFilters } from './UI/SVGFilters';
-import { useLighting } from './Rendering/useLighting';
 import { findLayerById } from '../../utils/layerUtils';
 
 /**
@@ -103,9 +101,11 @@ const Canvas: React.FC = () => {
    * Converts screen (clientX/Y) coordinates to document-space coordinates.
    * Accounts for canvas zoom, rotation, and offset.
    */
-  const getCoordinates = useCallback((clientX: number, clientY: number) => 
-    getCoordsUtil(clientX, clientY, stackRef.current, documentSize), [documentSize]);
 
+  const getCoordinates = useCallback((clientX: number, clientY: number) => {
+    const allowOutside = activeTool === 'artboard';
+    return getCoordsUtil(clientX, clientY, stackRef.current, documentSize, allowOutside);
+  }, [documentSize, activeTool]);
   /**
    * Snaps coordinates to nearby anchor points, edges, or paths.
    * Used by vector and selection tools for precision.
@@ -124,11 +124,11 @@ const Canvas: React.FC = () => {
     handleEyedropperUtil(x, y, activeLayerId, layers, canvasRefs, setBrushColor), [activeLayerId, layers, setBrushColor]);
 
   const applyCrop = useCallback(() =>
-    applyCropUtil(cropRect, layers, lassoPaths, canvasRefs, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, setCropRect, recordHistory, setIsInverseSelection), 
+    applyCropUtil(cropRect, layers, lassoPaths, canvasRefs, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, setCropRect, recordHistory, setIsInverseSelection),
     [cropRect, layers, lassoPaths, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, recordHistory, setIsInverseSelection]);
 
   const applyGradient = useCallback((start: { x: number, y: number }, end: { x: number, y: number }) =>
-    applyGradientUtil(start, end, activeLayerId, layers, canvasRefs, brushColor, secondaryColor, recordHistory), 
+    applyGradientUtil(start, end, activeLayerId, layers, canvasRefs, brushColor, secondaryColor, recordHistory),
     [activeLayerId, layers, brushColor, secondaryColor, recordHistory]);
 
   const getSvgPathData = (points: { x: number, y: number }[], closed: boolean, smooth: boolean = false) =>
@@ -156,13 +156,13 @@ const Canvas: React.FC = () => {
     [activeLayerId, layers, brushColor, primaryOpacity, updateLayer, recordHistory]);
 
   // --- Modular Rendering Hooks ---
-  
+
   // Handles the periodic rendering of all layers to their respective canvases
   useLayerRendering(layers, documentSize, canvasRefs, isInteracting, activeLayerId);
-  
+
   // Asynchronously generates layer thumbnails for the sidebar
   useThumbnailGeneration(layers, documentSize, canvasRefs, updateLayer);
-  
+
   // Manages the high-performance animation frame for selection "marching ants"
   useSelectionAnimation(selectionCanvasRef, {
     lassoPaths, vectorPaths, selectionRect, isInverseSelection,
@@ -273,10 +273,12 @@ const Canvas: React.FC = () => {
    */
   const startAction = useCallback((clientX: number, clientY: number, e: React.MouseEvent | React.TouchEvent) => {
     const rawCoords = getCoordinates(clientX, clientY);
-    if (!rawCoords) return;
+    // For artboard tool, allow starting drag even outside canvas bounds
+    if (!rawCoords && activeTool !== 'artboard') return;
 
-    const isStartToolVector = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-    const coords = isStartToolVector ? getSnappedCoords(rawCoords) : rawCoords;
+    const isStartVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+    const resolvedCoords = rawCoords ?? { x: 0, y: 0 };
+    const coords = isStartVectorTool ? getSnappedCoords(resolvedCoords) : resolvedCoords;
 
     const context: any = {
       canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
@@ -393,10 +395,12 @@ const Canvas: React.FC = () => {
    */
   const moveAction = useCallback((clientX: number, clientY: number) => {
     const rawCoords = getCoordinates(clientX, clientY);
-    if (!rawCoords) return;
+    // For artboard tool, allow dragging outside canvas
+    if (!rawCoords && activeTool !== 'artboard') return;
 
-    const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-    const coords = isVectorTool ? getSnappedCoords(rawCoords) : rawCoords;
+    const isMoveVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+    const resolvedMoveCoords = rawCoords ?? { x: 0, y: 0 };
+    const coords = isMoveVectorTool ? getSnappedCoords(resolvedMoveCoords) : resolvedMoveCoords;
 
     const context: any = {
       canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
@@ -646,6 +650,47 @@ const Canvas: React.FC = () => {
 
   const [mouseClientPos, setMouseClientPos] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    const coords = getCoordinates(e.clientX, e.clientY);
+
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const x = coords ? coords.x - img.width / 2 : documentSize.w / 2 - img.width / 2;
+          const y = coords ? coords.y - img.height / 2 : documentSize.h / 2 - img.height / 2;
+
+          addLayer({
+            name: file.name,
+            type: 'image',
+            visible: true,
+            opacity: 1,
+            position: { x, y },
+            dataUrl: dataUrl,
+          });
+          recordHistory(`Drop ${file.name}`);
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div
       className="canvas-container"
@@ -668,6 +713,8 @@ const Canvas: React.FC = () => {
         }
       }}
       onDoubleClick={handleDoubleClick}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       {/* Brush Size Preview Cursor */}
       {BRUSH_TOOLS.includes(activeTool as string) && (
@@ -690,15 +737,15 @@ const Canvas: React.FC = () => {
         />
       )}
       <div
-        ref={stackRef}
         className="canvas-stack"
         style={{
           transform: `scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
           width: `${documentSize.w / 2}px`,
           height: `${documentSize.h / 2}px`,
-          overflow: 'hidden'
+          overflow: activeTool === 'artboard' ? 'visible' : 'hidden'
         }}
         onTouchStart={handleTouchStart}
+        ref={stackRef}
       >
         {layers.map((layer, index) => (
           <CanvasLayer
@@ -712,7 +759,7 @@ const Canvas: React.FC = () => {
         ))}
 
         {isLightingEnabled && activeLayerId && litLayerData[activeLayerId] && (
-          <div 
+          <div
             className="lighting-result-overlay"
             style={{
               position: 'absolute',
@@ -724,9 +771,9 @@ const Canvas: React.FC = () => {
               zIndex: 10
             }}
           >
-            <img 
-              src={litLayerData[activeLayerId]} 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+            <img
+              src={litLayerData[activeLayerId]}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               alt="Lit Layer"
             />
           </div>
@@ -771,8 +818,6 @@ const Canvas: React.FC = () => {
           handleDoubleClick={handleDoubleClick}
           setLassoPaths={setLassoPaths}
         />
-
-        <LightingOverlay />
 
         <DraftOverlay
           draftShape={draftShape}
@@ -827,8 +872,6 @@ const Canvas: React.FC = () => {
         {/* Other cursors and indicators */}
         <SVGFilters />
       </div>
-      
-      <WorkflowStatus />
     </div>
   );
 };

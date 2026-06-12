@@ -18,15 +18,25 @@ export interface BaseLayer {
   locked: boolean;
   opacity: number;
   dataUrl?: string;
-  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer';
+  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard';
   blendMode: BlendMode;
   position?: { x: number; y: number };
 }
 
 export type Layer = BaseLayer & {
-  type: 'image' | 'paint' | 'text' | 'shape' | 'group';
+  type: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'artboard';
+  width?: number;
+  height?: number;
   children?: Layer[];
   collapsed?: boolean;
+
+  // Artboard properties
+  backgroundColor?: string;
+  backgroundTransparent?: boolean;
+  exportSettings?: any;
+  clippingEnabled?: boolean;
+  dpi?: number;
+  guides?: any[];
 
   // LayerData fields directly on Layer for easier migration
   dataUrl?: string;

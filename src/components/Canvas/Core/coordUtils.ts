@@ -4,13 +4,19 @@ export const getCoordinates = (
   clientX: number,
   clientY: number,
   stackElement: HTMLDivElement | null,
-  documentSize: { w: number, h: number }
+  documentSize: { w: number, h: number },
+  allowOutside: boolean = false
 ): Point | null => {
   if (!stackElement) return null;
   const rect = stackElement.getBoundingClientRect();
 
-  const nx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+  const nx = (clientX - rect.left) / rect.width;
+  const ny = (clientY - rect.top) / rect.height;
+
+  // For most tools, reject clicks outside the canvas bounds
+  if (!allowOutside && (nx < 0 || ny < 0 || nx > 1 || ny > 1)) {
+    return null;
+  }
 
   return {
     x: nx * documentSize.w,

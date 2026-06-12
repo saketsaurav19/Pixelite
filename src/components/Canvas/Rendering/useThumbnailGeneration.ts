@@ -10,7 +10,7 @@ const generateThumbnail = (
   lastContentRef: React.MutableRefObject<{ [key: string]: string }>
 ): void => {
   // If it's a group, recursively generate thumbnails for children
-  if (layer.type === 'group' && layer.children) {
+  if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
     layer.children.forEach(child => {
       generateThumbnail(child, documentSize, canvasRefs, updateLayer, lastContentRef);
     });
