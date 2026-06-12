@@ -30,7 +30,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
           zIndex: layersCount - layerIndex,
           pointerEvents: 'none',
           isolation: 'isolate',
-          mixBlendMode: (layer.blendMode === 'source-over' || (layer.blendMode as string) === 'pass through' ? 'normal' : (layer.blendMode || 'normal')) as any,
+          mixBlendMode: (layer.blendMode === 'source-over' || layer.blendMode === 'pass through' ? 'normal' : (layer.blendMode || 'normal')) as any,
           opacity: layer.opacity,
           // Group doesn't have a specific transform if we treat its children absolutely
           // If we want group positioning, we could apply transform here, but Photoshop typically handles child transforms relative to document unless dragged

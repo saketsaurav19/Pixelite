@@ -140,7 +140,6 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
             onMouseDown={(e) => {
               stopOverlayEvent(e);
               const c = getCoordinates(e.clientX, e.clientY);
-              if (c) lastPointRef.current = c;
               toolState._pcDragIdx = i + 4; // Midpoint indices are 4-7
               toolState._pcStartPoint = { ...c };
               toolState._pcOrigPoints = p.map(pt => ({ ...pt }));

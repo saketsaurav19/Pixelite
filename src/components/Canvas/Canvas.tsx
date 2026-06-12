@@ -103,7 +103,7 @@ const Canvas: React.FC = () => {
    * Converts screen (clientX/Y) coordinates to document-space coordinates.
    * Accounts for canvas zoom, rotation, and offset.
    */
-  const getCoordinates = useCallback((clientX: number, clientY: number) =>
+  const getCoordinates = useCallback((clientX: number, clientY: number) => 
     getCoordsUtil(clientX, clientY, stackRef.current, documentSize), [documentSize]);
 
   /**
@@ -124,11 +124,11 @@ const Canvas: React.FC = () => {
     handleEyedropperUtil(x, y, activeLayerId, layers, canvasRefs, setBrushColor), [activeLayerId, layers, setBrushColor]);
 
   const applyCrop = useCallback(() =>
-    applyCropUtil(cropRect, layers, lassoPaths, canvasRefs, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, setCropRect, recordHistory, setIsInverseSelection),
+    applyCropUtil(cropRect, layers, lassoPaths, canvasRefs, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, setCropRect, recordHistory, setIsInverseSelection), 
     [cropRect, layers, lassoPaths, setLayers, setLassoPaths, setSelectionRect, setDocumentSize, setCanvasOffset, recordHistory, setIsInverseSelection]);
 
   const applyGradient = useCallback((start: { x: number, y: number }, end: { x: number, y: number }) =>
-    applyGradientUtil(start, end, activeLayerId, layers, canvasRefs, brushColor, secondaryColor, recordHistory),
+    applyGradientUtil(start, end, activeLayerId, layers, canvasRefs, brushColor, secondaryColor, recordHistory), 
     [activeLayerId, layers, brushColor, secondaryColor, recordHistory]);
 
   const getSvgPathData = (points: { x: number, y: number }[], closed: boolean, smooth: boolean = false) =>
@@ -156,13 +156,13 @@ const Canvas: React.FC = () => {
     [activeLayerId, layers, brushColor, primaryOpacity, updateLayer, recordHistory]);
 
   // --- Modular Rendering Hooks ---
-
+  
   // Handles the periodic rendering of all layers to their respective canvases
   useLayerRendering(layers, documentSize, canvasRefs, isInteracting, activeLayerId);
-
+  
   // Asynchronously generates layer thumbnails for the sidebar
   useThumbnailGeneration(layers, documentSize, canvasRefs, updateLayer);
-
+  
   // Manages the high-performance animation frame for selection "marching ants"
   useSelectionAnimation(selectionCanvasRef, {
     lassoPaths, vectorPaths, selectionRect, isInverseSelection,
@@ -712,7 +712,7 @@ const Canvas: React.FC = () => {
         ))}
 
         {isLightingEnabled && activeLayerId && litLayerData[activeLayerId] && (
-          <div
+          <div 
             className="lighting-result-overlay"
             style={{
               position: 'absolute',
@@ -724,9 +724,9 @@ const Canvas: React.FC = () => {
               zIndex: 10
             }}
           >
-            <img
-              src={litLayerData[activeLayerId]}
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            <img 
+              src={litLayerData[activeLayerId]} 
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
               alt="Lit Layer"
             />
           </div>
@@ -827,7 +827,7 @@ const Canvas: React.FC = () => {
         {/* Other cursors and indicators */}
         <SVGFilters />
       </div>
-
+      
       <WorkflowStatus />
     </div>
   );

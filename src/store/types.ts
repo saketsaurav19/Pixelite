@@ -9,18 +9,27 @@ export type Tool =
   | 'shape' | 'ellipse_shape' | 'triangle_shape' | 'polygon_shape' | 'line_shape' | 'custom_shape'
   | 'hand' | 'rotate_view' | 'zoom_tool' | 'lighting';
 
-export interface Layer {
+export type BlendMode = GlobalCompositeOperation | 'pass through';
+
+export interface BaseLayer {
   id: string;
   name: string;
   visible: boolean;
   locked: boolean;
   opacity: number;
   dataUrl?: string;
+  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer';
+  blendMode: BlendMode;
+  position?: { x: number; y: number };
+}
+
+export type Layer = BaseLayer & {
   type: 'image' | 'paint' | 'text' | 'shape' | 'group';
-  position: { x: number; y: number };
-  blendMode: GlobalCompositeOperation;
   children?: Layer[];
   collapsed?: boolean;
+
+  // LayerData fields directly on Layer for easier migration
+  dataUrl?: string;
   textContent?: string;
   fontSize?: number;
   color?: string;
@@ -40,7 +49,8 @@ export interface Layer {
   thumbnail?: string;
   depthMap?: string; // Data URL of the depth map
   normalMap?: string; // Data URL of the normal map
-}
+  position: { x: number; y: number };
+};
 
 export interface Light {
   id: string;
@@ -107,18 +117,11 @@ export interface HistoryEntry {
   state: Omit<DocumentSpecificState, 'history' | 'historyIndex'>;
 }
 
-export interface Alert {
-  id: string;
-  type: 'info' | 'warning' | 'success' | 'error';
-  message: string;
-}
-
 export interface EditorState extends DocumentSpecificState {
   // Global App State
   documents: DocumentArchive[];
   activeDocumentId: string;
   activeDocumentName: string;
-  currentProjectId: string | null;
 
   // Tool State
   activeTool: Tool;
@@ -172,10 +175,9 @@ export interface EditorState extends DocumentSpecificState {
   isMobileMenuOpen: boolean;
   isCameraDialogOpen: boolean;
   mobileCapturedImage: string | null;
-  showRulers: boolean;
-  setShowRulers: (show: boolean) => void;
   rulerUnit: 'px' | 'in' | 'cm';
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
+  setShowRulers: (show: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
   activeMobileSubmenu: string | null;
   setActiveMobileSubmenu: (menu: string | null) => void;
@@ -198,4 +200,10 @@ export interface EditorState extends DocumentSpecificState {
 
   // Actions - These will be defined in slices
   [key: string]: any;
+}
+
+export interface Alert {
+  id: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  message: string;
 }

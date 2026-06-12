@@ -173,6 +173,8 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   cropRect: null,
   exifData: null,
   iccProfile: 'sRGB IEC61966-2.1',
+  setExifData: (exifData) => set({ exifData }),
+  setIccProfile: (iccProfile) => set({ iccProfile }),
 
   setZoom: (zoom) => set({ zoom }),
   setCanvasOffset: (offset) => set({ canvasOffset: offset }),
@@ -201,8 +203,6 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   setCropRect: (updater) => set((state) => ({
     cropRect: typeof updater === 'function' ? updater(state.cropRect) : updater
   })),
-  setExifData: (exifData) => set({ exifData }),
-  setIccProfile: (iccProfile) => set({ iccProfile }),
   showRulers: true,
   showGrid: false,
   showGuides: true,

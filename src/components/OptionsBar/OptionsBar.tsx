@@ -424,6 +424,7 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
+
       {activeTool === 'lighting' && (
         <>
           <div className="options-divider" />

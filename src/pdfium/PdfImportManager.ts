@@ -81,7 +81,7 @@ export class PdfImportManager {
           visible: true,
           locked: false,
           opacity: 1,
-          blendMode: 'pass through' as any,
+          blendMode: 'pass through',
         };
 
         topLevelLayers.push(pageGroup);

@@ -11,8 +11,7 @@ export const useFileImporter = () => {
     setDocumentSize,
     recordHistory,
     setCurrentProjectId,
-    setHistory,
-    addDocument
+    setHistory
   } = useStore();
 
   const handleFileImport = async (file: File, isPlace: boolean = false): Promise<void> => {
@@ -21,6 +20,12 @@ export const useFileImporter = () => {
 
       if (result.type === 'psd') {
         const psdData = await workerExportBridge.parsePSD(result.psdData);
+
+        if (!isPlace) {
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          setDocumentSize({ w: psdData.width, h: psdData.height });
+        }
 
         const newLayers: Layer[] = [];
         const processPsdLayer = (child: any) => {
@@ -42,21 +47,16 @@ export const useFileImporter = () => {
         };
         if (psdData.children) psdData.children.forEach(processPsdLayer);
 
-        if (!isPlace) {
-          addDocument(file.name, { w: psdData.width, h: psdData.height }, {
-            layers: newLayers.reverse(),
-            documentSize: { w: psdData.width, h: psdData.height },
-            zoom: 1,
-            canvasOffset: { x: 0, y: 0 },
-            history: [{ name: 'Open PSD', state: { layers: newLayers.reverse(), documentSize: { w: psdData.width, h: psdData.height } } }],
-            historyIndex: 0
-          });
-        } else {
-          setLayers([...layers, ...newLayers.reverse()]);
-          recordHistory(`Place PSD ${file.name}`);
-        }
+        if (!isPlace) setLayers(newLayers.reverse());
+        else setLayers([...layers, ...newLayers.reverse()]);
+        recordHistory(isPlace ? `Place PSD ${file.name}` : `Open PSD ${file.name}`);
 
       } else if (result.type === 'gif' && result.frames) {
+        if (!isPlace) {
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          setDocumentSize({ w: result.width, h: result.height });
+        }
         const newLayers: Layer[] = result.frames.map((frame, index) => ({
           id: Math.random().toString(36).substring(7),
           name: frame.name || `Frame ${index + 1}`,
@@ -70,46 +70,29 @@ export const useFileImporter = () => {
           opacity: 1,
           blendMode: 'source-over'
         }));
-        if (!isPlace) {
-          addDocument(file.name, { w: result.width, h: result.height }, {
-            layers: newLayers.reverse(),
-            documentSize: { w: result.width, h: result.height },
-            zoom: 1,
-            canvasOffset: { x: 0, y: 0 },
-            history: [{ name: 'Open GIF', state: { layers: newLayers.reverse(), documentSize: { w: result.width, h: result.height } } }],
-            historyIndex: 0
-          });
-        } else {
-          setLayers([...layers, ...newLayers.reverse()]);
-          recordHistory(`Place GIF ${result.name}`);
-        }
+        if (!isPlace) setLayers(newLayers.reverse());
+        else setLayers([...layers, ...newLayers.reverse()]);
+        recordHistory(isPlace ? `Place GIF ${result.name}` : `Open GIF ${result.name}`);
 
       } else if (result.type === 'svg' && result.layers) {
         if (!isPlace) {
-          addDocument(file.name, { w: result.width, h: result.height }, {
-            layers: result.layers.reverse(),
-            documentSize: { w: result.width, h: result.height },
-            zoom: 1,
-            canvasOffset: { x: 0, y: 0 },
-            history: [{ name: 'Open SVG', state: { layers: result.layers.reverse(), documentSize: { w: result.width, h: result.height } } }],
-            historyIndex: 0
-          });
-        } else {
-          setLayers([...layers, ...result.layers.reverse()]);
-          recordHistory(`Place SVG ${result.name}`);
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          setDocumentSize({ w: result.width, h: result.height });
         }
+        if (!isPlace) setLayers(result.layers.reverse());
+        else setLayers([...layers, ...result.layers.reverse()]);
+        recordHistory(isPlace ? `Place SVG ${result.name}` : `Open SVG ${result.name}`);
 
       } else if (result.type === 'pdf' && result.layers) {
+        // ── NEW: PDF returns a tree of page-group layers ──────────────────────
         if (!isPlace) {
-          addDocument(file.name, { w: result.width, h: result.height }, {
-            layers: result.layers,
-            documentSize: { w: result.width, h: result.height },
-            zoom: 1,
-            canvasOffset: { x: 0, y: 0 },
-            history: [{ name: 'Open PDF', state: { layers: result.layers, documentSize: { w: result.width, h: result.height } } }],
-            historyIndex: 0
-          });
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          setDocumentSize({ w: result.width, h: result.height });
+          setLayers(result.layers);
         } else {
+          // When placing, offset each page group to center it
           const offsetLayers = result.layers.map((pg) => ({
             ...pg,
             position: {
@@ -118,12 +101,23 @@ export const useFileImporter = () => {
             },
           }));
           setLayers([...offsetLayers, ...layers]);
-          recordHistory(`Place PDF ${result.name}`);
         }
+        recordHistory(isPlace ? `Place PDF ${result.name}` : `Open PDF ${result.name}`);
 
       } else if (result.type === 'image' && result.dataUrl) {
+        const isDefaultBackground =
+          layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
+
         if (!isPlace) {
-          const newDocLayers = [{
+          setCurrentProjectId(null);
+          setHistory([], 0);
+          if (result.exifData) (useStore.getState() as any).setExifData(result.exifData);
+          if (result.iccProfile) (useStore.getState() as any).setIccProfile(result.iccProfile);
+        }
+
+        if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
+          setDocumentSize({ w: result.width, h: result.height });
+          setLayers([{
             id: Math.random().toString(36).substring(7),
             name: result.name,
             type: 'image' as any,
@@ -133,17 +127,7 @@ export const useFileImporter = () => {
             locked: false,
             opacity: 1,
             blendMode: 'source-over' as any
-          }];
-          addDocument(file.name, { w: result.width, h: result.height }, {
-            layers: newDocLayers,
-            documentSize: { w: result.width, h: result.height },
-            zoom: 1,
-            canvasOffset: { x: 0, y: 0 },
-            history: [{ name: 'Open Image', state: { layers: newDocLayers, documentSize: { w: result.width, h: result.height } } }],
-            historyIndex: 0
-          });
-          if (result.exifData) (useStore.getState() as any).setExifData(result.exifData);
-          if (result.iccProfile) (useStore.getState() as any).setIccProfile(result.iccProfile);
+          }]);
         } else {
           setLayers([...layers, {
             id: Math.random().toString(36).substring(7),
@@ -159,8 +143,8 @@ export const useFileImporter = () => {
             opacity: 1,
             blendMode: 'source-over' as any
           }]);
-          recordHistory(`Place ${result.name}`);
         }
+        recordHistory(isPlace ? `Place ${result.name}` : `Open ${result.name}`);
       }
     } catch (err) {
       console.error(err);
