@@ -11,7 +11,8 @@ export const useFileImporter = () => {
     setDocumentSize,
     recordHistory,
     setCurrentProjectId,
-    setHistory
+    setHistory,
+    setActiveLayer
   } = useStore();
 
   const handleFileImport = async (file: File, isPlace: boolean = false): Promise<void> => {
@@ -47,8 +48,15 @@ export const useFileImporter = () => {
         };
         if (psdData.children) psdData.children.forEach(processPsdLayer);
 
-        if (!isPlace) setLayers(newLayers.reverse());
-        else setLayers([...layers, ...newLayers.reverse()]);
+        if (!isPlace) {
+          const reversed = newLayers.reverse();
+          setLayers(reversed);
+          if (reversed.length > 0) setActiveLayer(reversed[0].id);
+        } else {
+          const reversed = newLayers.reverse();
+          setLayers([...layers, ...reversed]);
+          if (reversed.length > 0) setActiveLayer(reversed[reversed.length - 1].id);
+        }
         recordHistory(isPlace ? `Place PSD ${file.name}` : `Open PSD ${file.name}`);
 
       } else if (result.type === 'gif' && result.frames) {
@@ -70,8 +78,15 @@ export const useFileImporter = () => {
           opacity: 1,
           blendMode: 'source-over'
         }));
-        if (!isPlace) setLayers(newLayers.reverse());
-        else setLayers([...layers, ...newLayers.reverse()]);
+        if (!isPlace) {
+          const reversed = newLayers.reverse();
+          setLayers(reversed);
+          if (reversed.length > 0) setActiveLayer(reversed[0].id);
+        } else {
+          const reversed = newLayers.reverse();
+          setLayers([...layers, ...reversed]);
+          if (reversed.length > 0) setActiveLayer(reversed[reversed.length - 1].id);
+        }
         recordHistory(isPlace ? `Place GIF ${result.name}` : `Open GIF ${result.name}`);
 
       } else if (result.type === 'svg' && result.layers) {
@@ -80,8 +95,15 @@ export const useFileImporter = () => {
           setHistory([], 0);
           setDocumentSize({ w: result.width, h: result.height });
         }
-        if (!isPlace) setLayers(result.layers.reverse());
-        else setLayers([...layers, ...result.layers.reverse()]);
+        if (!isPlace) {
+          const reversed = result.layers.reverse();
+          setLayers(reversed);
+          if (reversed.length > 0) setActiveLayer(reversed[0].id);
+        } else {
+          const reversed = result.layers.reverse();
+          setLayers([...layers, ...reversed]);
+          if (reversed.length > 0) setActiveLayer(reversed[reversed.length - 1].id);
+        }
         recordHistory(isPlace ? `Place SVG ${result.name}` : `Open SVG ${result.name}`);
 
       } else if (result.type === 'pdf' && result.layers) {
@@ -91,6 +113,7 @@ export const useFileImporter = () => {
           setHistory([], 0);
           setDocumentSize({ w: result.width, h: result.height });
           setLayers(result.layers);
+          if (result.layers.length > 0) setActiveLayer(result.layers[0].id);
         } else {
           // When placing, offset each page group to center it
           const offsetLayers = result.layers.map((pg) => ({
@@ -101,6 +124,7 @@ export const useFileImporter = () => {
             },
           }));
           setLayers([...offsetLayers, ...layers]);
+          if (offsetLayers.length > 0) setActiveLayer(offsetLayers[0].id);
         }
         recordHistory(isPlace ? `Place PDF ${result.name}` : `Open PDF ${result.name}`);
 
@@ -117,8 +141,9 @@ export const useFileImporter = () => {
 
         if (!isPlace && (layers.length === 0 || isDefaultBackground)) {
           setDocumentSize({ w: result.width, h: result.height });
+          const newId = Math.random().toString(36).substring(7);
           setLayers([{
-            id: Math.random().toString(36).substring(7),
+            id: newId,
             name: result.name,
             type: 'image' as any,
             dataUrl: result.dataUrl,
@@ -128,9 +153,11 @@ export const useFileImporter = () => {
             opacity: 1,
             blendMode: 'source-over' as any
           }]);
+          setActiveLayer(newId);
         } else {
+          const newId = Math.random().toString(36).substring(7);
           setLayers([...layers, {
-            id: Math.random().toString(36).substring(7),
+            id: newId,
             name: result.name,
             type: 'image' as any,
             dataUrl: result.dataUrl,
@@ -143,6 +170,7 @@ export const useFileImporter = () => {
             opacity: 1,
             blendMode: 'source-over' as any
           }]);
+          setActiveLayer(newId);
         }
         recordHistory(isPlace ? `Place ${result.name}` : `Open ${result.name}`);
       }

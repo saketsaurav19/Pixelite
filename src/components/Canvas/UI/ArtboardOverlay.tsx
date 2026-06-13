@@ -15,7 +15,7 @@ export const ArtboardOverlay: React.FC = () => {
     const margin = 20;
     let newX = x;
     let newY = y;
-    
+
     if (direction === 'top') newY = y - h - margin;
     if (direction === 'bottom') newY = y + h + margin;
     if (direction === 'left') newX = x - w - margin;
@@ -33,11 +33,11 @@ export const ArtboardOverlay: React.FC = () => {
 
   // Helper to map document coordinate to screen coordinate relative to canvas-container center
   const getScreenPos = (docX: number, docY: number) => {
-    const dx = (docX - documentSize.w / 2) / 2;
-    const dy = (docY - documentSize.h / 2) / 2;
+    const dx = (docX - documentSize.w / 2);
+    const dy = (docY - documentSize.h / 2);
     return {
-      x: (dx + canvasOffset.x / 2) * zoom,
-      y: (dy + canvasOffset.y / 2) * zoom,
+      x: (dx + canvasOffset.x) * zoom,
+      y: (dy + canvasOffset.y) * zoom,
     };
   };
 
@@ -51,8 +51,8 @@ export const ArtboardOverlay: React.FC = () => {
         const h = artboard.height || 0;
 
         const screenPos = getScreenPos(x, y);
-        const screenW = (w / 2) * zoom;
-        const screenH = (h / 2) * zoom;
+        const screenW = w * zoom;
+        const screenH = h * zoom;
 
         return (
           <div key={artboard.id} style={{ position: 'absolute', left: screenPos.x, top: screenPos.y, width: screenW, height: screenH }}>
@@ -87,25 +87,25 @@ export const ArtboardOverlay: React.FC = () => {
                 <div className="crop-handle move-handle" data-handle="move" data-layer-id={artboard.id} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: 'move', pointerEvents: 'auto' }} />
 
                 {/* Plus Buttons */}
-                <div 
+                <div
                   style={{ position: 'absolute', top: -35, left: '50%', transform: 'translateX(-50%)', width: 20, height: 20, borderRadius: '50%', backgroundColor: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => { e.stopPropagation(); handleAddArtboard(x, y, w, h, 'top'); }}
                 >
                   <LucideIcons.Plus size={14} color="#fff" />
                 </div>
-                <div 
+                <div
                   style={{ position: 'absolute', bottom: -35, left: '50%', transform: 'translateX(-50%)', width: 20, height: 20, borderRadius: '50%', backgroundColor: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => { e.stopPropagation(); handleAddArtboard(x, y, w, h, 'bottom'); }}
                 >
                   <LucideIcons.Plus size={14} color="#fff" />
                 </div>
-                <div 
+                <div
                   style={{ position: 'absolute', left: -35, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', backgroundColor: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => { e.stopPropagation(); handleAddArtboard(x, y, w, h, 'left'); }}
                 >
                   <LucideIcons.Plus size={14} color="#fff" />
                 </div>
-                <div 
+                <div
                   style={{ position: 'absolute', right: -35, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', backgroundColor: primaryColor, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => { e.stopPropagation(); handleAddArtboard(x, y, w, h, 'right'); }}
                 >
@@ -119,14 +119,14 @@ export const ArtboardOverlay: React.FC = () => {
                 </div>
 
                 {/* Resize Handles */}
-                <div className="crop-handle tl-handle" data-handle="tl" data-layer-id={artboard.id} style={{ position: 'absolute', top: -handleSize/2, left: -handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nwse-resize', pointerEvents: 'auto' }} />
-                <div className="crop-handle tm-handle" data-handle="tm" data-layer-id={artboard.id} style={{ position: 'absolute', top: -handleSize/2, left: screenW/2 - handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ns-resize', pointerEvents: 'auto' }} />
-                <div className="crop-handle tr-handle" data-handle="tr" data-layer-id={artboard.id} style={{ position: 'absolute', top: -handleSize/2, right: -handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nesw-resize', pointerEvents: 'auto' }} />
-                <div className="crop-handle lm-handle" data-handle="lm" data-layer-id={artboard.id} style={{ position: 'absolute', top: screenH/2 - handleSize/2, left: -handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ew-resize', pointerEvents: 'auto' }} />
-                <div className="crop-handle rm-handle" data-handle="rm" data-layer-id={artboard.id} style={{ position: 'absolute', top: screenH/2 - handleSize/2, right: -handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ew-resize', pointerEvents: 'auto' }} />
-                <div className="crop-handle bl-handle" data-handle="bl" data-layer-id={artboard.id} style={{ position: 'absolute', bottom: -handleSize/2, left: -handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nesw-resize', pointerEvents: 'auto' }} />
-                <div className="crop-handle bm-handle" data-handle="bm" data-layer-id={artboard.id} style={{ position: 'absolute', bottom: -handleSize/2, left: screenW/2 - handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ns-resize', pointerEvents: 'auto' }} />
-                <div className="crop-handle br-handle" data-handle="br" data-layer-id={artboard.id} style={{ position: 'absolute', bottom: -handleSize/2, right: -handleSize/2, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nwse-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle tl-handle" data-handle="tl" data-layer-id={artboard.id} style={{ position: 'absolute', top: -handleSize, left: -handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nwse-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle tm-handle" data-handle="tm" data-layer-id={artboard.id} style={{ position: 'absolute', top: -handleSize, left: screenW - handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ns-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle tr-handle" data-handle="tr" data-layer-id={artboard.id} style={{ position: 'absolute', top: -handleSize, right: -handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nesw-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle lm-handle" data-handle="lm" data-layer-id={artboard.id} style={{ position: 'absolute', top: screenH - handleSize, left: -handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ew-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle rm-handle" data-handle="rm" data-layer-id={artboard.id} style={{ position: 'absolute', top: screenH - handleSize, right: -handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ew-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle bl-handle" data-handle="bl" data-layer-id={artboard.id} style={{ position: 'absolute', bottom: -handleSize, left: -handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nesw-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle bm-handle" data-handle="bm" data-layer-id={artboard.id} style={{ position: 'absolute', bottom: -handleSize, left: screenW - handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'ns-resize', pointerEvents: 'auto' }} />
+                <div className="crop-handle br-handle" data-handle="br" data-layer-id={artboard.id} style={{ position: 'absolute', bottom: -handleSize, right: -handleSize, width: handleSize, height: handleSize, backgroundColor: '#fff', border: `1px solid ${primaryColor}`, cursor: 'nwse-resize', pointerEvents: 'auto' }} />
               </>
             )}
           </div>

@@ -48,7 +48,7 @@ export class WorkerClient {
     return this.sendMessage('GET_PAGES');
   }
 
-  async extractObjects(pageIndex: number): Promise<SceneNode[]> {
+  async extractObjects(pageIndex: number): Promise<{ backgroundDataUrl: string; nodes: SceneNode[] }> {
     return this.sendMessage('EXTRACT_OBJECTS', { pageIndex });
   }
 

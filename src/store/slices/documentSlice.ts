@@ -224,7 +224,16 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
 
     const newId = nanoid();
     const newName = name || `Untitled-${state.documents.length + 1}`;
-    const newDocState = initialState || createInitialDocumentState(size);
+    
+    const defaultState = createInitialDocumentState(size);
+    const newDocState = initialState
+      ? { ...defaultState, ...initialState }
+      : defaultState;
+
+    if (newDocState.layers && newDocState.layers.length > 0 && !newDocState.activeLayerId) {
+      newDocState.activeLayerId = newDocState.layers[0].id;
+    }
+
     const newDoc: DocumentArchive = {
       id: newId,
       name: newName,

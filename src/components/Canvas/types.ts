@@ -79,4 +79,8 @@ export interface CanvasContext {
   setActiveCropHandle: (handle: string | null) => void;
   isLightingEnabled: boolean;
   setLightingEnabled: (enabled: boolean) => void;
+  canvasRefs?: any;
+  setActiveLayer?: (id: string) => void;
+  moveAutoSelect?: boolean;
+  moveShowTransform?: boolean;
 }

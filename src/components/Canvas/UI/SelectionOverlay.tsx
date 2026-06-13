@@ -29,7 +29,7 @@ export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
         width: '100%', height: '100%',
         pointerEvents: 'none',
         zIndex: 1000,
-        transform: `translate(${-activeLayerPosition.x / 2}px, ${-activeLayerPosition.y / 2}px)`
+        transform: 'none'
       }}
     >
       <defs>
@@ -47,7 +47,7 @@ export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
       <path
         d={isInverseSelection
           ? getSelectionPathData()
-          : `M 0,0 L 0,${documentSize.h / 2} L ${documentSize.w / 2},${documentSize.h / 2} L ${documentSize.w / 2},0 Z ` +
+          : `M 0,0 L 0,${documentSize.h} L ${documentSize.w},${documentSize.h} L ${documentSize.w},0 Z ` +
           getSelectionPathData()}
         fill="rgba(0, 0, 0, 0.4)"
         fillRule={isInverseSelection ? 'nonzero' : 'evenodd'}

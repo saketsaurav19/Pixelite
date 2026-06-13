@@ -69,12 +69,12 @@ export const GlobalRulers: React.FC = () => {
       const docDim = isVertical ? documentSize.h : documentSize.w;
 
       // Offset applied to document center
-      const centerOffset = isVertical ? canvasOffset.y / 2 : canvasOffset.x / 2;
+      const centerOffset = isVertical ? canvasOffset.y : canvasOffset.x;
 
       // Start of document in screen space:
       // Viewport center is at viewportSize / 2
       // Document is centered there, plus centerOffset.
-      const docStartScreen = (viewportSize / 2) + centerOffset - (docDim * zoom / 4);
+      const docStartScreen = (viewportSize / 2) + centerOffset - (docDim * zoom / 2);
 
       // Start calculating ticks slightly before the visible area
       const startDocPos = -docStartScreen / zoom;
@@ -84,7 +84,7 @@ export const GlobalRulers: React.FC = () => {
 
       for (let pos = startMajor; pos <= endDocPos; pos += subTickStep) {
         // Document position scaled by 2 (matching the rest of the app)
-        const screenPos = docStartScreen + (pos * zoom * 0.5);
+        const screenPos = docStartScreen + (pos * zoom);
 
         if (screenPos < 0 || screenPos > viewportSize) continue;
 

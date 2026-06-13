@@ -28,7 +28,11 @@ const renderLayer = (
     const img = new Image();
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
+      if (layer.width && layer.height) {
+        ctx.drawImage(img, 0, 0, layer.width, layer.height);
+      } else {
+        ctx.drawImage(img, 0, 0);
+      }
     };
     img.src = layer.dataUrl;
   } else if (layer.type === 'paint' && layer.name === 'Background') {
@@ -38,7 +42,8 @@ const renderLayer = (
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = layer.color || '#000000';
     const fs = layer.fontSize || 40;
-    ctx.font = `${fs}px Arial`;
+    ctx.font = `${fs}px "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
+
     layer.textContent.split('\n').forEach((line: string, i: number) => {
       if (layer.isVertical) {
         const chars = line.split('');

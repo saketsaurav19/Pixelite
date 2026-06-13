@@ -37,13 +37,27 @@ export const ExportAsDialog: React.FC = () => {
         const ctx = previewCanvas.getContext('2d');
         if (ctx) {
              ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+             const drawLayerRecursive = (layer: any, currentOffsetX: number, currentOffsetY: number, parentOpacity: number = 1) => {
+                 if (!layer.visible) return;
+                 const lx = currentOffsetX + (layer.position?.x || 0);
+                 const ly = currentOffsetY + (layer.position?.y || 0);
+                 const currentOpacity = parentOpacity * layer.opacity;
+                 if (layer.children) {
+                     [...layer.children].reverse().forEach((child: any) => {
+                         drawLayerRecursive(child, lx, ly, currentOpacity);
+                     });
+                 } else {
+                     const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+                     if (layerCanvas) {
+                         ctx.save();
+                         ctx.globalAlpha = currentOpacity;
+                         ctx.drawImage(layerCanvas, lx, ly);
+                         ctx.restore();
+                     }
+                 }
+             };
              [...layers].reverse().forEach(layer => {
-                if (layer.visible) {
-                    const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-                    if (layerCanvas) {
-                        ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
-                    }
-                }
+                 drawLayerRecursive(layer, 0, 0);
              });
         }
     }
@@ -83,13 +97,27 @@ export const ExportAsDialog: React.FC = () => {
                  ctx.fillStyle = '#ffffff';
                  ctx.fillRect(0,0, targetWidth, targetHeight);
              }
+             const drawLayerRecursive = (layer: any, currentOffsetX: number, currentOffsetY: number, parentOpacity: number = 1) => {
+                 if (!layer.visible) return;
+                 const lx = currentOffsetX + (layer.position?.x || 0);
+                 const ly = currentOffsetY + (layer.position?.y || 0);
+                 const currentOpacity = parentOpacity * layer.opacity;
+                 if (layer.children) {
+                     [...layer.children].reverse().forEach((child: any) => {
+                         drawLayerRecursive(child, lx, ly, currentOpacity);
+                     });
+                 } else {
+                     const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+                     if (layerCanvas) {
+                         ctx.save();
+                         ctx.globalAlpha = currentOpacity;
+                         ctx.drawImage(layerCanvas, lx * scaleX, ly * scaleY, layerCanvas.width * scaleX, layerCanvas.height * scaleY);
+                         ctx.restore();
+                     }
+                 }
+             };
              [...layers].reverse().forEach(layer => {
-                if (layer.visible) {
-                    const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-                    if (layerCanvas) {
-                        ctx.drawImage(layerCanvas, layer.position.x * scaleX, layer.position.y * scaleY, layerCanvas.width * scaleX, layerCanvas.height * scaleY);
-                    }
-                }
+                 drawLayerRecursive(layer, 0, 0);
              });
         }
 
@@ -138,13 +166,27 @@ export const ExportAsDialog: React.FC = () => {
                  ctx.fillStyle = '#ffffff';
                  ctx.fillRect(0,0, targetWidth, targetHeight);
              }
+             const drawLayerRecursive = (layer: any, currentOffsetX: number, currentOffsetY: number, parentOpacity: number = 1) => {
+                 if (!layer.visible) return;
+                 const lx = currentOffsetX + (layer.position?.x || 0);
+                 const ly = currentOffsetY + (layer.position?.y || 0);
+                 const currentOpacity = parentOpacity * layer.opacity;
+                 if (layer.children) {
+                     [...layer.children].reverse().forEach((child: any) => {
+                         drawLayerRecursive(child, lx, ly, currentOpacity);
+                     });
+                 } else {
+                     const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+                     if (layerCanvas) {
+                         ctx.save();
+                         ctx.globalAlpha = currentOpacity;
+                         ctx.drawImage(layerCanvas, lx * scaleX, ly * scaleY, layerCanvas.width * scaleX, layerCanvas.height * scaleY);
+                         ctx.restore();
+                     }
+                 }
+             };
              [...layers].reverse().forEach(layer => {
-                if (layer.visible) {
-                    const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-                    if (layerCanvas) {
-                        ctx.drawImage(layerCanvas, layer.position.x * scaleX, layer.position.y * scaleY, layerCanvas.width * scaleX, layerCanvas.height * scaleY);
-                    }
-                }
+                 drawLayerRecursive(layer, 0, 0);
              });
         }
 

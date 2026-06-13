@@ -57,10 +57,14 @@ export interface ToolContext {
   setIsTyping: (val: boolean) => void;
   redEyePupilSize: number;
   redEyeDarkenAmount: number;
-  isInteracting: boolean;
   cropRect: { x: number, y: number, w: number, h: number } | null;
   activeCropHandle: string | null;
   setActiveCropHandle: (handle: string | null) => void;
+  canvasRefs?: any;
+  setActiveLayer?: (id: string) => void;
+  moveAutoSelect?: boolean;
+  moveShowTransform?: boolean;
+  isInteracting: boolean;
 }
 
 export interface ToolModule {

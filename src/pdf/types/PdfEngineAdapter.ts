@@ -5,4 +5,5 @@ export interface PdfEngineAdapter {
   getPages(): Promise<PageData[]>;
   extractObjects(pageIndex: number): Promise<SceneNode[]>;
   closeDocument(): Promise<void>;
+  renderPageToDataUrl?(pageIndex: number, scale?: number): Promise<string>;
 }

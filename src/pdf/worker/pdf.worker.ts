@@ -23,8 +23,9 @@ self.onmessage = async (e: MessageEvent) => {
         break;
       }
       case 'EXTRACT_OBJECTS': {
+        const backgroundDataUrl = await adapter.renderPageToDataUrl(payload.pageIndex, 2.0);
         const nodes = await adapter.extractObjects(payload.pageIndex);
-        self.postMessage({ id, type: 'SUCCESS', payload: nodes });
+        self.postMessage({ id, type: 'SUCCESS', payload: { backgroundDataUrl, nodes } });
         break;
       }
       case 'CLOSE_DOCUMENT':

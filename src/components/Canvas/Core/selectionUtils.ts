@@ -57,10 +57,10 @@ export const getSelectionPathData = (
 ): string => {
   let d = '';
   if (selectionRect) {
-    const x = (selectionRect.w >= 0 ? selectionRect.x : selectionRect.x + selectionRect.w) / 2;
-    const y = (selectionRect.h >= 0 ? selectionRect.y : selectionRect.y + selectionRect.h) / 2;
-    const w = Math.abs(selectionRect.w) / 2;
-    const h = Math.abs(selectionRect.h) / 2;
+    const x = selectionRect.w >= 0 ? selectionRect.x : selectionRect.x + selectionRect.w;
+    const y = selectionRect.h >= 0 ? selectionRect.y : selectionRect.y + selectionRect.h;
+    const w = Math.abs(selectionRect.w);
+    const h = Math.abs(selectionRect.h);
 
     if (selectionShape === 'ellipse') {
       const rx = w / 2;
@@ -75,7 +75,7 @@ export const getSelectionPathData = (
 
   lassoPaths.forEach(path => {
     if (path.length < 2) return;
-    d += `M ${path.map(p => `${p.x / 2},${p.y / 2}`).join(' L ')} Z `;
+    d += `M ${path.map(p => `${p.x},${p.y}`).join(' L ')} Z `;
   });
 
   return d;

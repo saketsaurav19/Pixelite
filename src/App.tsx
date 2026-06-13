@@ -11,11 +11,13 @@ import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
+import { ImportEngine } from './services/import/ImportEngine';
 
 import MenuBar from './components/MenuBar/MenuBar';
 import { removeBackground } from '@imgly/background-removal';
 import TabBar from './components/TabBar/TabBar';
-import { writePsd, readPsd } from 'ag-psd';
+import { writePsd } from 'ag-psd';
+import { workerExportBridge } from './services/export/WorkerExportBridge';
 import { nanoid } from 'nanoid';
 import { CloudStorageModal } from './components/Modals/CloudStorageModal';
 import { PublicShareModal } from './components/Modals/PublicShareModal';
@@ -222,16 +224,32 @@ const App: React.FC = () => {
     const ctx = exportCanvas.getContext('2d');
     if (!ctx) return null;
 
-    layers.forEach(layer => {
+    const drawLayerRecursive = (layer: any, currentOffsetX: number, currentOffsetY: number, parentOpacity: number = 1) => {
       if (!layer.visible) return;
-      const el = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
-      if (el) {
-        ctx.save();
-        ctx.globalAlpha = layer.opacity;
-        ctx.globalCompositeOperation = layer.blendMode === 'pass through' ? 'source-over' : (layer.blendMode || 'source-over');
-        ctx.drawImage(el, layer.position.x, layer.position.y);
-        ctx.restore();
+
+      const lx = currentOffsetX + (layer.position?.x || 0);
+      const ly = currentOffsetY + (layer.position?.y || 0);
+      const currentOpacity = parentOpacity * layer.opacity;
+
+      if (layer.children) {
+        // Render children bottom-to-top (reverse of the array order)
+        [...layer.children].reverse().forEach((child: any) => {
+          drawLayerRecursive(child, lx, ly, currentOpacity);
+        });
+      } else {
+        const el = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+        if (el) {
+          ctx.save();
+          ctx.globalAlpha = currentOpacity;
+          ctx.globalCompositeOperation = layer.blendMode === 'pass through' ? 'source-over' : (layer.blendMode || 'source-over');
+          ctx.drawImage(el, lx, ly);
+          ctx.restore();
+        }
       }
+    };
+
+    [...layers].reverse().forEach(layer => {
+      drawLayerRecursive(layer, 0, 0);
     });
 
     return exportCanvas.toDataURL(format);
@@ -520,118 +538,180 @@ const App: React.FC = () => {
   }, []);
 
 
-  const handleFile = (file: File | Blob, name?: string, skipResize: boolean = false) => {
+  const handleFile = async (file: File | Blob, name?: string, skipResize: boolean = false) => {
     const isOpening = !skipResize;
 
-    // 1. Handle Native Project File (.psd)
-    if ((file as File).name?.toLowerCase().endsWith('.psd')) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const result = e.target?.result;
-        if (!result) return;
+    try {
+      setIsProcessing(true);
+      setProcessingText('Importing file...');
 
-        try {
-          // Try loading as a real PSD first
-          const psd = readPsd(result as ArrayBuffer);
-          if (psd && psd.children) {
-            // Extract lighting metadata if it exists
-            const metadataLayer = psd.children.find((c: any) => c.name === '__pixelite_metadata__');
-            let lightingMetadata: any = {};
+      // If it's a blob without a name property (e.g. pasted image), construct a File or use default name
+      const fileToImport = file instanceof File ? file : new File([file], name || 'Pasted Image', { type: file.type });
 
-            if (metadataLayer) {
-              const meta = metadataLayer as any;
-              if (meta.annotations && meta.annotations[0]) {
-                try {
-                  lightingMetadata = JSON.parse(meta.annotations[0].data);
-                  console.log('[Lighting] Restored metadata from PSD:', lightingMetadata);
-                } catch (e) {
-                  console.warn('[Lighting] Failed to parse PSD metadata', e);
-                }
-              }
+      // Run it through the universal ImportEngine
+      const result = await ImportEngine.importFile(fileToImport);
+
+      // Now handle the result by type:
+      if (result.type === 'psd') {
+        const psdData = await workerExportBridge.parsePSD(result.psdData);
+        // Extract lighting metadata if it exists
+        const metadataLayer = psdData.children?.find((c: any) => c.name === '__pixelite_metadata__');
+        let lightingMetadata: any = {};
+
+        if (metadataLayer) {
+          const meta = metadataLayer as any;
+          if (meta.annotations && meta.annotations[0]) {
+            try {
+              lightingMetadata = JSON.parse(meta.annotations[0].data);
+              console.log('[Lighting] Restored metadata from PSD:', lightingMetadata);
+            } catch (e) {
+              console.warn('[Lighting] Failed to parse PSD metadata', e);
             }
-
-            const loadedLayers = psd.children
-              .filter((child: any) => child.name !== '__pixelite_metadata__')
-              .map((child: any) => ({
-                id: nanoid(),
-                name: child.name || 'Layer',
-                visible: child.visible !== false,
-                opacity: child.opacity !== undefined ? child.opacity : 1,
-                blendMode: child.blendMode || 'normal',
-                locked: false,
-                type: 'image' as const,
-                position: { x: child.left || 0, y: child.top || 0 },
-                dataUrl: child.canvas ? child.canvas.toDataURL() : null
-              })).reverse();
-
-            const projectState = {
-              layers: loadedLayers,
-              documentSize: { w: psd.width, h: psd.height },
-              ...lightingMetadata, // Restore lights, ambient settings, etc.
-              isLightingEnabled: !!lightingMetadata?.lights?.length
-            };
-
-            if (isOpening) {
-              addDocument((file as File).name, { w: psd.width, h: psd.height }, {
-                ...projectState,
-                zoom: 1,
-                canvasOffset: { x: 0, y: 0 },
-                history: [{ name: 'Open PSD', state: projectState }],
-                historyIndex: 0
-              });
-            } else {
-              setDocumentSize({ w: psd.width, h: psd.height });
-              setLayers(loadedLayers);
-              if (lightingMetadata.lights) {
-                useStore.getState().updateLighting(lightingMetadata);
-              }
-              recordHistory(`Import PSD: ${(file as File).name}`);
-            }
-            return;
-          }
-        } catch (err) {
-          // If real PSD parsing fails, check if it's our custom JSON
-          try {
-            const text = new TextDecoder().decode(result as ArrayBuffer);
-            const project = JSON.parse(text);
-            if (project && project.layers && project.documentSize) {
-              if (isOpening) {
-                addDocument((file as File).name, project.documentSize, project);
-              } else {
-                setDocumentSize(project.documentSize);
-                setLayers(project.layers);
-                if (project.activeLayerId) setActiveLayer(project.activeLayerId);
-                recordHistory(`Open Project: ${project.name || 'Untitled'}`);
-              }
-              return;
-            }
-          } catch (jsonErr) {
-            loadAsImage(file, name, skipResize);
           }
         }
-      };
-      reader.readAsArrayBuffer(file);
-      return;
-    }
 
-    loadAsImage(file, name, skipResize);
-  };
+        const loadedLayers: any[] = [];
+        const processPsdLayer = (child: any) => {
+          if (child.children) {
+            child.children.forEach(processPsdLayer);
+          } else if (child.dataUrl) {
+            loadedLayers.push({
+              id: nanoid(),
+              name: child.name || 'Layer',
+              type: 'image' as const,
+              dataUrl: child.dataUrl,
+              position: { x: child.left || 0, y: child.top || 0 },
+              visible: child.hidden !== true,
+              locked: false,
+              opacity: typeof child.opacity === 'number' ? child.opacity : 1,
+              blendMode: child.blendMode === 'pass through' || !child.blendMode ? 'source-over' : child.blendMode
+            });
+          } else if (child.canvas) {
+            loadedLayers.push({
+              id: nanoid(),
+              name: child.name || 'Layer',
+              type: 'image' as const,
+              dataUrl: child.canvas.toDataURL(),
+              position: { x: child.left || 0, y: child.top || 0 },
+              visible: child.visible !== false,
+              locked: false,
+              opacity: typeof child.opacity === 'number' ? child.opacity : 1,
+              blendMode: child.blendMode || 'normal'
+            });
+          }
+        };
+        if (psdData.children) psdData.children.forEach(processPsdLayer);
+        const layersToUse = loadedLayers.reverse();
 
-  const loadAsImage = (file: File | Blob, name?: string, skipResize: boolean = false) => {
-    if (!file.type.startsWith('image/') && !(file as File).name?.toLowerCase().endsWith('.psd')) return;
-    const isOpening = !skipResize;
+        const projectState = {
+          layers: layersToUse,
+          documentSize: { w: psdData.width, h: psdData.height },
+          ...lightingMetadata,
+          isLightingEnabled: !!lightingMetadata?.lights?.length
+        };
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
+        if (isOpening) {
+          addDocument(fileToImport.name, { w: psdData.width, h: psdData.height }, {
+            ...projectState,
+            zoom: 1,
+            canvasOffset: { x: 0, y: 0 },
+            history: [{ name: 'Open PSD', state: projectState }],
+            historyIndex: 0
+          });
+        } else {
+          setDocumentSize({ w: psdData.width, h: psdData.height });
+          setLayers(layersToUse);
+          if (layersToUse.length > 0) setActiveLayer(layersToUse[0].id);
+          if (lightingMetadata.lights) {
+            useStore.getState().updateLighting(lightingMetadata);
+          }
+          recordHistory(`Import PSD: ${fileToImport.name}`);
+        }
+      } else if (result.type === 'gif' && result.frames) {
+        const newLayers: any[] = result.frames.map((frame, index) => ({
+          id: nanoid(),
+          name: frame.name || `Frame ${index + 1}`,
+          type: 'image' as any,
+          dataUrl: frame.dataUrl,
+          position: !isOpening
+            ? { x: (documentSize.w - result.width) / 2, y: (documentSize.h - result.height) / 2 }
+            : { x: 0, y: 0 },
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'source-over'
+        })).reverse();
+
+        if (isOpening) {
+          addDocument(fileToImport.name, { w: result.width, h: result.height }, {
+            layers: newLayers,
+            documentSize: { w: result.width, h: result.height },
+            zoom: 1,
+            canvasOffset: { x: 0, y: 0 },
+            history: [{ name: 'Open GIF', state: { layers: newLayers, documentSize: { w: result.width, h: result.height } } }],
+            historyIndex: 0
+          });
+        } else {
+          setLayers([...layers, ...newLayers]);
+          if (newLayers.length > 0) setActiveLayer(newLayers[newLayers.length - 1].id);
+          recordHistory(`Place GIF: ${fileToImport.name}`);
+        }
+      } else if (result.type === 'svg' && result.layers) {
+        const layersToUse = result.layers.reverse();
+        if (isOpening) {
+          addDocument(fileToImport.name, { w: result.width, h: result.height }, {
+            layers: layersToUse,
+            documentSize: { w: result.width, h: result.height },
+            zoom: 1,
+            canvasOffset: { x: 0, y: 0 },
+            history: [{ name: 'Open SVG', state: { layers: layersToUse, documentSize: { w: result.width, h: result.height } } }],
+            historyIndex: 0
+          });
+        } else {
+          setLayers([...layers, ...layersToUse]);
+          if (layersToUse.length > 0) setActiveLayer(layersToUse[layersToUse.length - 1].id);
+          recordHistory(`Place SVG: ${fileToImport.name}`);
+        }
+      } else if (result.type === 'pdf' && result.layers) {
+        const layersToUse = result.layers;
+        if (isOpening) {
+          const viewportW = window.innerWidth - 240 - 44 - 60;
+          const viewportH = window.innerHeight - 38 - 32 - 24 - 40;
+          const zoomW = viewportW / result.width;
+          const zoomH = viewportH / result.height;
+          const initialZoom = Math.min(1, Math.min(zoomW, zoomH));
+
+          addDocument(fileToImport.name, { w: result.width, h: result.height }, {
+            layers: layersToUse,
+            documentSize: { w: result.width, h: result.height },
+            zoom: initialZoom,
+            canvasOffset: { x: 0, y: 0 },
+            history: [{ name: 'Open PDF', state: { layers: layersToUse, documentSize: { w: result.width, h: result.height } } }],
+            historyIndex: 0
+          });
+        } else {
+          // When placing, offset each page group to center it
+          const offsetLayers = layersToUse.map((pg) => ({
+            ...pg,
+            position: {
+              x: (pg.position?.x || 0) + (documentSize.w - result.width) / 2,
+              y: (pg.position?.y || 0) + (documentSize.h - result.height) / 2,
+            },
+          }));
+          setLayers([...offsetLayers, ...layers]);
+          if (offsetLayers.length > 0) setActiveLayer(offsetLayers[0].id);
+          recordHistory(`Place PDF: ${fileToImport.name}`);
+        }
+      } else if (result.type === 'image' && result.dataUrl) {
+        const isDefaultBackground =
+          layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
+
         if (isOpening) {
           const newLayers = [{
             id: nanoid(),
-            name: name || (file as File).name || 'Pasted Image',
+            name: fileToImport.name || 'Pasted Image',
             type: 'image' as const,
-            dataUrl,
+            dataUrl: result.dataUrl,
             visible: true,
             opacity: 1,
             position: { x: 0, y: 0 },
@@ -641,45 +721,58 @@ const App: React.FC = () => {
           // Calculate initial zoom to fit
           const viewportW = window.innerWidth - 240 - 44 - 60; // 60px padding
           const viewportH = window.innerHeight - 38 - 32 - 24 - 40; // 40px padding
-          const zoomW = viewportW / img.width;
-          const zoomH = viewportH / img.height;
+          const zoomW = viewportW / result.width;
+          const zoomH = viewportH / result.height;
           const initialZoom = Math.min(1, Math.min(zoomW, zoomH));
 
-          addDocument((file as File).name, { w: img.width, h: img.height }, {
+          if (result.exifData) (useStore.getState() as any).setExifData(result.exifData);
+          if (result.iccProfile) (useStore.getState() as any).setIccProfile(result.iccProfile);
+
+          addDocument(fileToImport.name, { w: result.width, h: result.height }, {
             layers: newLayers,
-            documentSize: { w: img.width, h: img.height },
+            documentSize: { w: result.width, h: result.height },
             zoom: initialZoom,
             canvasOffset: { x: 0, y: 0 },
-            history: [{ name: 'Open Image', state: { layers: newLayers, documentSize: { w: img.width, h: img.height } } }],
+            history: [{ name: 'Open Image', state: { layers: newLayers, documentSize: { w: result.width, h: result.height } } }],
             historyIndex: 0
           });
         } else {
-          const isDefaultBackground = layers.length === 1 && layers[0].name === 'Background' && layers[0].type === 'paint';
           if (layers.length === 0 || isDefaultBackground) {
-            setDocumentSize({ w: img.width, h: img.height });
+            setDocumentSize({ w: result.width, h: result.height });
           }
           addLayer({
-            name: name || (file as File).name || 'Pasted Image',
+            name: fileToImport.name || 'Pasted Image',
             type: 'image',
-            dataUrl,
-            position: (layers.length === 0 || isDefaultBackground || skipResize) ? { x: 0, y: 0 } : { x: (documentSize.w - img.width) / 2, y: (documentSize.h - img.height) / 2 }
+            dataUrl: result.dataUrl,
+            position: (layers.length === 0 || isDefaultBackground || skipResize) ? { x: 0, y: 0 } : { x: (documentSize.w - result.width) / 2, y: (documentSize.h - result.height) / 2 }
           });
-          recordHistory(`Import ${name || 'Image'}`);
+          recordHistory(`Import ${fileToImport.name}`);
         }
-      };
-      img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
+      }
+    } catch (err: any) {
+      console.error('[handleFile] Full error:', err);
+      console.error('[handleFile] Stack:', err?.stack);
+      alert('Failed to open file: ' + (err?.message ?? String(err)));
+    } finally {
+      setIsProcessing(false);
+      setProcessingText('');
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    if (file) {
+      handleFile(file);
+      e.target.value = '';
+    }
   };
 
   const handlePlaceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleFile(file, undefined, true); // true = skipResize
+    if (file) {
+      handleFile(file, undefined, true); // true = skipResize
+      e.target.value = '';
+    }
   };
 
   React.useEffect(() => {
@@ -1064,29 +1157,195 @@ const App: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const handleOpenURL = () => {
-    const url = prompt('Enter image URL:');
+  const handleOpenURL = async () => {
+    let url = prompt('Enter image/document URL or Local File Path:');
     if (!url) return;
 
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        addLayer({
-          name: 'Image from URL',
-          type: 'image',
-          dataUrl: canvas.toDataURL()
-        });
-        recordHistory('Open from URL');
+    url = url.replace(/^['"]|['"]$/g, '').trim();
+
+    // Check if it's a local file path
+    const isLocalFilePath = url.startsWith('file:') || /^[a-zA-Z]:[\\/]/.test(url) || url.startsWith('\\\\');
+
+    if (isLocalFilePath) {
+      // Clean path
+      let cleanPath = url;
+      if (url.startsWith('file:///')) {
+        cleanPath = url.substring(8);
+      } else if (url.startsWith('file://')) {
+        cleanPath = url.substring(7);
       }
-    };
-    img.onerror = () => alert('Could not load image from URL.');
-    img.src = url;
+
+      // Extract parts to show a nice prompt
+      const lastSlash = Math.max(cleanPath.lastIndexOf('/'), cleanPath.lastIndexOf('\\'));
+      const filename = lastSlash !== -1 ? cleanPath.substring(lastSlash + 1) : cleanPath;
+      const parentDir = lastSlash !== -1 ? cleanPath.substring(0, lastSlash) : 'its parent folder';
+
+      // 100% Client-side File System Access API check
+      if (typeof (window as any).showDirectoryPicker !== 'function') {
+        alert(
+          `Local file paths cannot be opened directly in this browser.\n\n` +
+          `Please select the file manually using File -> Open instead.`
+        );
+        document.getElementById('global-file-input')?.click();
+        return;
+      }
+
+      try {
+        setIsProcessing(true);
+        setProcessingText('Locating file...');
+
+        // Prompt the user to grant permission to the directory containing the file
+        alert(
+          `To open this local file, we need temporary browser permission to search its parent folder.\n\n` +
+          `In the next window, please select and confirm permission for the folder:\n"${parentDir}"`
+        );
+
+        const dirHandle = await (window as any).showDirectoryPicker();
+        
+        // Try direct resolution first
+        let fileHandle = null;
+        try {
+          const dirName = dirHandle.name;
+          const normalizedPath = cleanPath.replace(/\//g, '\\');
+          const marker = '\\' + dirName + '\\';
+          const index = normalizedPath.indexOf(marker);
+          let relativeParts: string[] = [];
+
+          if (index !== -1) {
+            relativeParts = normalizedPath.substring(index + marker.length).split('\\').filter(Boolean);
+          } else if (normalizedPath.endsWith('\\' + dirName)) {
+            relativeParts = [];
+          } else {
+            relativeParts = [filename];
+          }
+
+          let currentDir = dirHandle;
+          for (let i = 0; i < relativeParts.length - 1; i++) {
+            currentDir = await currentDir.getDirectoryHandle(relativeParts[i]);
+          }
+          const targetName = relativeParts.length > 0 ? relativeParts[relativeParts.length - 1] : filename;
+          fileHandle = await currentDir.getFileHandle(targetName);
+        } catch (e) {
+          console.warn('Direct path resolution failed, trying recursive search...', e);
+        }
+
+        // Fallback: search recursively
+        if (!fileHandle) {
+          const findFileRecursively = async (
+            directory: any,
+            targetName: string
+          ): Promise<any | null> => {
+            for await (const entry of directory.values()) {
+              if (entry.kind === 'file') {
+                if (entry.name.toLowerCase() === targetName.toLowerCase()) {
+                  return entry;
+                }
+              } else if (entry.kind === 'directory') {
+                try {
+                  const found = await findFileRecursively(entry, targetName);
+                  if (found) return found;
+                } catch (e) {
+                  // Ignore directory read/permission errors
+                }
+              }
+            }
+            return null;
+          };
+
+          fileHandle = await findFileRecursively(dirHandle, filename);
+        }
+
+        if (!fileHandle) {
+          throw new Error(`File "${filename}" not found in the selected folder tree.`);
+        }
+
+        const file = await fileHandle.getFile();
+        await handleFile(file);
+      } catch (err: any) {
+        console.error(err);
+        alert('Could not open local file:\n' + err.message);
+      } finally {
+        setIsProcessing(false);
+        setProcessingText('');
+      }
+      return;
+    }
+
+    // Otherwise, handle it as a standard web URL
+    try {
+      setIsProcessing(true);
+      setProcessingText('Downloading file...');
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+      }
+      const blob = await response.blob();
+
+      // Extract filename and extension from the URL
+      let filename = 'file_from_url';
+      try {
+        const parsedUrl = new URL(url);
+        const pathname = parsedUrl.pathname;
+        const lastPart = pathname.substring(pathname.lastIndexOf('/') + 1);
+        if (lastPart) {
+          filename = decodeURIComponent(lastPart);
+        } else {
+          // If pathname has no filename, check content-type to append extension
+          const mime = blob.type;
+          if (mime === 'application/pdf') filename += '.pdf';
+          else if (mime === 'image/svg+xml') filename += '.svg';
+          else if (mime === 'image/gif') filename += '.gif';
+          else if (mime === 'application/x-photoshop' || mime === 'image/vnd.adobe.photoshop') filename += '.psd';
+          else if (mime.startsWith('image/')) {
+            const ext = mime.split('/')[1];
+            filename += `.${ext}`;
+          }
+        }
+      } catch (e) {
+        // Fallback using blob type if URL parsing fails
+        const mime = blob.type;
+        if (mime === 'application/pdf') filename += '.pdf';
+        else if (mime === 'image/svg+xml') filename += '.svg';
+        else if (mime === 'image/gif') filename += '.gif';
+        else if (mime === 'application/x-photoshop' || mime === 'image/vnd.adobe.photoshop') filename += '.psd';
+      }
+
+      // Construct a proper File object
+      const file = new File([blob], filename, { type: blob.type });
+
+      // Run it through the app's existing file importer
+      await handleFile(file);
+    } catch (err: any) {
+      console.error(err);
+      
+      // Fallback: If it's a standard image URL, try loading via <img> tags directly
+      console.warn('Fetch failed, falling back to standard image loader...');
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          addLayer({
+            name: 'Image from URL',
+            type: 'image',
+            dataUrl: canvas.toDataURL()
+          });
+          recordHistory('Open from URL');
+        }
+      };
+      img.onerror = () => {
+        alert('Could not load document or image from URL.\nError: ' + err.message);
+      };
+      img.src = url;
+    } finally {
+      setIsProcessing(false);
+      setProcessingText('');
+    }
   };
 
   const handleTakeSnapshot = async () => {
@@ -1222,8 +1481,8 @@ const App: React.FC = () => {
 
   return (
     <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''}`}>
-      <input type="file" id="global-file-input" accept="image/*,.psd" hidden onChange={handleImageUpload} />
-      <input type="file" id="place-file-input" accept="image/*,.psd" hidden onChange={handlePlaceUpload} />
+      <input type="file" id="global-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handleImageUpload} />
+      <input type="file" id="place-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handlePlaceUpload} />
 
       {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
         <div

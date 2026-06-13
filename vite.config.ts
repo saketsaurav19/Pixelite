@@ -1,17 +1,38 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
+import path from 'path'
+
+// Custom plugin to serve harfbuzz.wasm with correct MIME type
+const harfbuzzWasmPlugin = () => ({
+  name: 'harfbuzz-wasm-plugin',
+  configureServer(server: any) {
+    server.middlewares.use((req: any, res: any, next: any) => {
+      if (req.url && req.url.endsWith('harfbuzz.wasm')) {
+        const wasmPath = path.resolve(__dirname, 'node_modules/harfbuzzjs/dist/harfbuzz.wasm');
+        if (fs.existsSync(wasmPath)) {
+          res.setHeader('Content-Type', 'application/wasm');
+          res.end(fs.readFileSync(wasmPath));
+          return;
+        }
+      }
+      next();
+    });
+  }
+});
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    harfbuzzWasmPlugin(),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
       injectManifest: {
-        maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
       },
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'icon.png'],
@@ -33,6 +54,9 @@ export default defineConfig({
 
     })
   ],
+  optimizeDeps: {
+    exclude: ['harfbuzzjs']
+  },
   base: '/',
   server: {
     port: 5174,

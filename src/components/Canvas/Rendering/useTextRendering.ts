@@ -41,7 +41,7 @@ export const useTextRendering = (
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const fs = brushSize * 2;
       ctx.fillStyle = hexToRgba(brushColor, primaryOpacity);
-      ctx.font = `${fs}px Arial`;
+      ctx.font = `${fs}px "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
 
       const lines = textEditor.value.split('\n');
       let maxWidth = 10;

@@ -2,6 +2,58 @@ import type { ToolModule } from '../types';
 import { warpPerspective } from '../../utils/canvasUtils';
 import { toolState } from '../toolState';
 
+const getLayerAtCoords = (
+  layersList: any[],
+  coords: { x: number; y: number },
+  canvasRefs: any
+): string | null => {
+  for (let i = layersList.length - 1; i >= 0; i--) {
+    const layer = layersList[i];
+    if (!layer.visible) continue;
+
+    if (layer.type === 'group' || layer.type === 'artboard') {
+      if (layer.type === 'artboard') {
+        const x = layer.position?.x || 0;
+        const y = layer.position?.y || 0;
+        const w = layer.width || 0;
+        const h = layer.height || 0;
+        if (coords.x < x || coords.x > x + w || coords.y < y || coords.y > y + h) {
+          continue;
+        }
+      }
+
+      if (layer.children) {
+        const found = getLayerAtCoords(layer.children, coords, canvasRefs);
+        if (found) return found;
+      }
+
+      if (layer.type === 'artboard') {
+        return layer.id;
+      }
+    } else {
+      const canvas = canvasRefs?.current?.[layer.id];
+      if (!canvas) continue;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) continue;
+
+      const localX = Math.round(coords.x - (layer.position?.x || 0));
+      const localY = Math.round(coords.y - (layer.position?.y || 0));
+
+      if (localX >= 0 && localX < canvas.width && localY >= 0 && localY < canvas.height) {
+        try {
+          const imgData = ctx.getImageData(localX, localY, 1, 1);
+          if (imgData.data[3] > 10) {
+            return layer.id;
+          }
+        } catch (e) {
+          console.error("Error reading pixel data", e);
+        }
+      }
+    }
+  }
+  return null;
+};
+
 export const transformTools: ToolModule[] = [
   {
     id: 'hand',
@@ -11,6 +63,15 @@ export const transformTools: ToolModule[] = [
   },
   {
     id: 'move',
+    start: ({ coords, layers, canvasRefs, setActiveLayer, moveAutoSelect, setIsInteracting }) => {
+      if (setIsInteracting) setIsInteracting(true);
+      if (moveAutoSelect && canvasRefs && setActiveLayer) {
+        const targetLayerId = getLayerAtCoords(layers, coords, canvasRefs);
+        if (targetLayerId) {
+          setActiveLayer(targetLayerId);
+        }
+      }
+    },
     move: ({ coords, lastPoint, activeLayerId, layers, updateLayer }) => {
       if (!lastPoint || !activeLayerId) return;
       const activeLayer = layers.find(l => l.id === activeLayerId);

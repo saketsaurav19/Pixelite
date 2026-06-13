@@ -9,7 +9,39 @@ export class ImageEngine {
     transform: number[]
   ): Promise<ImageNode | null> {
     try {
-      const img = await page.objs.get(imgName);
+      const isCommon = imgName.startsWith('g_');
+      const objContainer = isCommon ? (page as any).commonObjs : (page as any).objs;
+
+      if (!objContainer) {
+        throw new Error(`PDF objects container is not available for ${imgName}`);
+      }
+
+      const img = await new Promise<any>((resolve, reject) => {
+        let resolved = false;
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            reject(new Error(`Timeout resolving PDF object ${imgName}`));
+          }
+        }, 10000); // 10 seconds timeout
+
+        try {
+          objContainer.get(imgName, (resolvedObj: any) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeout);
+              resolve(resolvedObj);
+            }
+          });
+        } catch (err) {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            reject(err);
+          }
+        }
+      });
+
       if (img && img.data) {
 
         // This is a stub for image extraction. In a real scenario, we would

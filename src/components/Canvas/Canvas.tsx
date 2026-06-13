@@ -53,7 +53,8 @@ const Canvas: React.FC = () => {
     setIsTyping, toolStrength, toolHardness,
     redEyePupilSize, redEyeDarkenAmount,
     textEditor, setTextEditor,
-    lights, isLightingEnabled, lightingQuality, ambientIntensity
+    lights, isLightingEnabled, lightingQuality, ambientIntensity,
+    moveAutoSelect, moveShowTransform
   } = store;
   // --- UI & Interaction State ---
   const [isInteracting, setIsInteracting] = useState(false); // True during active mouse/touch drag
@@ -308,7 +309,8 @@ const Canvas: React.FC = () => {
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
       redEyePupilSize, redEyeDarkenAmount, isInteracting, setIsTyping,
-      cropRect, activeCropHandle, setActiveCropHandle
+      cropRect, activeCropHandle, setActiveCropHandle,
+      canvasRefs, setActiveLayer, moveAutoSelect, moveShowTransform
     };
 
     startActionHandler(clientX, clientY, e, context, {
@@ -316,7 +318,7 @@ const Canvas: React.FC = () => {
     }, {
       lastPointRef, startMouseRef, startOffsetRef, hiddenTextInputRef
     });
-  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, lassoPaths, vectorPaths, activePathIndex, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, setSelectedPoint, isAltPressed, isCtrlPressed, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, applySelectionClip, activeCropHandle]);
+  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, lassoPaths, vectorPaths, activePathIndex, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, setSelectedPoint, isAltPressed, isCtrlPressed, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, applySelectionClip, activeCropHandle, moveAutoSelect, moveShowTransform]);
 
   const handleDoubleClick = useCallback(() => {
     const id = activeLayerId || layers[0]?.id;
@@ -340,11 +342,12 @@ const Canvas: React.FC = () => {
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
       isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
-      cropRect, activeCropHandle, setActiveCropHandle
+      cropRect, activeCropHandle, setActiveCropHandle,
+      canvasRefs, setActiveLayer, moveAutoSelect, moveShowTransform
     };
 
     handleDoubleClickUtil(context);
-  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer, setDocumentSize, isAltPressed, isCtrlPressed, vectorPaths, activePathIndex, lassoPaths, isInverseSelection, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, secondaryColor, primaryOpacity, secondaryOpacity, applySelectionClip, activeCropHandle]);
+  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer, setDocumentSize, isAltPressed, isCtrlPressed, vectorPaths, activePathIndex, lassoPaths, isInverseSelection, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, secondaryColor, primaryOpacity, secondaryOpacity, applySelectionClip, activeCropHandle, moveAutoSelect, moveShowTransform]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -425,7 +428,8 @@ const Canvas: React.FC = () => {
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
       isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
-      cropRect, activeCropHandle, setActiveCropHandle
+      cropRect, activeCropHandle, setActiveCropHandle,
+      canvasRefs, setActiveLayer, moveAutoSelect, moveShowTransform
     };
 
     moveActionHandler(clientX, clientY, context, {
@@ -435,7 +439,7 @@ const Canvas: React.FC = () => {
     }, {
       isInteracting, activeCropHandle, selectedPoint, activePathIndex
     });
-  }, [getCoordinates, isInteracting, activeTool, activeLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect, applySelectionClip, findBestEdgePoint, vectorPaths, activePathIndex, selectedPoint, isAltPressed, isCtrlPressed]);
+  }, [getCoordinates, isInteracting, activeTool, activeLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect, applySelectionClip, findBestEdgePoint, vectorPaths, activePathIndex, selectedPoint, isAltPressed, isCtrlPressed, moveAutoSelect, moveShowTransform]);
 
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
@@ -475,7 +479,8 @@ const Canvas: React.FC = () => {
       isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
       setIsTyping,
       redEyePupilSize, redEyeDarkenAmount,
-      cropRect, activeCropHandle, setActiveCropHandle
+      cropRect, activeCropHandle, setActiveCropHandle,
+      canvasRefs, setActiveLayer, moveAutoSelect, moveShowTransform
     };
 
     endActionHandler(context, {
@@ -485,7 +490,7 @@ const Canvas: React.FC = () => {
     }, {
       isInteracting, draftShape, gradientStart
     });
-  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle]);
+  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle, moveAutoSelect, moveShowTransform]);
 
 
   // Handles mouse wheel zooming
@@ -591,7 +596,7 @@ const Canvas: React.FC = () => {
     if (textEditor) {
       const fs = brushSize * 2;
       ctx.fillStyle = hexToRgba(brushColor, primaryOpacity);
-      ctx.font = `${fs}px Arial`;
+      ctx.font = `${fs}px "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
       const lines = textEditor.value.split('\n');
       let maxWidth = 10;
       lines.forEach((line) => {
@@ -691,6 +696,8 @@ const Canvas: React.FC = () => {
     }
   };
 
+  const hasArtboards = layers.some(layer => layer.type === 'artboard');
+
   return (
     <div
       className="canvas-container"
@@ -739,10 +746,12 @@ const Canvas: React.FC = () => {
       <div
         className="canvas-stack"
         style={{
-          transform: `scale(${zoom}) translate(${canvasOffset.x / 2}px, ${canvasOffset.y / 2}px) rotate(${canvasRotation}deg)`,
-          width: `${documentSize.w / 2}px`,
-          height: `${documentSize.h / 2}px`,
-          overflow: activeTool === 'artboard' ? 'visible' : 'hidden'
+          transform: `scale(${zoom}) translate(${canvasOffset.x}px, ${canvasOffset.y}px) rotate(${canvasRotation}deg)`,
+          width: `${documentSize.w}px`,
+          height: `${documentSize.h}px`,
+          overflow: activeTool === 'artboard' ? 'visible' : 'hidden',
+          backgroundColor: hasArtboards ? 'transparent' : undefined,
+          boxShadow: hasArtboards ? 'none' : undefined,
         }}
         onTouchStart={handleTouchStart}
         ref={stackRef}

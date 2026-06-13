@@ -28,8 +28,8 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
         className="text-editor-input"
         style={{
           position: 'absolute',
-          left: textEditor.x / 2,
-          top: textEditor.y / 2,
+          left: textEditor.x,
+          top: textEditor.y,
           zIndex: 10001
         }}
         value={textEditor.value}
@@ -62,8 +62,8 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
         className="text-tool-interface"
         style={{
           position: 'absolute',
-          left: textEditor.x / 2,
-          top: textEditor.y / 2 - 45,
+          left: textEditor.x,
+          top: textEditor.y - 45,
           zIndex: 20000,
           display: 'flex',
           gap: '8px',
