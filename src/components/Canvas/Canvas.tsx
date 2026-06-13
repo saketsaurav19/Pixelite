@@ -29,7 +29,6 @@ import { RulerOverlay } from './UI/RulerOverlay';
 import { DraftOverlay } from './UI/DraftOverlay';
 import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
 import { SVGFilters } from './UI/SVGFilters';
-import { findLayerById } from '../../utils/layerUtils';
 
 /**
  * The main Canvas component that acts as the primary viewport for the Photoshop clone.
@@ -794,7 +793,6 @@ const Canvas: React.FC = () => {
             lassoPaths={lassoPaths}
             isInverseSelection={isInverseSelection}
             documentSize={documentSize}
-            activeLayerPosition={findLayerById(layers, activeLayerId)?.position || { x: 0, y: 0 }}
             getSelectionPathData={getSelectionPathData}
           />
         )}

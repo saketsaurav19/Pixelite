@@ -6,7 +6,6 @@ interface SelectionOverlayProps {
   lassoPaths: Point[][];
   isInverseSelection: boolean;
   documentSize: { w: number, h: number };
-  activeLayerPosition: { x: number, y: number };
   getSelectionPathData: () => string;
 }
 
@@ -15,7 +14,6 @@ export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
   lassoPaths,
   isInverseSelection,
   documentSize,
-  activeLayerPosition,
   getSelectionPathData
 }) => {
   if (!selectionRect && lassoPaths.length === 0) return null;
