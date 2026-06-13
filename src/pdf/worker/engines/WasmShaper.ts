@@ -81,7 +81,7 @@ function splitIntoScriptRuns(text: string): { text: string; isDevanagari: boolea
   if (!text) return [];
 
   const isDevanagariChar = (c: string) => /[\u0900-\u097F]/.test(c);
-  const isNeutralChar = (c: string) => /^[0-9\s!"#$%&'()*+,-./:;<=>?@\[\\\]^_`{|}~]$/.test(c);
+  const isNeutralChar = (c: string) => /^[0-9\s!"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]$/.test(c);
 
   const runs: { text: string; isDevanagari: boolean }[] = [];
   let currentRunText = '';
