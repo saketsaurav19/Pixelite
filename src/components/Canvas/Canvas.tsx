@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import './Canvas.css';
+import { findLayerById } from '../../utils/layerUtils';
 import { getCoordinates as getCoordsUtil, getSnappedCoords as getSnappedCoordsUtil } from './Core/coordUtils';
 import { applySelectionClip as applySelectionClipUtil, getSelectionPathData as getSelectionPathDataUtil, clearSelection as clearSelectionUtil } from './Core/selectionUtils';
 import { getSvgPathData as getSvgPathDataUtil } from './Core/pathUtils';
@@ -40,7 +41,7 @@ const Canvas: React.FC = () => {
     activeTool, brushSize, strokeWidth, brushColor, secondaryColor,
     primaryOpacity, secondaryOpacity,
     zoom, setZoom, layers, activeLayerId,
-    updateLayer, addLayer, recordHistory, setActiveLayer, setLayers,
+    updateLayer, addLayer, recordHistory, setActiveLayer, setLayers, setActiveTool,
     canvasOffset, setCanvasOffset, canvasRotation, setCanvasRotation, setBrushColor,
     history, historyIndex,
     lassoPaths, setLassoPaths, selectionRect, setSelectionRect,
@@ -97,6 +98,45 @@ const Canvas: React.FC = () => {
     return () => setIsTyping(false);
   }, [textEditor, setIsTyping]);
 
+  useEffect(() => {
+    if (activeLayerId) {
+      const activeLayer = findLayerById(useStore.getState().layers, activeLayerId);
+      if (activeLayer && activeLayer.type === 'text') {
+        const currentEditor = useStore.getState().textEditor;
+        if (!currentEditor || currentEditor.layerId !== activeLayerId) {
+          if (currentEditor) {
+            commitText();
+          }
+          setTextEditor({
+            x: activeLayer.position?.x || 0,
+            y: activeLayer.position?.y || 0,
+            value: activeLayer.textContent || '',
+            layerId: activeLayerId
+          });
+          setActiveTool('text');
+          setTimeout(() => {
+            const input = hiddenTextInputRef.current;
+            if (input) {
+              input.focus();
+              const len = input.value.length;
+              input.setSelectionRange(len, len);
+            }
+          }, 50);
+        }
+      } else {
+        const currentEditor = useStore.getState().textEditor;
+        if (currentEditor && currentEditor.layerId) {
+          commitText();
+        }
+      }
+    } else {
+      const currentEditor = useStore.getState().textEditor;
+      if (currentEditor && currentEditor.layerId) {
+        commitText();
+      }
+    }
+  }, [activeLayerId]);
+
   /**
    * Converts screen (clientX/Y) coordinates to document-space coordinates.
    * Accounts for canvas zoom, rotation, and offset.
@@ -138,8 +178,8 @@ const Canvas: React.FC = () => {
     getSelectionPathDataUtil(selectionRect, lassoPaths, store.selectionShape), [selectionRect, lassoPaths, store.selectionShape]);
 
   const commitText = useCallback(() =>
-    commitTextUtil(textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor, hiddenTextInputRef),
-    [textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor]);
+    commitTextUtil(textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor, hiddenTextInputRef, updateLayer),
+    [textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor, updateLayer]);
 
   const cancelText = useCallback(() =>
     cancelTextUtil(setTextEditor, hiddenTextInputRef), [setTextEditor]);
@@ -174,7 +214,7 @@ const Canvas: React.FC = () => {
   // Renders the live preview of text while typing
   useTextRendering(draftTextCanvasRef, {
     textEditor, brushSize, brushColor, primaryOpacity, strokeWidth,
-    secondaryColor, secondaryOpacity, hexToRgba
+    secondaryColor, secondaryOpacity, hexToRgba, hiddenTextInputRef
   });
 
   useLighting(canvasRefs, activeLayerId, layers, isLightingEnabled, lights, lightingQuality, ambientIntensity);
@@ -586,65 +626,7 @@ const Canvas: React.FC = () => {
     };
   }, [clearSelection, textEditor, commitText, cropRect, applyCrop, setCropRect]);
 
-  useEffect(() => {
-    const canvas = draftTextCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (textEditor) {
-      const fs = brushSize * 2;
-      ctx.fillStyle = hexToRgba(brushColor, primaryOpacity);
-      ctx.font = `${fs}px "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
-      const lines = textEditor.value.split('\n');
-      let maxWidth = 10;
-      lines.forEach((line) => {
-        const w = ctx.measureText(line).width;
-        if (w > maxWidth) maxWidth = w;
-      });
-      const padding = 10;
-      ctx.strokeStyle = '#aaaaaa';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.strokeRect(textEditor.x - padding, textEditor.y, maxWidth + padding * 2 + 10, lines.length * fs + padding);
-      ctx.setLineDash([]);
-      const isVertical = toolState._lastTextTool === 'vertical_text';
-      lines.forEach((line, i) => {
-        if (isVertical) {
-          const chars = line.split('');
-          const xPos = textEditor.x + i * fs * 1.2;
-          chars.forEach((char, j) => {
-            const yPos = textEditor.y + (j + 1) * fs;
-            if (strokeWidth > 0) {
-              ctx.strokeStyle = hexToRgba(secondaryColor, secondaryOpacity);
-              ctx.lineWidth = strokeWidth;
-              ctx.strokeText(char, xPos, yPos);
-            }
-            ctx.fillText(char, xPos, yPos);
-          });
-        } else {
-          const yPos = textEditor.y + (i + 1) * fs;
-          if (strokeWidth > 0) {
-            ctx.strokeStyle = hexToRgba(secondaryColor, secondaryOpacity);
-            ctx.lineWidth = strokeWidth;
-            ctx.strokeText(line, textEditor.x, yPos);
-          }
-          ctx.fillText(line, textEditor.x, yPos);
-        }
-      });
-      const lastLine = lines[lines.length - 1];
-      const textWidth = ctx.measureText(lastLine).width;
-      const time = Date.now();
-      if (Math.floor(time / 500) % 2 === 0) {
-        ctx.beginPath();
-        ctx.moveTo(textEditor.x + textWidth + 2, textEditor.y + (lines.length - 1) * fs + fs * 0.2);
-        ctx.lineTo(textEditor.x + textWidth + 2, textEditor.y + lines.length * fs + fs * 0.2);
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-    }
-  }, [textEditor, brushSize, brushColor]);
+  // Redundant canvas text rendering effect removed. useTextRendering manages real-time preview and caret rendering.
 
 
 
@@ -714,6 +696,12 @@ const Canvas: React.FC = () => {
         if (e.button === 0) {
           if (isCropUiTarget(e.target)) {
             return;
+          }
+          if (textEditor) {
+            const target = e.target as HTMLElement;
+            if (!target.closest('.text-editor-input') && !target.closest('.text-tool-interface')) {
+              commitText();
+            }
           }
           startAction(e.clientX, e.clientY, e);
         }

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
-import { shapeTextWasm } from '../../../pdf/worker/engines/WasmShaper';
-import type { ShapedGlyph } from '../../../pdf/worker/engines/WasmShaper';
+import { useStore } from '../../../store/useStore';
+import { FontRegistry } from '../../../pdf/worker/engines/FontRegistry';
 
 interface CanvasLayerProps {
   layer: Layer;
@@ -16,136 +16,202 @@ interface VectorTextLayerProps {
   layer: Layer;
 }
 
+// ───────────────────────────────────────────────────────────────────────────────────
+// VectorTextLayer — pure CSS rendering
+// Using the browser’s built-in Unicode/OpenType engine instead of WasmShaper
+// means Devanagari conjuncts (e.g. हल्का) and matras (ा ि ी ु ू े ै ो ौ) render
+// correctly via the system/Google Font stack without any WASM overhead.
+// ───────────────────────────────────────────────────────────────────────────────────
+
 const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
-  const [shapedResult, setShapedResult] = useState<{
-    glyphs: ShapedGlyph[];
-    width: number;
-    ascender: number;
-    upem: number;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-
   const text = layer.textContent || '';
-  const fontSize = layer.fontSize || 40;
+  const fontSize = layer.fontSize || 16;
+  const textColor = layer.color || '#000000';
+  const fontWeight = layer.fontWeight || 'normal';
 
+  // Dynamically load the font face in the browser so the HTML canvas & text editor can use it
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    shapeTextWasm(text, fontSize)
-      .then(res => {
-        if (active) {
-          setShapedResult(res);
-          setLoading(false);
-        }
-      })
-      .catch(err => {
-        console.error("Failed shaping text via Wasm:", err);
-        if (active) {
-          setLoading(false);
-        }
-      });
+    if (layer.fontChecksum) {
+      const regFont = FontRegistry.get(layer.fontChecksum);
+      if (regFont && regFont.data) {
+        const fontKey = `pdf-font-${layer.fontChecksum}`;
+        const cleanFamily = regFont.name.replace(/^[A-Z]{6}\+/, '');
+        
+        const registerBrowserFont = async () => {
+          try {
+            // Check if already registered
+            const loadedFonts = Array.from(document.fonts as any) as any[];
+            const isKeyLoaded = loadedFonts.some(f => f.family === fontKey);
+            if (!isKeyLoaded) {
+              const fontFace1 = new FontFace(fontKey, regFont.data.buffer as ArrayBuffer);
+              await fontFace1.load();
+              (document.fonts as any).add(fontFace1);
+              console.log(`[CanvasLayer] Registered FontFace: ${fontKey}`);
+            }
+            
+            const isFamilyLoaded = loadedFonts.some(f => f.family === cleanFamily);
+            if (!isFamilyLoaded) {
+              const fontFace2 = new FontFace(cleanFamily, regFont.data.buffer as ArrayBuffer);
+              await fontFace2.load();
+              (document.fonts as any).add(fontFace2);
+              console.log(`[CanvasLayer] Registered FontFace family: ${cleanFamily}`);
+            }
+          } catch (err) {
+            console.error('[CanvasLayer] Dynamic browser FontFace registration failed:', err);
+          }
+        };
+        registerBrowserFont();
+      }
+    }
+  }, [layer.fontChecksum, layer.fontName]);
 
-    return () => {
-      active = false;
-    };
-  }, [text, fontSize]);
+  if (layer.shapedText && layer.shapedText.glyphs && layer.shapedText.glyphs.length > 0) {
+    const st = layer.shapedText;
+    const scale = st.fontSize / st.upem;
+    const baselineOffset = st.fontSize * 0.85;
 
-  if (layer.isVertical) {
-    const lines = text.split('\n');
+    return (
+      <svg
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'visible',
+          pointerEvents: 'none',
+        }}
+      >
+        <g>
+          {st.glyphs.map((g: any, idx: number) => {
+            const tx = g.x + g.xOffset;
+            const ty = baselineOffset - g.yOffset;
+            return (
+              <path
+                key={idx}
+                d={g.path}
+                fill={textColor}
+                transform={`translate(${tx}, ${ty}) scale(${scale}, ${-scale})`}
+              />
+            );
+          })}
+        </g>
+      </svg>
+    );
+  }
+
+  const hasCustomFont = !!layer.fontChecksum;
+  const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
+  const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
+  
+  const fontFamily = hasCustomFont
+    ? `"${customFontKey}", "${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+    : isGeneric
+      ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+      : `"${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
+
+  if (layer.runs && layer.runs.length > 0) {
+    const theta = ((layer.rotation || 0) * Math.PI) / 180;
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+
     return (
       <div
         style={{
           position: 'absolute',
           top: 0,
           left: 0,
-          display: 'flex',
-          flexDirection: 'row',
-          fontFamily: `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`,
-          fontSize: `${fontSize}px`,
-          color: layer.color || '#000000',
+          width: '100%',
+          height: '100%',
+          userSelect: 'none',
+          pointerEvents: 'none',
         }}
       >
+        {layer.runs.map((run, i) => {
+          const runIsGeneric = !run.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(run.fontFamily.toLowerCase());
+          const runFontFamily = hasCustomFont
+            ? `"${customFontKey}", "${run.fontFamily || layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+            : runIsGeneric
+              ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+              : `"${run.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
+
+          const runFontSize = run.fontSize;
+          const runColor = run.color || textColor;
+          const runFontWeight = run.fontWeight || fontWeight;
+
+          const rx = run.x - (layer.position?.x || 0);
+          const ry = run.y - (layer.position?.y || 0);
+          const dx = rx * cosT + ry * sinT;
+          const dy = -rx * sinT + ry * cosT;
+
+          const relativeRotation = (run.rotation ?? 0) - (layer.rotation ?? 0);
+          const runTransform = Math.abs(relativeRotation) > 0.01 ? `rotate(${relativeRotation}deg)` : undefined;
+
+          return (
+            <span
+              key={i}
+              style={{
+                position: 'absolute',
+                left: `${dx}px`,
+                top: `${dy}px`,
+                fontFamily: runFontFamily,
+                fontWeight: runFontWeight,
+                fontSize: `${runFontSize}px`,
+                color: runColor,
+                opacity: run.opacity ?? 1,
+                lineHeight: 1,
+                whiteSpace: 'nowrap',
+                fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
+                direction: 'ltr',
+                unicodeBidi: 'plaintext',
+                transform: runTransform,
+                transformOrigin: '0 0',
+              }}
+            >
+              {run.str}
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (layer.isVertical) {
+    const lines = text.split('\n');
+    return (
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
         {lines.map((line, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              marginRight: `${fontSize * 0.2}px`,
-            }}
-          >
-            {line.split('').map((char, j) => (
-              <span
-                key={j}
-                style={{
-                  height: `${fontSize}px`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  WebkitTextStroke: layer.strokeColor && layer.strokeWidth ? `${layer.strokeWidth}px ${layer.strokeColor}` : undefined,
-                }}
-              >
-                {char}
-              </span>
-            ))}
+          <div key={i} style={{ writingMode: 'vertical-rl', fontFamily, fontWeight, fontSize: `${fontSize}px`, color: textColor, whiteSpace: 'pre', lineHeight: 1 }}>
+            {line}
           </div>
         ))}
       </div>
     );
   }
 
-  if (loading || !shapedResult) {
-    // Fallback: render text using browser styling
-    return (
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          fontFamily: `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`,
-          fontSize: `${fontSize}px`,
-          color: layer.color || '#000000',
-          lineHeight: 1.0,
-          whiteSpace: 'pre'
-        }}
-      >
-        {text}
-      </div>
-    );
-  }
-
-  const scale = fontSize / shapedResult.upem;
-  const baseline = shapedResult.ascender;
-
   return (
-    <svg
+    <div
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
-        width: `${shapedResult.width}px`,
-        height: `${fontSize * 1.5}px`,
-        overflow: 'visible',
+        fontFamily,
+        fontWeight,
+        fontSize: `${fontSize}px`,
+        color: textColor,
+        lineHeight: 1,
+        whiteSpace: 'nowrap',
+        // OpenType features for correct ligature, kern, conjunct shaping
+        fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
+        // Ensure left-to-right base direction for mixed scripts
+        direction: 'ltr',
+        unicodeBidi: 'plaintext',
+        userSelect: 'none',
+        pointerEvents: 'none',
       }}
     >
-      <g fill={layer.color || '#000000'}>
-        {shapedResult.glyphs.map((g, idx) => {
-          if (!g.path) return null;
-          const tx = g.x + g.xOffset;
-          const ty = baseline - g.yOffset;
-          
-          return (
-            <path
-              key={idx}
-              d={g.path}
-              transform={`translate(${tx}, ${ty}) scale(${scale}, ${-scale})`}
-              stroke={layer.strokeColor && layer.strokeWidth ? layer.strokeColor : undefined}
-              strokeWidth={layer.strokeColor && layer.strokeWidth ? layer.strokeWidth / scale : undefined}
-            />
-          );
-        })}
-      </g>
-    </svg>
+      {text}
+    </div>
   );
 };
 
@@ -250,6 +316,10 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   layerIndex,
   depth = 0
 }) => {
+  const textEditor = useStore(state => state.textEditor);
+  const updateLayer = useStore(state => state.updateLayer);
+  const isEditingThisLayer = textEditor?.layerId === layer.id;
+
   // If it's a group or artboard, we wrap the children in an isolated div for compositing
   if (layer.type === 'group' || layer.type === 'artboard') {
     return (
@@ -283,6 +353,180 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
             depth={depth + 1}
           />
         ))}
+
+        {/* Interactive PDF Annotations Overlay */}
+        {layer.type === 'artboard' && layer.annotations && layer.annotations.length > 0 && (
+          <div
+            className="artboard-annotations"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+              zIndex: 10000,
+            }}
+          >
+            {layer.annotations.map((ann) => {
+              const [x1, y1, x2, y2] = ann.rect;
+              const width = Math.max(10, x2 - x1);
+              const height = Math.max(10, y2 - y1);
+
+              const handleValueChange = (val: any) => {
+                const nextAnns = layer.annotations!.map(a =>
+                  a.id === ann.id ? { ...a, fieldValue: val } : a
+                );
+                updateLayer(layer.id, { annotations: nextAnns });
+              };
+
+              const baseStyle: React.CSSProperties = {
+                position: 'absolute',
+                left: `${x1}px`,
+                top: `${y1}px`,
+                width: `${width}px`,
+                height: `${height}px`,
+                pointerEvents: 'auto',
+                boxSizing: 'border-box',
+              };
+
+              if (ann.subtype === 'Link') {
+                return (
+                  <a
+                    key={ann.id}
+                    href={ann.url || '#'}
+                    target={ann.url ? '_blank' : undefined}
+                    rel="noopener noreferrer"
+                    title={ann.url || 'Internal Link'}
+                    style={{
+                      ...baseStyle,
+                      border: '1px dashed rgba(0, 100, 255, 0.4)',
+                      backgroundColor: 'rgba(0, 100, 255, 0.05)',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0, 100, 255, 0.15)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0, 100, 255, 0.05)'; }}
+                  />
+                );
+              }
+
+              if (ann.subtype === 'Widget') {
+                if (ann.fieldType === 'Tx') {
+                  if (ann.multiLine) {
+                    return (
+                      <textarea
+                        key={ann.id}
+                        value={ann.fieldValue || ''}
+                        onChange={(e) => handleValueChange(e.target.value)}
+                        placeholder={ann.alternativeText}
+                        style={{
+                          ...baseStyle,
+                          border: '1px solid rgba(0, 120, 255, 0.3)',
+                          backgroundColor: 'rgba(230, 240, 255, 0.8)',
+                          color: '#000000',
+                          fontFamily: 'sans-serif',
+                          fontSize: '11px',
+                          padding: '2px',
+                          resize: 'none',
+                          outline: 'none',
+                        }}
+                      />
+                    );
+                  } else {
+                    return (
+                      <input
+                        key={ann.id}
+                        type="text"
+                        value={ann.fieldValue || ''}
+                        onChange={(e) => handleValueChange(e.target.value)}
+                        placeholder={ann.alternativeText}
+                        style={{
+                          ...baseStyle,
+                          border: '1px solid rgba(0, 120, 255, 0.3)',
+                          backgroundColor: 'rgba(230, 240, 255, 0.8)',
+                          color: '#000000',
+                          fontFamily: 'sans-serif',
+                          fontSize: '11px',
+                          padding: '0 2px',
+                          outline: 'none',
+                        }}
+                      />
+                    );
+                  }
+                }
+
+                if (ann.fieldType === 'Btn') {
+                  const isChecked = ann.fieldValue === true || ann.fieldValue === 'Yes' || ann.fieldValue === ann.exportValue;
+                  return (
+                    <input
+                      key={ann.id}
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => handleValueChange(e.target.checked ? (ann.exportValue || true) : false)}
+                      title={ann.alternativeText}
+                      style={{
+                        ...baseStyle,
+                        margin: 0,
+                        cursor: 'pointer',
+                        accentColor: '#0078ff',
+                      }}
+                    />
+                  );
+                }
+
+                if (ann.fieldType === 'Ch') {
+                  return (
+                    <select
+                      key={ann.id}
+                      value={ann.fieldValue || ''}
+                      onChange={(e) => handleValueChange(e.target.value)}
+                      title={ann.alternativeText}
+                      style={{
+                        ...baseStyle,
+                        border: '1px solid rgba(0, 120, 255, 0.3)',
+                        backgroundColor: 'rgba(230, 240, 255, 0.9)',
+                        color: '#000000',
+                        fontFamily: 'sans-serif',
+                        fontSize: '11px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value=""></option>
+                      {ann.options?.map((opt: any, idx: number) => (
+                        <option key={idx} value={opt.value}>
+                          {opt.displayValue || opt.value}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                }
+              }
+
+              if (ann.subtype === 'Text') {
+                return (
+                  <div
+                    key={ann.id}
+                    style={{
+                      ...baseStyle,
+                      width: '20px',
+                      height: '20px',
+                      cursor: 'help',
+                    }}
+                    title={ann.contents || 'Sticky Note'}
+                  >
+                    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="#ffd000" stroke="#b38f00" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+          </div>
+        )}
       </div>
     );
   }
@@ -291,11 +535,25 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   const canvasW = layer.width || documentSize.w;
   const canvasH = layer.height || documentSize.h;
 
-  const isVector = layer.type === 'text' || layer.type === 'shape';
+  const isVector = layer.type === 'text' || layer.type === 'shape' || layer.type === 'table';
+
+  // Build the CSS transform string:
+  //   translate() always present (positions the layer)
+  //   rotate() added when the layer has a non-zero rotation (from PDF extraction)
+  // Transform origin is top-left (0 0) so PDF-space position stays accurate.
+  const rotationDeg = layer.rotation ?? 0;
+  const layerTransform = rotationDeg !== 0
+    ? `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px) rotate(${rotationDeg}deg)`
+    : `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px)`;
+
+  // We ALWAYS use transform-origin: 0 0 for all layers (including watermarks)
+  // to ensure that absolute run coordinate projection in VectorTextLayer aligns perfectly.
+  const isWatermark = layer.isWatermark === true;
+  const transformOrigin = '0 0';
 
   return (
     <div
-      className={`layer-wrapper ${layer.visible ? 'visible' : 'hidden'}`}
+      className={`layer-wrapper ${(layer.visible && !isEditingThisLayer) ? 'visible' : 'hidden'}`}
       style={{
         position: 'absolute',
         top: 0, left: 0,
@@ -305,7 +563,8 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         pointerEvents: 'none',
         mixBlendMode: (layer.blendMode === 'source-over' ? 'normal' : (layer.blendMode || 'normal')) as any,
         opacity: layer.opacity,
-        transform: `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px)`
+        transform: layerTransform,
+        transformOrigin,
       }}
     >
       <canvas
@@ -321,6 +580,93 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         }}
       />
       {layer.type === 'text' && <VectorTextLayer layer={layer} />}
+      {layer.type === 'text' && isWatermark && (
+        // Watermark badge — shown above the text element in the editor
+        <div
+          style={{
+            position: 'absolute',
+            top: -20,
+            left: 0,
+            background: 'rgba(255, 180, 0, 0.9)',
+            color: '#1a1a1a',
+            fontSize: '10px',
+            fontWeight: '600',
+            fontFamily: 'Inter, system-ui, sans-serif',
+            padding: '2px 7px',
+            borderRadius: '3px',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            letterSpacing: '0.03em',
+            zIndex: 1000,
+          }}
+        >
+          💧 Watermark
+        </div>
+      )}
+      {layer.type === 'table' && layer.tableData && (
+        // PDF table rendered as a proper HTML table
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: `${layer.tableData.width}px`,
+            height: `${layer.tableData.height}px`,
+            overflow: 'visible',
+            pointerEvents: 'none',
+          }}
+        >
+          <table
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: `${layer.tableData.width}px`,
+              height: `${layer.tableData.height}px`,
+              borderCollapse: 'collapse',
+              tableLayout: 'fixed',
+            }}
+          >
+            <colgroup>
+              {layer.tableData.colWidths.map((w, ci) => (
+                <col key={ci} style={{ width: `${w}px` }} />
+              ))}
+            </colgroup>
+            <tbody>
+              {Array.from({ length: layer.tableData.rows }, (_, ri) => (
+                <tr key={ri} style={{ height: `${layer.tableData!.rowHeights[ri]}px` }}>
+                  {layer.tableData!.cells
+                    .filter(c => c.row === ri)
+                    .sort((a, b) => a.col - b.col)
+                    .map(cell => (
+                      <td
+                        key={`${cell.row}-${cell.col}`}
+                        style={{
+                          border: '1px solid #333',
+                          padding: '2px 4px',
+                          fontSize: `${cell.fontSize}px`,
+                          fontWeight: cell.fontWeight,
+                          fontFamily: (!cell.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(cell.fontFamily.toLowerCase()))
+                            ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
+                            : `"${cell.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`,
+                          color: cell.color,
+                          textAlign: cell.textAlign,
+                          verticalAlign: 'middle',
+                          overflow: 'hidden',
+                          whiteSpace: 'nowrap',
+                          lineHeight: 1.3,
+                          fontFeatureSettings: '"kern" 1, "liga" 1',
+                        }}
+                      >
+                        {cell.text}
+                      </td>
+                    ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {layer.type === 'shape' && (
         <svg
           style={{

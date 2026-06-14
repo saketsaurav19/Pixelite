@@ -1,0 +1,32 @@
+{
+  "fonts": [
+    {
+      "name": "NirmalaUI",
+      "fullName": "Nirmala UI",
+      "style": "regular",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf",
+      "fallback": "sans-serif"
+    },
+    {
+      "name": "NirmalaUI-Bold",
+      "fullName": "Nirmala UI Bold",
+      "style": "bold",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf",
+      "fallback": "sans-serif"
+    },
+    {
+      "name": "TimesNewRomanPSMT",
+      "fullName": "Times New Roman",
+      "style": "regular",
+      "url": "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
+      "fallback": "serif"
+    },
+    {
+      "name": "TimesNewRomanPS-BoldMT",
+      "fullName": "Times New Roman Bold",
+      "style": "bold",
+      "url": "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSans/NotoSans-Bold.ttf",
+      "fallback": "serif"
+    }
+  ]
+}

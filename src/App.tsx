@@ -26,11 +26,13 @@ import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
 import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
+import { SignatureDialog } from './components/Dialogs/SignatureDialog';
 import { CameraDialog } from "./components/Dialogs/CameraDialog";
 import { MobileCameraDialog } from "./components/Dialogs/MobileCameraDialog";
 import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
+import { AgentTestPanel } from './components/UI/AgentTestPanel';
 
 const App: React.FC = () => {
   const [layerContextMenu, setLayerContextMenu] = React.useState<{ layerId: string; x: number; y: number } | null>(null);
@@ -1905,8 +1907,10 @@ const App: React.FC = () => {
       <NewDocumentDialog />
       <ExportAsDialog />
       <FileInfoDialog />
+      <SignatureDialog />
       <CameraDialog />
       <MobileCameraDialog />
+      <AgentTestPanel onImportFile={handleFile} getMergedImageData={getMergedImageData} />
       <AlertContainer />
     </div>
   );

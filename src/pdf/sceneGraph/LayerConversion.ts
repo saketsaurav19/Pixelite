@@ -1,26 +1,45 @@
-import type { PathSegment, SceneNode, SceneNodeTransform } from '../types/SceneNode';
+import type { PathSegment, SceneNode, SceneNodeTransform, TableNode } from '../types/SceneNode';
 import type { Layer } from '../../store/types';
 import { nanoid } from 'nanoid';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function pathSegmentsToSvgPath(segments: PathSegment[]): string {
-  return segments.map((segment) => {
-    switch (segment.type) {
-      case 'moveTo':
-        return `M ${segment.points[0].x} ${segment.points[0].y}`;
-      case 'lineTo':
-        return `L ${segment.points[0].x} ${segment.points[0].y}`;
-      case 'bezierCurveTo':
-        return `C ${segment.points.map((point) => `${point.x} ${point.y}`).join(' ')}`;
-      case 'closePath':
-        return 'Z';
-      default:
-        return '';
-    }
-  }).filter(Boolean).join(' ');
+  return segments
+    .map(segment => {
+      switch (segment.type) {
+        case 'moveTo':
+          return `M ${segment.points[0].x} ${segment.points[0].y}`;
+        case 'lineTo':
+          return `L ${segment.points[0].x} ${segment.points[0].y}`;
+        case 'bezierCurveTo':
+          return `C ${segment.points.map(p => `${p.x} ${p.y}`).join(' ')}`;
+        case 'closePath':
+          return 'Z';
+        default:
+          return '';
+      }
+    })
+    .filter(Boolean)
+    .join(' ');
 }
 
-function applyTransformToPosition(transform: SceneNodeTransform | undefined, x: number, y: number): { x: number, y: number } {
+function translatePathSegments(segments: PathSegment[], dx: number, dy: number): PathSegment[] {
+  return segments.map(segment => ({
+    ...segment,
+    points: segment.points.map(point => ({
+      x: point.x - dx,
+      y: point.y - dy,
+    })),
+  }));
+}
+
+/** Apply a 2D affine transform to origin (0,0) to get the layer position. */
+function applyTransformToPosition(
+  transform: SceneNodeTransform | undefined,
+  x = 0,
+  y = 0
+): { x: number; y: number } {
   if (!transform) return { x, y };
   return {
     x: x * transform.a + y * transform.c + transform.e,
@@ -28,7 +47,21 @@ function applyTransformToPosition(transform: SceneNodeTransform | undefined, x: 
   };
 }
 
-export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0, pageOffsetY: number = 0): Layer {
+/** Derive the rotation in degrees from an affine transform matrix. */
+function transformToRotationDeg(transform: SceneNodeTransform | undefined): number {
+  if (!transform) return 0;
+  const angle = Math.atan2(transform.b, transform.a) * (180 / Math.PI);
+  // Round to 2 decimals; ignore sub-degree floating point noise
+  return Math.abs(angle) < 0.01 ? 0 : parseFloat(angle.toFixed(2));
+}
+
+// ─── Main Converter ───────────────────────────────────────────────────────────
+
+export function convertSceneNodeToLayer(
+  node: SceneNode,
+  pageOffsetX = 0,
+  pageOffsetY = 0
+): Layer {
   const basePosition = applyTransformToPosition(node.transform, 0, 0);
   const position = {
     x: basePosition.x + pageOffsetX,
@@ -36,7 +69,9 @@ export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0
   };
 
   switch (node.type) {
-    case 'image':
+    // ── Image ─────────────────────────────────────────────────────────────
+    case 'image': {
+      const rotation = transformToRotationDeg(node.transform);
       return {
         id: node.id || nanoid(),
         name: node.name || 'Image',
@@ -47,10 +82,20 @@ export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0
         blendMode: (node.blendMode as any) || 'source-over',
         position,
         dataUrl: node.geometry.dataUrl,
+        width:  node.geometry.width,
+        height: node.geometry.height,
+        rotation: rotation || undefined,
       };
+    }
 
-    case 'path':
-      // Basic conversion for paths. Ideally, path segments get mapped to SVG path data or our shape data.
+    // ── Vector Path / Shape ────────────────────────────────────────────────
+    case 'path': {
+      const rotation = transformToRotationDeg(node.transform);
+      const pathSegments = translatePathSegments(
+        node.geometry.segments,
+        node.transform?.e || 0,
+        node.transform?.f || 0
+      );
       return {
         id: node.id || nanoid(),
         name: node.name || 'Path',
@@ -60,33 +105,97 @@ export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0
         opacity: node.opacity ?? 1,
         blendMode: (node.blendMode as any) || 'source-over',
         position,
+        rotation: rotation || undefined,
         shapeData: {
           type: 'path',
-          svgPath: pathSegmentsToSvgPath(node.geometry.segments),
-          fill: node.style.fillColor || 'transparent',
-          stroke: node.style.strokeColor || 'transparent',
-          strokeWidth: node.style.strokeWidth || 0,
-          closed: node.geometry.isClosed,
-        }
+          svgPath: pathSegmentsToSvgPath(pathSegments),
+          fill:        node.style.fillColor   || 'transparent',
+          stroke:      node.style.strokeColor || 'transparent',
+          strokeWidth: node.style.strokeWidth ?? 0,
+          closed:      node.geometry.isClosed,
+        },
       };
+    }
 
-    case 'text':
+    // ── Text ──────────────────────────────────────────────────────────────
+    case 'text': {
+      const geo = node.geometry;
+      const rotation = geo.rotation
+        ?? transformToRotationDeg(node.transform);
+
       return {
         id: node.id || nanoid(),
         name: node.name || 'Text',
         type: 'text',
         visible: node.visible !== false,
         locked: node.locked === true,
-        opacity: node.opacity ?? 1,
+        opacity: geo.opacity ?? node.opacity ?? 1,
         blendMode: (node.blendMode as any) || 'source-over',
         position,
-        textContent: node.geometry.text,
-        fontSize: node.geometry.fontSize,
-        color: node.style.fillColor || '#000000',
+        textContent: geo.text,
+        fontSize:    geo.fontSize,
+        color:       geo.color || node.style?.fillColor || '#000000',
+        strokeColor: geo.strokeColor || node.style?.strokeColor,
+        fontFamily:  geo.fontFamily,
+        fontWeight:  geo.fontWeight,
+        rotation:    rotation || undefined,
+        isWatermark: geo.isWatermark || undefined,
+        runs:        geo.runs,
+        shapedText:  (geo as any).shapedText || undefined,
+        fontChecksum: geo.fontChecksum,
+        fontName:     geo.fontName,
       };
+    }
 
+    // ── Table ───────────────────────────────────────────────────────────────────
+    case 'table': {
+      const tNode = node as TableNode;
+      const td = tNode.tableData;
+      return {
+        id: node.id || nanoid(),
+        name: node.name || 'Table',
+        type: 'table',
+        visible: node.visible !== false,
+        locked: node.locked === true,
+        opacity: node.opacity ?? 1,
+        blendMode: (node.blendMode as any) || 'source-over',
+        position: {
+          x: td.x + pageOffsetX,
+          y: td.y + pageOffsetY,
+        },
+        width:  td.width,
+        height: td.height,
+        tableData: {
+          x:          td.x,
+          y:          td.y,
+          width:      td.width,
+          height:     td.height,
+          rows:       td.rows,
+          cols:       td.cols,
+          rowHeights: td.rowHeights,
+          colWidths:  td.colWidths,
+          cells:      td.cells.map(c => ({
+            row:        c.row,
+            col:        c.col,
+            x:          c.x,
+            y:          c.y,
+            width:      c.width,
+            height:     c.height,
+            text:       c.text,
+            fontSize:   c.fontSize,
+            fontWeight: c.fontWeight,
+            fontFamily: c.fontFamily,
+            color:      c.color,
+            textAlign:  c.textAlign,
+          })),
+        },
+      };
+    }
+
+    // ── Group / Page ──────────────────────────────────────────────────────
     case 'group':
-    case 'page':
+    case 'page': {
+      const annotations = node.type === 'page' ? node.annotations : undefined;
       return {
         id: node.id || nanoid(),
         name: node.name || (node.type === 'page' ? 'Page' : 'Group'),
@@ -96,12 +205,16 @@ export function convertSceneNodeToLayer(node: SceneNode, pageOffsetX: number = 0
         opacity: node.opacity ?? 1,
         blendMode: (node.blendMode as any) || 'pass through',
         position,
-        children: (node.children || []).map(child => convertSceneNodeToLayer(child, pageOffsetX, pageOffsetY)),
+        children: (node.children || []).map(child =>
+          convertSceneNodeToLayer(child, pageOffsetX, pageOffsetY)
+        ),
         collapsed: false,
+        annotations: annotations?.length ? annotations : undefined,
       };
+    }
 
+    // ── Fallback ─────────────────────────────────────────────────────────
     default:
-      // Fallback
       return {
         id: node.id || nanoid(),
         name: node.name || 'Layer',

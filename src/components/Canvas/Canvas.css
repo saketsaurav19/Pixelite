@@ -249,10 +249,6 @@
 
 .text-editor-input {
   position: absolute;
-  width: 2ch;
-  min-width: 20px;
-  height: 1.5em;
-  min-height: 24px;
   opacity: 0.01;
   color: transparent;
   caret-color: transparent;

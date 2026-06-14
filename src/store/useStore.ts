@@ -23,6 +23,10 @@ export const useStore = create<EditorState>()((...a) => ({
   activeDocumentName: '',
 }));
 
+if (typeof window !== 'undefined') {
+  (window as any).__store = useStore;
+}
+
 import { nanoid } from 'nanoid';
 // Initialize history with initial state
 const initialDocId = nanoid();

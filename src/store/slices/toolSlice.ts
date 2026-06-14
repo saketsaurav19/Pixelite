@@ -29,7 +29,7 @@ export interface ToolSlice {
   moveShowTransform: boolean;
   textFontFamily: string;
   textAlign: 'left' | 'center' | 'right';
-  textEditor: { x: number; y: number; value: string } | null;
+  textEditor: { x: number; y: number; value: string; layerId?: string } | null;
   
   setActiveTool: (tool: Tool) => void;
   setToolVariant: (groupId: string, tool: Tool) => void;

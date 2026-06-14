@@ -9,4 +9,6 @@ export const editCoreMenu: MenuItem[] = [
   { label: 'Copy', shortcut: 'Ctrl+C', action: (s) => copySelectionToClipboard(s, false) },
   { label: 'Copy Merged', shortcut: 'Shift+Ctrl+C', action: (s) => copySelectionToClipboard(s, true) },
   { label: 'Paste', shortcut: 'Ctrl+V', action: (s) => pasteFromClipboard(s, 'center'), isEnabled: (s) => !!s.clipboardDataUrl },
+  { divider: true },
+  { label: 'Signature Trace...', action: (s) => s.setIsSignatureDialogOpen?.(true) },
 ];

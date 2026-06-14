@@ -1,8 +1,11 @@
 import React from 'react';
+import { useStore } from '../../../store/useStore';
+import { findLayerById } from '../../../utils/layerUtils';
+import { toolState } from '../../../tools/toolState';
 
 interface TextEditorOverlayProps {
-  textEditor: { x: number, y: number, value: string } | null;
-  setTextEditor: React.Dispatch<React.SetStateAction<{ x: number, y: number, value: string } | null>>;
+  textEditor: { x: number, y: number, value: string, layerId?: string } | null;
+  setTextEditor: React.Dispatch<React.SetStateAction<{ x: number, y: number, value: string, layerId?: string } | null>>;
   hiddenTextInputRef: React.RefObject<HTMLTextAreaElement | null>;
   draftTextCanvasRef: React.RefObject<HTMLCanvasElement | null>;
   documentSize: { w: number, h: number };
@@ -19,7 +22,73 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
   commitText,
   cancelText
 }) => {
+  const brushSize = useStore(state => state.brushSize);
+  const layers = useStore(state => state.layers);
+
   if (!textEditor) return null;
+
+  const activeLayer = textEditor.layerId ? findLayerById(layers, textEditor.layerId) : null;
+  const isVertical = activeLayer?.isVertical || toolState._lastTextTool === 'vertical_text';
+
+  const hasCustomFont = !!activeLayer?.fontChecksum;
+  const customFontKey = hasCustomFont ? `pdf-font-${activeLayer.fontChecksum}` : '';
+  const cleanFamily = activeLayer?.fontFamily || '';
+
+  const editorFontFamily = hasCustomFont
+    ? `"${customFontKey}", "${cleanFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
+    : `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
+
+  const fs = brushSize * 2;
+  const lines = textEditor.value.split('\n');
+  const padding = 10;
+
+  let width = 100;
+  let height = 40;
+
+  if (isVertical) {
+    let maxLineLength = 1;
+    lines.forEach(line => {
+      if (line.length > maxLineLength) maxLineLength = line.length;
+    });
+    width = lines.length * fs * 1.2 + padding * 2;
+    height = maxLineLength * fs + padding * 2;
+  } else {
+    let maxWidth = 10;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.font = `${fs}px ${editorFontFamily}`;
+      lines.forEach((line) => {
+        const w = ctx.measureText(line).width;
+        if (w > maxWidth) maxWidth = w;
+      });
+    } else {
+      lines.forEach(line => {
+        const w = line.length * fs * 0.6;
+        if (w > maxWidth) maxWidth = w;
+      });
+    }
+    width = maxWidth + padding * 2 + 10;
+    height = lines.length * fs + padding;
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const target = e.target;
+    const val = target.value;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+
+    setTextEditor(prev => {
+      if (!prev) return null;
+      return { ...prev, value: val };
+    });
+
+    requestAnimationFrame(() => {
+      if (hiddenTextInputRef.current) {
+        hiddenTextInputRef.current.setSelectionRange(start, end);
+      }
+    });
+  };
 
   return (
     <>
@@ -28,12 +97,20 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
         className="text-editor-input"
         style={{
           position: 'absolute',
-          left: textEditor.x,
+          left: textEditor.x - padding,
           top: textEditor.y,
+          width: width,
+          height: height,
+          fontSize: `${fs}px`,
+          fontFamily: editorFontFamily,
+          lineHeight: 1.2,
+          padding: `${padding}px`,
+          boxSizing: 'border-box',
+          writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
           zIndex: 10001
         }}
         value={textEditor.value}
-        onChange={(e) => setTextEditor(prev => prev ? { ...prev, value: e.target.value } : null)}
+        onChange={handleChange}
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="sentences"
@@ -94,3 +171,4 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
     </>
   );
 };
+

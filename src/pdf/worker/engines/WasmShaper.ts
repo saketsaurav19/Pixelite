@@ -1,4 +1,10 @@
-import { Blob, Face, Font, Buffer, shape } from 'harfbuzzjs';
+import { Blob, Face, Font, Buffer, shape, Direction } from 'harfbuzzjs';
+// @ts-ignore
+import bidiFactory from 'bidi-js';
+import { FontRegistry } from './FontRegistry';
+import fontDb from '../../fonts/font-database.json';
+
+const bidi = bidiFactory();
 
 const fontCache: Record<string, ArrayBuffer> = {};
 
@@ -15,14 +21,42 @@ async function getFontData(fontUrl: string): Promise<ArrayBuffer> {
   return buffer;
 }
 
-async function loadFontData(isDevanagari: boolean): Promise<ArrayBuffer> {
-  const localUrl = isDevanagari
-    ? '/fonts/NotoSansDevanagari.ttf'
-    : '/fonts/NotoSans-Regular.ttf';
+export type ScriptType = 'devanagari' | 'arabic' | 'hebrew' | 'regular';
 
-  const fallbackUrl = isDevanagari
-    ? 'https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf'
-    : 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSans/NotoSans-Regular.ttf';
+async function loadFontData(scriptType: ScriptType, fontName?: string): Promise<ArrayBuffer> {
+  if (fontName) {
+    const cleanName = fontName.replace(/^[A-Z]{6}\+/, '').toLowerCase();
+    const dbEntry = fontDb.fonts.find(f => f.name.toLowerCase() === cleanName || f.fullName.toLowerCase() === cleanName);
+    if (dbEntry && dbEntry.url) {
+      try {
+        return await getFontData(dbEntry.url);
+      } catch (err) {
+        console.warn(`Failed to load font from database CDN for ${fontName}:`, err);
+      }
+    }
+  }
+
+  let localUrl = '';
+  let fallbackUrl = '';
+
+  switch (scriptType) {
+    case 'devanagari':
+      localUrl = '/fonts/NotoSansDevanagari.ttf';
+      fallbackUrl = 'https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Regular.ttf';
+      break;
+    case 'arabic':
+      localUrl = '/fonts/NotoSansArabic-Regular.ttf';
+      fallbackUrl = 'https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansArabic/NotoSansArabic-Regular.ttf';
+      break;
+    case 'hebrew':
+      localUrl = '/fonts/NotoSansHebrew-Regular.ttf';
+      fallbackUrl = 'https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSansHebrew/NotoSansHebrew-Regular.ttf';
+      break;
+    default:
+      localUrl = '/fonts/NotoSans-Regular.ttf';
+      fallbackUrl = 'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@master/hinted/ttf/NotoSans/NotoSans-Regular.ttf';
+      break;
+  }
 
   try {
     return await getFontData(localUrl);
@@ -53,89 +87,308 @@ export interface ShapedTextResult {
   lineGap: number;
 }
 
-// Cache Font and upem instances so we don't recreate them constantly
-let devanagariFontCache: { font: Font; upem: number } | null = null;
-let regularFontCache: { font: Font; upem: number } | null = null;
+const fontInstancesCache: Record<ScriptType, { font: Font; upem: number } | null> = {
+  devanagari: null,
+  arabic: null,
+  hebrew: null,
+  regular: null
+};
 
-async function getFontInstance(isDevanagari: boolean): Promise<{ font: Font; upem: number }> {
-  if (isDevanagari && devanagariFontCache) return devanagariFontCache;
-  if (!isDevanagari && regularFontCache) return regularFontCache;
+const customFontInstancesCache: Record<string, { font: Font; upem: number }> = {};
 
-  const fontData = await loadFontData(isDevanagari);
-  const blob = new Blob(fontData);
+async function getFontInstance(
+  scriptType: ScriptType,
+  fontChecksum?: string,
+  fontName?: string
+): Promise<{ font: Font; upem: number }> {
+  let fontData: ArrayBuffer | null = null;
+  let cacheKey = '';
+
+  // 1. Try to find extracted font by checksum in registry
+  if (fontChecksum) {
+    const regFont = FontRegistry.get(fontChecksum);
+    if (regFont) {
+      fontData = regFont.data.buffer as ArrayBuffer;
+      cacheKey = fontChecksum;
+    }
+  }
+
+  // 2. Try to find extracted font by name in registry
+  if (!fontData && fontName) {
+    const regFont = FontRegistry.getByName(fontName);
+    if (regFont) {
+      fontData = regFont.data.buffer as ArrayBuffer;
+      cacheKey = regFont.name;
+    }
+  }
+
+  // If we found custom font data, return or cache it
+  if (fontData && cacheKey) {
+    if (customFontInstancesCache[cacheKey]) {
+      return customFontInstancesCache[cacheKey];
+    }
+    try {
+      const blob = new Blob(fontData);
+      const face = new Face(blob, 0);
+      const font = new Font(face);
+      const upem = face.upem || 1000;
+      font.setScale(upem, upem);
+
+      const cacheItem = { font, upem };
+      customFontInstancesCache[cacheKey] = cacheItem;
+      return cacheItem;
+    } catch (err) {
+      console.warn(`Failed to initialize HarfBuzz face with custom font ${cacheKey}:`, err);
+    }
+  }
+
+  // 3. Try to resolve via database CDN
+  if (fontName) {
+    const cleanName = fontName.replace(/^[A-Z]{6}\+/, '').toLowerCase();
+    const cacheKeyCDN = `cdn-${cleanName}`;
+    if (customFontInstancesCache[cacheKeyCDN]) {
+      return customFontInstancesCache[cacheKeyCDN];
+    }
+    try {
+      const dbFontData = await loadFontData(scriptType, fontName);
+      const blob = new Blob(dbFontData);
+      const face = new Face(blob, 0);
+      const font = new Font(face);
+      const upem = face.upem || 1000;
+      font.setScale(upem, upem);
+
+      const cacheItem = { font, upem };
+      customFontInstancesCache[cacheKeyCDN] = cacheItem;
+      return cacheItem;
+    } catch (err) {
+      // ignore, fallback to standard script font
+    }
+  }
+
+  // 4. Fallback: Standard script caching and loading
+  const cached = fontInstancesCache[scriptType];
+  if (cached) return cached;
+
+  const standardFontData = await loadFontData(scriptType);
+  const blob = new Blob(standardFontData);
   const face = new Face(blob, 0);
   const font = new Font(face);
   const upem = face.upem || 1000;
   font.setScale(upem, upem);
 
   const cacheItem = { font, upem };
-  if (isDevanagari) {
-    devanagariFontCache = cacheItem;
-  } else {
-    regularFontCache = cacheItem;
-  }
+  fontInstancesCache[scriptType] = cacheItem;
   return cacheItem;
 }
 
-function splitIntoScriptRuns(text: string): { text: string; isDevanagari: boolean }[] {
-  if (!text) return [];
+function getScriptType(char: string): ScriptType {
+  const code = char.codePointAt(0) || 0;
+  // Devanagari range
+  if (code >= 0x0900 && code <= 0x097F) {
+    return 'devanagari';
+  }
+  // Arabic range (main block, supplements, presentation forms)
+  if (
+    (code >= 0x0600 && code <= 0x06FF) ||
+    (code >= 0x0750 && code <= 0x077F) ||
+    (code >= 0x08A0 && code <= 0x08FF) ||
+    (code >= 0xFB50 && code <= 0xFDFF) ||
+    (code >= 0xFE70 && code <= 0xFEFF)
+  ) {
+    return 'arabic';
+  }
+  // Hebrew range
+  if ((code >= 0x0590 && code <= 0x05FF) || (code >= 0xFB1D && code <= 0xFB4F)) {
+    return 'hebrew';
+  }
+  return 'regular';
+}
 
-  const isDevanagariChar = (c: string) => /[\u0900-\u097F]/.test(c);
+function resolveScripts(text: string): ScriptType[] {
   const isNeutralChar = (c: string) => /^[0-9\s!"#$%&'()*+,-./:;<=>?@[\\\]^_`{|}~]$/.test(c);
 
-  const runs: { text: string; isDevanagari: boolean }[] = [];
-  let currentRunText = '';
-  let currentRunIsDevanagari = false;
-  let hasSetDirection = false;
-
+  const scripts: (ScriptType | undefined)[] = [];
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    const isDev = isDevanagariChar(char);
-    const isNeutral = isNeutralChar(char);
-
-    if (isNeutral) {
-      if (!hasSetDirection) {
-        let nextStrongIsDev = false;
-        for (let j = i + 1; j < text.length; j++) {
-          if (!isNeutralChar(text[j])) {
-            nextStrongIsDev = isDevanagariChar(text[j]);
-            break;
-          }
-        }
-        currentRunIsDevanagari = nextStrongIsDev;
-        hasSetDirection = true;
-      }
-      currentRunText += char;
+    if (isNeutralChar(char)) {
+      scripts.push(undefined);
     } else {
-      if (!hasSetDirection) {
-        currentRunIsDevanagari = isDev;
-        hasSetDirection = true;
-        currentRunText += char;
-      } else if (isDev === currentRunIsDevanagari) {
-        currentRunText += char;
-      } else {
-        runs.push({ text: currentRunText, isDevanagari: currentRunIsDevanagari });
-        currentRunText = char;
-        currentRunIsDevanagari = isDev;
-      }
+      scripts.push(getScriptType(char));
     }
   }
 
-  if (currentRunText) {
-    runs.push({ text: currentRunText, isDevanagari: currentRunIsDevanagari });
+  // Forward propagation of strong script
+  let lastStrong: ScriptType | undefined = undefined;
+  for (let i = 0; i < scripts.length; i++) {
+    if (scripts[i] !== undefined) {
+      lastStrong = scripts[i];
+    } else if (lastStrong !== undefined) {
+      scripts[i] = lastStrong;
+    }
   }
+
+  // Backward propagation of strong script (for leading neutrals)
+  let nextStrong: ScriptType | undefined = undefined;
+  for (let i = scripts.length - 1; i >= 0; i--) {
+    if (scripts[i] !== undefined) {
+      nextStrong = scripts[i];
+    } else if (nextStrong !== undefined) {
+      scripts[i] = nextStrong;
+    }
+  }
+
+  return scripts.map(s => s || 'regular');
+}
+
+interface TextRun {
+  text: string;
+  script: ScriptType;
+  level: number;
+  direction: 'ltr' | 'rtl';
+  startIndex: number;
+  endIndex: number;
+}
+
+function segmentText(text: string, levels: Uint8Array, scripts: ScriptType[]): TextRun[] {
+  if (!text) return [];
+
+  const runs: TextRun[] = [];
+  let currentRunText = text[0];
+  let currentLevel = levels[0];
+  let currentScript = scripts[0];
+  let startIndex = 0;
+
+  for (let i = 1; i < text.length; i++) {
+    const level = levels[i];
+    const script = scripts[i];
+    const char = text[i];
+
+    if (level === currentLevel && script === currentScript) {
+      currentRunText += char;
+    } else {
+      runs.push({
+        text: currentRunText,
+        script: currentScript,
+        level: currentLevel,
+        direction: (currentLevel % 2 === 0) ? 'ltr' : 'rtl',
+        startIndex,
+        endIndex: i - 1
+      });
+      currentRunText = char;
+      currentLevel = level;
+      currentScript = script;
+      startIndex = i;
+    }
+  }
+
+  runs.push({
+    text: currentRunText,
+    script: currentScript,
+    level: currentLevel,
+    direction: (currentLevel % 2 === 0) ? 'ltr' : 'rtl',
+    startIndex,
+    endIndex: text.length - 1
+  });
 
   return runs;
 }
 
+function mirrorRunText(runText: string, runLevel: number): string {
+  if (runLevel % 2 === 0) return runText;
+
+  const chars = Array.from(runText);
+  for (let i = 0; i < chars.length; i++) {
+    const mirrored = bidi.getMirroredCharacter(chars[i]);
+    if (mirrored !== null) {
+      chars[i] = mirrored;
+    }
+  }
+  return chars.join('');
+}
+
+interface ShapedRun {
+  run: TextRun;
+  glyphs: ShapedGlyph[];
+  width: number;
+  upem: number;
+  ascender: number;
+  descender: number;
+  lineGap: number;
+}
+
+function reorderRuns(runs: ShapedRun[], baseLevel: number): ShapedRun[] {
+  if (runs.length <= 1) return runs;
+
+  let maxLevel = baseLevel;
+  let minOddLevel = 127;
+
+  for (const r of runs) {
+    if (r.run.level > maxLevel) {
+      maxLevel = r.run.level;
+    }
+    if ((r.run.level & 1) && r.run.level < minOddLevel) {
+      minOddLevel = r.run.level;
+    }
+  }
+
+  if (minOddLevel === 127) {
+    return runs;
+  }
+
+  const result = [...runs];
+
+  for (let lvl = maxLevel; lvl >= minOddLevel; lvl--) {
+    let i = 0;
+    while (i < result.length) {
+      if (result[i].run.level >= lvl) {
+        const start = i;
+        while (i + 1 < result.length && result[i + 1].run.level >= lvl) {
+          i++;
+        }
+        const end = i;
+        const sliced = result.slice(start, end + 1);
+        sliced.reverse();
+        result.splice(start, sliced.length, ...sliced);
+      }
+      i++;
+    }
+  }
+
+  return result;
+}
+
 export async function shapeTextWasm(
   text: string,
-  fontSize: number
+  fontSize: number,
+  fontChecksum?: string,
+  fontName?: string
 ): Promise<ShapedTextResult> {
-  const runs = splitIntoScriptRuns(text);
-  const glyphs: ShapedGlyph[] = [];
-  let currentX = 0;
-  let currentY = 0;
+  if (!text) {
+    return {
+      glyphs: [],
+      width: 0,
+      height: fontSize,
+      fontSize,
+      upem: 1000,
+      ascender: 0,
+      descender: 0,
+      lineGap: 0
+    };
+  }
+
+  // 1. Resolve bidi levels using bidi-js
+  const bidiResult = bidi.getEmbeddingLevels(text, 'auto');
+  const baseLevel = bidiResult.paragraphs[0]?.level || 0;
+  const levels = bidiResult.levels;
+
+  // 2. Resolve script runs
+  const scripts = resolveScripts(text);
+
+  // 3. Segment text into runs
+  const textRuns = segmentText(text, levels, scripts);
+
+  // 4. Shape each run using HarfBuzz
+  const shapedRuns: ShapedRun[] = [];
 
   let primaryUpem = 1000;
   let primaryAscender = 0;
@@ -143,8 +396,8 @@ export async function shapeTextWasm(
   let primaryLineGap = 0;
   let hasSetPrimaryMetrics = false;
 
-  for (const run of runs) {
-    const { font, upem } = await getFontInstance(run.isDevanagari);
+  for (const run of textRuns) {
+    const { font, upem } = await getFontInstance(run.script, fontChecksum, fontName);
     const scale = fontSize / upem;
 
     if (!hasSetPrimaryMetrics) {
@@ -157,12 +410,34 @@ export async function shapeTextWasm(
     }
 
     const buffer = new Buffer();
-    buffer.addText(run.text);
-    buffer.guessSegmentProperties();
+    const shapedText = mirrorRunText(run.text, run.level);
+    buffer.addText(shapedText);
+    buffer.setDirection(run.direction === 'rtl' ? Direction.RTL : Direction.LTR);
+
+    // Set script and language tags
+    let scriptTag = 'latn';
+    let langTag = 'en';
+    if (run.script === 'devanagari') {
+      scriptTag = 'deva';
+      langTag = 'hi';
+    } else if (run.script === 'arabic') {
+      scriptTag = 'arab';
+      langTag = 'ar';
+    } else if (run.script === 'hebrew') {
+      scriptTag = 'hebr';
+      langTag = 'he';
+    }
+
+    buffer.setScript(scriptTag);
+    buffer.setLanguage(langTag);
 
     shape(font, buffer);
 
     const infos = buffer.getGlyphInfosAndPositions();
+    const glyphs: ShapedGlyph[] = [];
+    let currentX = 0;
+    let currentY = 0;
+
     for (const info of infos) {
       const glyphId = info.codepoint;
       const path = font.glyphToPath(glyphId) || '';
@@ -185,11 +460,38 @@ export async function shapeTextWasm(
       currentX += xAdvance;
       currentY += yAdvance;
     }
+
+    shapedRuns.push({
+      run,
+      glyphs,
+      width: currentX,
+      upem,
+      ascender: (font.hExtents().ascender || 0) * scale,
+      descender: (font.hExtents().descender || 0) * scale,
+      lineGap: (font.hExtents().lineGap || 0) * scale
+    });
+  }
+
+  // 5. Reorder shaped runs according to UAX #9 L2
+  const visuallyOrderedRuns = reorderRuns(shapedRuns, baseLevel);
+
+  // 6. Assemble global shaped glyph positions
+  const finalGlyphs: ShapedGlyph[] = [];
+  let globalX = 0;
+
+  for (const run of visuallyOrderedRuns) {
+    for (const g of run.glyphs) {
+      finalGlyphs.push({
+        ...g,
+        x: globalX + g.x
+      });
+    }
+    globalX += run.width;
   }
 
   return {
-    glyphs,
-    width: currentX,
+    glyphs: finalGlyphs,
+    width: globalX,
     height: fontSize,
     fontSize,
     upem: primaryUpem,

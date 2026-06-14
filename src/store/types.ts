@@ -11,6 +11,19 @@ export type Tool =
 
 export type BlendMode = GlobalCompositeOperation | 'pass through';
 
+export interface TextRun {
+  str: string;
+  fontSize: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  color?: string;
+  strokeColor?: string;
+  opacity?: number;
+  x: number;
+  y: number;
+  rotation?: number;
+}
+
 export interface BaseLayer {
   id: string;
   name: string;
@@ -18,13 +31,29 @@ export interface BaseLayer {
   locked: boolean;
   opacity: number;
   dataUrl?: string;
-  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard';
+  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard' | 'table';
   blendMode: BlendMode;
   position?: { x: number; y: number };
 }
 
+export interface AnnotationData {
+  id: string;
+  subtype: string;
+  rect: number[];
+  url?: string;
+  contents?: string;
+  fieldName?: string;
+  fieldValue?: any;
+  color?: string;
+  fieldType?: string;
+  alternativeText?: string;
+  multiLine?: boolean;
+  options?: { value: string; displayValue: string }[];
+  exportValue?: string;
+}
+
 export type Layer = BaseLayer & {
-  type: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'artboard';
+  type: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'artboard' | 'table';
   width?: number;
   height?: number;
   children?: Layer[];
@@ -57,9 +86,47 @@ export type Layer = BaseLayer & {
     svgPath?: string;
   };
   thumbnail?: string;
-  depthMap?: string; // Data URL of the depth map
-  normalMap?: string; // Data URL of the normal map
+  depthMap?: string;
+  normalMap?: string;
   position: { x: number; y: number };
+
+  // PDF extraction fields
+  rotation?: number;           // CSS rotation in degrees (from text/image transform)
+  fontWeight?: string;         // 'normal' | 'bold' | '100'–'900'
+  fontFamily?: string;         // resolved font family
+  isWatermark?: boolean;       // detected watermark element
+  runs?: TextRun[];            // per-character-run style data for exact font rendering
+  annotations?: AnnotationData[]; // embedded PDF annotations on this layer
+  shapedText?: any;            // HarfBuzz shaped glyph paths
+  fontChecksum?: string;
+  fontName?: string;
+  pdfMetadata?: {              // document-level metadata (on page artboard)
+    title?: string;
+    author?: string;
+    creator?: string;
+    producer?: string;
+    createdAt?: string;
+    modifiedAt?: string;
+  };
+  // PDF table data — rendered as HTML <table> in CanvasLayer
+  tableData?: {
+    x: number; y: number;
+    width: number; height: number;
+    rows: number; cols: number;
+    rowHeights: number[];
+    colWidths: number[];
+    cells: Array<{
+      row: number; col: number;
+      x: number; y: number;
+      width: number; height: number;
+      text: string;
+      fontSize: number;
+      fontWeight: string;
+      fontFamily: string;
+      color: string;
+      textAlign: 'left' | 'center' | 'right';
+    }>;
+  };
 };
 
 export interface Light {
@@ -163,7 +230,7 @@ export interface EditorState extends DocumentSpecificState {
   moveShowTransform: boolean;
   textFontFamily: string;
   textAlign: 'left' | 'center' | 'right';
-  textEditor: { x: number; y: number; value: string } | null;
+  textEditor: { x: number; y: number; value: string; layerId?: string } | null;
   selectionShape: 'rect' | 'ellipse' | 'lasso';
   selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
 
@@ -184,6 +251,7 @@ export interface EditorState extends DocumentSpecificState {
   isSystemInfoDialogOpen: boolean;
   isMobileMenuOpen: boolean;
   isCameraDialogOpen: boolean;
+  isSignatureDialogOpen: boolean;
   mobileCapturedImage: string | null;
   rulerUnit: 'px' | 'in' | 'cm';
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
