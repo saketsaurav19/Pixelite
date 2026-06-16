@@ -32,7 +32,7 @@ import { MobileCameraDialog } from "./components/Dialogs/MobileCameraDialog";
 import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
-import { AgentTestPanel } from './components/UI/AgentTestPanel';
+
 
 const App: React.FC = () => {
   const [layerContextMenu, setLayerContextMenu] = React.useState<{ layerId: string; x: number; y: number } | null>(null);
@@ -1910,7 +1910,7 @@ const App: React.FC = () => {
       <SignatureDialog />
       <CameraDialog />
       <MobileCameraDialog />
-      <AgentTestPanel onImportFile={handleFile} getMergedImageData={getMergedImageData} />
+
       <AlertContainer />
     </div>
   );

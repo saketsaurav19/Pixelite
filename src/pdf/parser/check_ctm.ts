@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { pathToFileURL } from 'url';
 
 // Polyfills
 if (typeof Promise !== 'undefined' && !(Promise as any).try) {

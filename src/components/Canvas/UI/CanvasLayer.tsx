@@ -17,10 +17,17 @@ interface VectorTextLayerProps {
 }
 
 // ───────────────────────────────────────────────────────────────────────────────────
-// VectorTextLayer — pure CSS rendering
-// Using the browser’s built-in Unicode/OpenType engine instead of WasmShaper
-// means Devanagari conjuncts (e.g. हल्का) and matras (ा ि ी ु ू े ै ो ौ) render
-// correctly via the system/Google Font stack without any WASM overhead.
+// VectorTextLayer — pure HTML text rendering (no SVG, no HarfBuzz glyph paths):
+//
+//  1. HarfBuzz cluster <span>s  — when shapedPositions[] is available (complex scripts:
+//     Devanagari, Arabic, Hebrew, bidi). Each Unicode cluster is rendered as an
+//     absolutely-positioned <span> at its HarfBuzz x coordinate. The browser
+//     shapes each cluster natively (conjuncts, matras, ligatures render correctly).
+//
+//  2. PDF-run <span>s            — fallback. One <span> per TextRun extracted from the
+//     PDF operator list, positioned using PDF coordinates.
+//
+//  3. Plain <div>                — last resort when no runs exist.
 // ───────────────────────────────────────────────────────────────────────────────────
 
 const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
@@ -65,41 +72,6 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
     }
   }, [layer.fontChecksum, layer.fontName]);
 
-  if (layer.shapedText && layer.shapedText.glyphs && layer.shapedText.glyphs.length > 0) {
-    const st = layer.shapedText;
-    const scale = st.fontSize / st.upem;
-    const baselineOffset = st.fontSize * 0.85;
-
-    return (
-      <svg
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          overflow: 'visible',
-          pointerEvents: 'none',
-        }}
-      >
-        <g>
-          {st.glyphs.map((g: any, idx: number) => {
-            const tx = g.x + g.xOffset;
-            const ty = baselineOffset - g.yOffset;
-            return (
-              <path
-                key={idx}
-                d={g.path}
-                fill={textColor}
-                transform={`translate(${tx}, ${ty}) scale(${scale}, ${-scale})`}
-              />
-            );
-          })}
-        </g>
-      </svg>
-    );
-  }
-
   const hasCustomFont = !!layer.fontChecksum;
   const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
   const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
@@ -110,6 +82,47 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
       ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
       : `"${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
 
+  // ── Priority 1: HarfBuzz cluster spans (complex scripts / bidi) ─────────────
+  // HarfBuzz is used ONLY to determine cluster boundaries — which Unicode
+  // codepoints form one visual unit (conjunct, matra, ligature, etc.).
+  // Clusters are rendered as inline <span>s in normal flow so the browser's
+  // own text engine handles advance widths. This avoids the x-drift that occurs
+  // when HarfBuzz (using a fallback font) and the browser (using the PDF font)
+  // compute different advance widths for the same text.
+  if (layer.shapedPositions && layer.shapedPositions.length > 0) {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          whiteSpace: 'nowrap',
+          fontFamily,
+          fontWeight,
+          fontSize: `${fontSize}px`,
+          color: textColor,
+          lineHeight: 1,
+          fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}
+      >
+        {layer.shapedPositions.map((cluster, i) => (
+          <span
+            key={i}
+            style={{
+              direction: cluster.direction,
+              unicodeBidi: cluster.direction === 'rtl' ? 'bidi-override' : 'normal',
+            }}
+          >
+            {cluster.text}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Priority 2: PDF-run spans ──────────────────────────────────────────────
   if (layer.runs && layer.runs.length > 0) {
     const theta = ((layer.rotation || 0) * Math.PI) / 180;
     const cosT = Math.cos(theta);

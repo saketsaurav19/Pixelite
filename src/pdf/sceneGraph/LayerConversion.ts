@@ -141,7 +141,7 @@ export function convertSceneNodeToLayer(
         rotation:    rotation || undefined,
         isWatermark: geo.isWatermark || undefined,
         runs:        geo.runs,
-        shapedText:  (geo as any).shapedText || undefined,
+        shapedPositions: (geo as any).shapedPositions || undefined,
         fontChecksum: geo.fontChecksum,
         fontName:     geo.fontName,
       };

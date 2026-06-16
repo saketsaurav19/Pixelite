@@ -2,7 +2,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 import type { TextNode, TextRun } from '../../types/SceneNode';
 import type { GraphicsStateSnapshot } from '../../parser/GraphicsState';
 import { nanoid } from 'nanoid';
-import { shapeTextWasm } from './WasmShaper';
+
+import { getShapedPositions } from './WasmShaper';
+import type { TextCluster } from './WasmShaper';
 import { FontRegistry } from './FontRegistry';
 
 // ─── Devanagari visual reorder fix ───────────────────────────────────────────
@@ -129,6 +131,7 @@ export class TextEngine {
       let activeTags: string[] = [];
       const parsedItems: any[] = [];
       let textItemIndex = 0;
+      let pendingSpace = false;
 
       for (const item of textContent.items) {
         if ('type' in item) {
@@ -146,7 +149,16 @@ export class TextEngine {
         const currentIdx = textItemIndex;
         textItemIndex++;
 
-        if (!('str' in item) || !item.str.trim()) {
+        if (!('str' in item)) {
+          continue;
+        }
+
+        if (item.str === '') {
+          continue;
+        }
+
+        if (!item.str.trim()) {
+          pendingSpace = true;
           continue;
         }
 
@@ -155,23 +167,23 @@ export class TextEngine {
         if (textItemStates && textItemStates.length > 0) {
           let bestIdx = 0;
           let minDistance = Infinity;
-          
+
           for (let s = 0; s < textItemStates.length; s++) {
             const snap = textItemStates[s];
             if (!snap) continue;
-            
+
             // Compute page-space origin of snapshot
             const snapTransform = pdfjsLib.Util.transform(snap.ctm, snap.textMatrix);
             const snapX = snapTransform[4];
             const snapY = snapTransform[5];
-            
+
             const itemX = item.transform[4];
             const itemY = item.transform[5];
-            
+
             const dx = snapX - itemX;
             const dy = snapY - itemY;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            
+
             if (dist < minDistance) {
               minDistance = dist;
               bestIdx = s;
@@ -224,7 +236,7 @@ export class TextEngine {
           : item.str.length * fontSize * 0.55;
 
         // Detect if marked as watermark in marked content blocks
-        const isWatermarkMarked = activeTags.some(tag => 
+        const isWatermarkMarked = activeTags.some(tag =>
           /watermark/i.test(tag)
         );
 
@@ -263,7 +275,9 @@ export class TextEngine {
           height: item.height || fontSize || 12,
           originalIndex: currentIdx,
           isWatermark,
+          precededBySpace: pendingSpace,
         });
+        pendingSpace = false;
       }
 
       if (parsedItems.length === 0) return [];
@@ -328,11 +342,11 @@ export class TextEngine {
         const closeHorizontally = gapRight < currentLine.fontSize * 0.65;
 
         if (sameLine && closeHorizontally && sameRotation) {
-          // Insert a space when there's a visible gap between words
+          // Insert a space when there's an explicit preceding space or visible gap
           const needsSpace =
-            gapRight > currentLine.fontSize * 0.15 &&
             !currentLine.str.endsWith(' ') &&
-            !item.str.startsWith(' ');
+            !item.str.startsWith(' ') &&
+            (item.precededBySpace || gapRight > currentLine.fontSize * 0.15);
 
           currentLine.str += (needsSpace ? ' ' : '') + item.str;
           lineMinX = Math.min(lineMinX, item.x);
@@ -343,7 +357,7 @@ export class TextEngine {
           if (item.fontSize > currentLine.fontSize) {
             currentLine.fontWeight = item.fontWeight;
             currentLine.fontFamily = item.fontFamily;
-            currentLine.fontSize   = item.fontSize;
+            currentLine.fontSize = item.fontSize;
           }
           if (item.isWatermark) {
             currentLine.isWatermark = true;
@@ -421,12 +435,12 @@ export class TextEngine {
               if (typeof window !== 'undefined' && typeof FontFace !== 'undefined') {
                 const fontKey = `pdf-font-${fontChecksum}`;
                 const cleanFamily = f.name.replace(/^[A-Z]{6}\+/, '');
-                
+
                 try {
                   const fFace1 = new FontFace(fontKey, f.data.buffer as ArrayBuffer);
                   await fFace1.load();
                   (document.fonts as any).add(fFace1);
-                  
+
                   const fFace2 = new FontFace(cleanFamily, f.data.buffer as ArrayBuffer);
                   await fFace2.load();
                   (document.fonts as any).add(fFace2);
@@ -440,14 +454,19 @@ export class TextEngine {
           }
         }
 
-        // Shape Devanagari texts client-side using WasmShaper / HarfBuzz
-        let shapedText: any = undefined;
-        const hasDevanagari = /[\u0900-\u097F]/.test(correctedStr);
-        if (hasDevanagari) {
+        // For complex scripts (Devanagari, Arabic, Hebrew) or bidirectional text,
+        // run HarfBuzz to get per-cluster x positions so HTML spans are placed
+        // correctly. Latin/ASCII text skips this for performance.
+        const needsShaping =
+          /[\u0900-\u097F\u0600-\u06FF\u0590-\u05FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\uFB1D-\uFB4F]/.test(correctedStr);
+
+        let shapedPositions: TextCluster[] | undefined = undefined;
+        if (needsShaping) {
           try {
-            shapedText = await shapeTextWasm(correctedStr, line.fontSize, fontChecksum, originalFontName);
+            const result = await getShapedPositions(correctedStr, line.fontSize, fontChecksum, originalFontName);
+            shapedPositions = result ?? undefined;
           } catch (shapeErr) {
-            console.warn('Failed to shape Devanagari text:', shapeErr);
+            console.warn('[TextEngine] getShapedPositions failed, using CSS spans:', shapeErr);
           }
         }
 
@@ -490,7 +509,7 @@ export class TextEngine {
             rotation: line.rotation,
             isWatermark,
             runs,
-            shapedText,
+            shapedPositions,
             fontChecksum,
             fontName: originalFontName || line.fontName,
           },

@@ -97,7 +97,8 @@ export type Layer = BaseLayer & {
   isWatermark?: boolean;       // detected watermark element
   runs?: TextRun[];            // per-character-run style data for exact font rendering
   annotations?: AnnotationData[]; // embedded PDF annotations on this layer
-  shapedText?: any;            // HarfBuzz shaped glyph paths
+  /** HarfBuzz per-cluster positions for correct complex-script span layout. */
+  shapedPositions?: Array<{ text: string; x: number; xAdvance: number; direction: 'ltr' | 'rtl' }>;
   fontChecksum?: string;
   fontName?: string;
   pdfMetadata?: {              // document-level metadata (on page artboard)

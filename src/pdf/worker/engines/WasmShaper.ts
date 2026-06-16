@@ -87,6 +87,18 @@ export interface ShapedTextResult {
   lineGap: number;
 }
 
+/** A single Unicode cluster with its HarfBuzz-computed x position. */
+export interface TextCluster {
+  /** The Unicode text of this cluster (one or more codepoints). */
+  text: string;
+  /** Absolute x position in px from the start of the shaped line. */
+  x: number;
+  /** Advance width of this cluster in px. */
+  xAdvance: number;
+  /** 'ltr' or 'rtl' — used by the renderer to set CSS direction. */
+  direction: 'ltr' | 'rtl';
+}
+
 const fontInstancesCache: Record<ScriptType, { font: Font; upem: number } | null> = {
   devanagari: null,
   arabic: null,
@@ -499,4 +511,151 @@ export async function shapeTextWasm(
     descender: primaryDescender,
     lineGap: primaryLineGap
   };
+}
+
+// ─── Cluster-position shaping (for HTML span rendering) ──────────────────────
+//
+// Instead of returning SVG glyph paths, this function returns the HarfBuzz
+// advance positions per Unicode cluster, so each cluster can be placed as an
+// absolutely-positioned HTML <span>. The browser's native text engine renders
+// each cluster's glyphs (conjuncts, ligatures, matras, etc.) correctly.
+
+/**
+ * Shape `text` and return per-cluster positions for HTML <span> rendering.
+ * Returns null if shaping fails (caller falls back to unpositioned CSS spans).
+ */
+export async function getShapedPositions(
+  text: string,
+  fontSize: number,
+  fontChecksum?: string,
+  fontName?: string
+): Promise<TextCluster[] | null> {
+  if (!text) return null;
+
+  try {
+    // 1. Bidi analysis
+    const bidiResult = bidi.getEmbeddingLevels(text, 'auto');
+    const baseLevel: number = bidiResult.paragraphs[0]?.level ?? 0;
+    const levels: Uint8Array = bidiResult.levels;
+
+    // 2. Script segmentation
+    const scripts = resolveScripts(text);
+
+    // 3. Break into bidi+script runs
+    const textRuns = segmentText(text, levels, scripts);
+
+    // Track logical char offset into the full `text` string per run
+    let logicalOffset = 0;
+
+    interface ProcessedRun {
+      run: TextRun;
+      clusters: { text: string; width: number }[];
+      totalWidth: number;
+    }
+
+    const processedRuns: ProcessedRun[] = [];
+
+    for (const run of textRuns) {
+      const { font, upem } = await getFontInstance(run.script, fontChecksum, fontName);
+      const scale = fontSize / upem;
+
+      const buf = new Buffer();
+      buf.addText(mirrorRunText(run.text, run.level));
+      buf.setDirection(run.direction === 'rtl' ? Direction.RTL : Direction.LTR);
+
+      let scriptTag = 'latn', langTag = 'en';
+      if (run.script === 'devanagari') { scriptTag = 'deva'; langTag = 'hi'; }
+      else if (run.script === 'arabic')    { scriptTag = 'arab'; langTag = 'ar'; }
+      else if (run.script === 'hebrew')    { scriptTag = 'hebr'; langTag = 'he'; }
+      buf.setScript(scriptTag);
+      buf.setLanguage(langTag);
+      shape(font, buf);
+
+      const infos = buf.getGlyphInfosAndPositions();
+
+      // Accumulate advance widths per cluster index (into run.text)
+      const clusterAdvances = new Map<number, number>();
+      for (const info of infos) {
+        const c = info.cluster as number;
+        clusterAdvances.set(c, (clusterAdvances.get(c) ?? 0) + (info.xAdvance ?? 0) * scale);
+      }
+
+      // Sort cluster start indices in logical (string) order
+      const sortedClusterStarts = Array.from(clusterAdvances.keys()).sort((a, b) => a - b);
+
+      // Build cluster list: extract text substring for each cluster
+      const runClusters: { text: string; width: number }[] = [];
+      let totalWidth = 0;
+      for (let i = 0; i < sortedClusterStarts.length; i++) {
+        const c = sortedClusterStarts[i];
+        const nextC = sortedClusterStarts[i + 1];
+        const clusterText = nextC !== undefined
+          ? run.text.substring(c, nextC)
+          : run.text.substring(c);
+        const width = clusterAdvances.get(c) ?? 0;
+        runClusters.push({ text: clusterText, width });
+        totalWidth += width;
+      }
+
+      // For RTL runs, reverse clusters into visual (left→right screen) order
+      if (run.direction === 'rtl') {
+        runClusters.reverse();
+      }
+
+      processedRuns.push({ run, clusters: runClusters, totalWidth });
+      logicalOffset += run.text.length;
+    }
+
+    // 4. Reorder runs visually using UAX #9 L2 (same algorithm as reorderRuns)
+    const runLevels = processedRuns.map(r => r.run.level);
+    const visualRunOrder = computeVisualRunOrder(runLevels, baseLevel);
+
+    // 5. Assemble final cluster list with global x positions
+    const finalClusters: TextCluster[] = [];
+    let globalX = 0;
+
+    for (const ri of visualRunOrder) {
+      const { run, clusters } = processedRuns[ri];
+      for (const cluster of clusters) {
+        finalClusters.push({
+          text:      cluster.text,
+          x:         globalX,
+          xAdvance:  cluster.width,
+          direction: run.direction,
+        });
+        globalX += cluster.width;
+      }
+    }
+
+    return finalClusters.length > 0 ? finalClusters : null;
+
+  } catch (err) {
+    console.warn('[WasmShaper] getShapedPositions failed:', err);
+    return null;
+  }
+}
+
+/** UAX #9 L2 visual run ordering — same logic as reorderRuns() but for index arrays. */
+function computeVisualRunOrder(levels: number[], baseLevel: number): number[] {
+  const indices = levels.map((_, i) => i);
+  if (levels.length <= 1) return indices;
+
+  const maxLevel = levels.reduce((m, l) => Math.max(m, l), baseLevel);
+  const minOddLevel = levels.filter(l => l % 2 !== 0).reduce((m, l) => Math.min(m, l), 127);
+
+  if (minOddLevel === 127) return indices; // all LTR — no reordering needed
+
+  const result = [...indices];
+  for (let lvl = maxLevel; lvl >= minOddLevel; lvl--) {
+    let i = 0;
+    while (i < result.length) {
+      if (levels[result[i]] >= lvl) {
+        const start = i;
+        while (i + 1 < result.length && levels[result[i + 1]] >= lvl) i++;
+        result.splice(start, i - start + 1, ...result.slice(start, i + 1).reverse());
+      }
+      i++;
+    }
+  }
+  return result;
 }

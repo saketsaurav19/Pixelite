@@ -161,7 +161,7 @@ export const AgentTestPanel: React.FC<AgentTestPanelProps> = ({ onImportFile, ge
               onChange={(e) => setServerUrl(e.target.value)} 
               placeholder="http://localhost:5180"
             />
-            <button onClick={() => setConnected(null)} title="Reconnect">
+            <button onClick={() => setIsConnected(null)} title="Reconnect">
               <LucideIcons.RefreshCw size={12} />
             </button>
           </div>

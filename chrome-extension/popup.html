@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Pixelite Agent Controller</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="extension-container">
+    <header class="header">
+      <div class="logo-area">
+        <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+          <path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
+          <line x1="12" y1="2" x2="12" y2="4"/>
+          <line x1="12" y1="20" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="4" y2="12"/>
+          <line x1="20" y1="12" x2="22" y2="12"/>
+        </svg>
+        <h1>Pixelite URL Generator</h1>
+      </div>
+      <div id="connection-status" class="status-badge checking">Checking</div>
+    </header>
+
+    <div class="content-body">
+      <!-- Section: Select Workspace File -->
+      <section class="control-section">
+        <div class="section-header">
+          <label>Select Workspace File</label>
+          <button id="refresh-files-btn" class="icon-btn" title="Refresh files list">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
+        </div>
+        <div class="input-row">
+          <select id="file-select" disabled>
+            <option value="">Loading files...</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Section: Custom Local Path -->
+      <section class="control-section">
+        <label for="custom-path-input">Paste Any Custom Local Path</label>
+        <div class="input-row">
+          <input type="text" id="custom-path-input" placeholder="e.g., C:\Users\Downloads\receipt.pdf">
+        </div>
+      </section>
+
+      <!-- Section: Output Link Display -->
+      <section class="control-section url-section">
+        <label>Generated Localhost URL</label>
+        <div class="url-output-container">
+          <input type="text" id="url-output" readonly placeholder="Select file or enter path above...">
+          <button id="copy-url-btn" class="action-btn primary copy-btn" disabled>Copy Link</button>
+        </div>
+        <p class="helper-text">Paste this URL into Pixelite's <strong>File -> Open from URL</strong> dialog box.</p>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- Section: Viewport Capture -->
+      <section class="control-section">
+        <label for="export-filename">Capture & Upload Tab Viewport</label>
+        <div class="input-row">
+          <input type="text" id="export-filename" placeholder="agent_canvas_export.png" value="agent_canvas_export.png">
+        </div>
+        <button id="upload-screenshot-btn" class="action-btn secondary">Upload Screen Capture</button>
+      </section>
+
+      <hr class="divider" />
+
+      <!-- Section: Console Logs -->
+      <section class="log-section">
+        <div class="log-header">
+          <span>Activity Log</span>
+          <button id="clear-logs-btn" class="text-link-btn">Clear</button>
+        </div>
+        <div id="logs-console" class="console">
+          <div class="log-line info">Ready. Ensure test server is running on port 5180.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

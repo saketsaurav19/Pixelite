@@ -51,6 +51,8 @@ export interface TextRun {
   rotation?: number;      // degrees, from transform matrix
 }
 
+import type { TextCluster } from '../../pdf/worker/engines/WasmShaper';
+
 export interface TextGeometry {
   text: string;           // merged full string (for compat)
   fontSize: number;       // dominant font size of the run group
@@ -62,7 +64,8 @@ export interface TextGeometry {
   rotation?: number;      // degrees — from the text matrix
   isWatermark?: boolean;  // true if detected as a watermark element
   runs?: TextRun[];       // per-character-run rich data
-  shapedText?: any;       // HarfBuzz shaped glyph paths
+  /** HarfBuzz per-cluster positions for correct complex-script span layout. */
+  shapedPositions?: TextCluster[];
   fontChecksum?: string;
   fontName?: string;
 }

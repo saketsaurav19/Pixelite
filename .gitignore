@@ -27,5 +27,10 @@ dist/
 
 public/models/*.*
 
-# Agent Tests
-agent-tests/
+# Agent / Debug scripts (not part of the app)
+_agents/uploads/
+
+# Test data (large JSON fixtures — track in git or not based on preference)
+# Uncomment below to exclude large test fixtures from git:
+# _tests/data/
+_tests/results/
