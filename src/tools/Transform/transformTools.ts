@@ -1,34 +1,39 @@
 import type { ToolModule } from '../types';
 import { warpPerspective } from '../../utils/canvasUtils';
 import { toolState } from '../toolState';
+import { isLayerOrAncestorsLocked, findLayerById } from '../../utils/layerUtils';
+
 
 const getLayerAtCoords = (
   layersList: any[],
   coords: { x: number; y: number },
-  canvasRefs: any
+  canvasRefs: any,
+  parentOffset: { x: number; y: number } = { x: 0, y: 0 }
 ): string | null => {
   for (let i = layersList.length - 1; i >= 0; i--) {
     const layer = layersList[i];
     if (!layer.visible) continue;
 
     if (layer.type === 'group' || layer.type === 'artboard') {
+      const layerX = (layer.position?.x || 0) + parentOffset.x;
+      const layerY = (layer.position?.y || 0) + parentOffset.y;
+
       if (layer.type === 'artboard') {
-        const x = layer.position?.x || 0;
-        const y = layer.position?.y || 0;
         const w = layer.width || 0;
         const h = layer.height || 0;
-        if (coords.x < x || coords.x > x + w || coords.y < y || coords.y > y + h) {
+        // Bounds check using absolute position
+        if (coords.x < layerX || coords.x > layerX + w || coords.y < layerY || coords.y > layerY + h) {
           continue;
         }
+        // Clicking inside an artboard always selects the artboard itself
+        // (Move tool should move the whole artboard, not individual child layers)
+        return layer.id;
       }
 
       if (layer.children) {
-        const found = getLayerAtCoords(layer.children, coords, canvasRefs);
+        // For groups (non-artboards), recurse into children with same offset
+        const found = getLayerAtCoords(layer.children, coords, canvasRefs, parentOffset);
         if (found) return found;
-      }
-
-      if (layer.type === 'artboard') {
-        return layer.id;
       }
     } else {
       const canvas = canvasRefs?.current?.[layer.id];
@@ -36,8 +41,11 @@ const getLayerAtCoords = (
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) continue;
 
-      const localX = Math.round(coords.x - (layer.position?.x || 0));
-      const localY = Math.round(coords.y - (layer.position?.y || 0));
+      // Child position is LOCAL within parent; add parentOffset to get absolute
+      const absX = (layer.position?.x || 0) + parentOffset.x;
+      const absY = (layer.position?.y || 0) + parentOffset.y;
+      const localX = Math.round(coords.x - absX);
+      const localY = Math.round(coords.y - absY);
 
       if (localX >= 0 && localX < canvas.width && localY >= 0 && localY < canvas.height) {
         try {
@@ -74,19 +82,22 @@ export const transformTools: ToolModule[] = [
     },
     move: ({ coords, lastPoint, activeLayerId, layers, updateLayer }) => {
       if (!lastPoint || !activeLayerId) return;
-      const activeLayer = layers.find(l => l.id === activeLayerId);
-      if (activeLayer && !activeLayer.locked) {
+      // Search deeply — active layer may be nested inside an artboard
+      const activeLayer = findLayerById(layers, activeLayerId);
+      // Only check the layer's OWN lock — not descendants' locks (those are just visual indicators)
+      if (activeLayer && !activeLayer.locked && !activeLayer.lockPosition) {
         const dx = coords.x - lastPoint.x;
         const dy = coords.y - lastPoint.y;
         updateLayer(activeLayerId, { 
           position: { 
-            x: activeLayer.position.x + dx, 
-            y: activeLayer.position.y + dy 
+            x: (activeLayer.position?.x || 0) + dx, 
+            y: (activeLayer.position?.y || 0) + dy 
           } 
         });
       }
     }
   },
+
   {
     id: 'artboard',
     start: ({ coords, setSelectionRect, setIsInteracting, activeCropHandle }) => {

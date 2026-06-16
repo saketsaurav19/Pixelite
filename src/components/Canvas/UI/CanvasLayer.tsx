@@ -43,7 +43,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
       if (regFont && regFont.data) {
         const fontKey = `pdf-font-${layer.fontChecksum}`;
         const cleanFamily = regFont.name.replace(/^[A-Z]{6}\+/, '');
-        
+
         const registerBrowserFont = async () => {
           try {
             // Check if already registered
@@ -55,7 +55,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
               (document.fonts as any).add(fontFace1);
               console.log(`[CanvasLayer] Registered FontFace: ${fontKey}`);
             }
-            
+
             const isFamilyLoaded = loadedFonts.some(f => f.family === cleanFamily);
             if (!isFamilyLoaded) {
               const fontFace2 = new FontFace(cleanFamily, regFont.data.buffer as ArrayBuffer);
@@ -75,7 +75,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
   const hasCustomFont = !!layer.fontChecksum;
   const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
   const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
-  
+
   const fontFamily = hasCustomFont
     ? `"${customFontKey}", "${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
     : isGeneric
@@ -596,29 +596,6 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
           }}
         />
         {layer.type === 'text' && <VectorTextLayer layer={layer} />}
-        {layer.type === 'text' && isWatermark && (
-          // Watermark badge — shown above the text element in the editor
-          <div
-            style={{
-              position: 'absolute',
-              top: -20,
-              left: 0,
-              background: 'rgba(255, 180, 0, 0.9)',
-              color: '#1a1a1a',
-              fontSize: '10px',
-              fontWeight: '600',
-              fontFamily: 'Inter, system-ui, sans-serif',
-              padding: '2px 7px',
-              borderRadius: '3px',
-              pointerEvents: 'none',
-              whiteSpace: 'nowrap',
-              letterSpacing: '0.03em',
-              zIndex: 1000,
-            }}
-          >
-            💧 Watermark
-          </div>
-        )}
         {layer.type === 'table' && layer.tableData && (
           // PDF table rendered as a proper HTML table
           <div

@@ -1,4 +1,4 @@
-import { findLayerById } from './utils/layerUtils';
+import { findLayerById, isLayerOrDescendantsLocked } from './utils/layerUtils';
 import { Application } from "./scripting/Application";
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
@@ -231,7 +231,7 @@ const App: React.FC = () => {
                 )}
               </span>
             )}
-            {(layer.locked || layer.lockPixels || layer.lockPosition || layer.lockTransparent) && (
+            {(isLayerOrDescendantsLocked(layer) || layer.lockPixels || layer.lockPosition || layer.lockTransparent) && (
               <div className="layer-lock-indicator" title="Layer has active locks" style={{ display: 'flex', alignItems: 'center', marginRight: '6px' }}>
                 <LucideIcons.Lock size={10} style={{ opacity: 0.5 }} />
               </div>
@@ -1978,7 +1978,7 @@ const App: React.FC = () => {
                             <span>Lock:</span>
                             <button
                               className={`lock-btn ${activeLayer.lockTransparent ? 'active' : ''}`}
-                              disabled={activeLayer.locked}
+                              disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockTransparent;
                                 updateLayer(activeLayerId, { lockTransparent: newVal });
@@ -1990,7 +1990,7 @@ const App: React.FC = () => {
                             </button>
                             <button
                               className={`lock-btn ${activeLayer.lockPixels ? 'active' : ''}`}
-                              disabled={activeLayer.locked}
+                              disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockPixels;
                                 updateLayer(activeLayerId, { lockPixels: newVal });
@@ -2002,7 +2002,7 @@ const App: React.FC = () => {
                             </button>
                             <button
                               className={`lock-btn ${activeLayer.lockPosition ? 'active' : ''}`}
-                              disabled={activeLayer.locked}
+                              disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockPosition;
                                 updateLayer(activeLayerId, { lockPosition: newVal });
@@ -2013,11 +2013,11 @@ const App: React.FC = () => {
                               <LucideIcons.Move size={11} />
                             </button>
                             <button
-                              className={`lock-btn ${activeLayer.locked ? 'active' : ''}`}
+                              className={`lock-btn ${isLayerOrDescendantsLocked(activeLayer) ? 'active' : ''}`}
                               onClick={() => {
-                                const newVal = !activeLayer.locked;
+                                const newVal = !isLayerOrDescendantsLocked(activeLayer);
                                 updateLayer(activeLayerId, { locked: newVal });
-                                recordHistory(`Toggle Lock All`);
+                                recordHistory(newVal ? `Toggle Lock All` : `Toggle Unlock All`);
                               }}
                               title="Lock all"
                             >

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import './Canvas.css';
-import { findLayerById } from '../../utils/layerUtils';
+import { findLayerById, isLayerOrAncestorsLocked } from '../../utils/layerUtils';
 import { getCoordinates as getCoordsUtil, getSnappedCoords as getSnappedCoordsUtil } from './Core/coordUtils';
 import { applySelectionClip as applySelectionClipUtil, getSelectionPathData as getSelectionPathDataUtil, clearSelection as clearSelectionUtil } from './Core/selectionUtils';
 import { getSvgPathData as getSvgPathDataUtil } from './Core/pathUtils';
@@ -354,12 +354,17 @@ const Canvas: React.FC = () => {
     // For artboard tool, allow starting drag even outside canvas bounds
     if (!rawCoords && activeTool !== 'artboard') return;
 
-    const activeLayer = layers.find(l => l.id === activeLayerId);
+    const activeLayer = findLayerById(layers, activeLayerId || '');
     if (activeLayer) {
-      if (activeLayer.locked) return;
-      const modifyingTools = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'smudge', 'clone', 'gradient', 'paint_bucket'];
-      if (activeLayer.lockPixels && modifyingTools.includes(activeTool as string)) return;
-      if (activeLayer.lockPosition && activeTool === 'move') return;
+      // For move tool: only block if the layer itself is locked or lockPosition is set.
+      // Do NOT block based on children being locked (that's just for the UI indicator).
+      if (activeTool === 'move') {
+        if (activeLayer.locked || activeLayer.lockPosition) return;
+      } else {
+        if (isLayerOrAncestorsLocked(layers, activeLayer.id)) return;
+        const modifyingTools = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'smudge', 'clone', 'gradient', 'paint_bucket'];
+        if (activeLayer.lockPixels && modifyingTools.includes(activeTool as string)) return;
+      }
     }
 
     const activeCanvas = activeLayerId ? canvasRefs.current[activeLayerId] : null;
@@ -804,6 +809,7 @@ const Canvas: React.FC = () => {
           height: `${documentSize.h}px`,
           overflow: (activeTool === 'artboard' || hasArtboards) ? 'visible' : 'hidden',
           backgroundColor: hasArtboards ? 'transparent' : undefined,
+          backgroundImage: hasArtboards ? 'none' : undefined,
           boxShadow: hasArtboards ? 'none' : undefined,
         }}
         onTouchStart={handleTouchStart}

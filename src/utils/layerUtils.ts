@@ -147,3 +147,37 @@ export function reorderNodes(layers: Layer[], draggedId: string, targetId: strin
 
     return insertAtTarget(newLayers);
 }
+
+export function isLayerOrDescendantsLocked(layer: Layer): boolean {
+  if (layer.locked) return true;
+  if (layer.children) {
+    for (const child of layer.children) {
+      if (isLayerOrDescendantsLocked(child)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function isLayerOrAncestorsLocked(layers: Layer[], layerId: string): boolean {
+  const layer = findLayerById(layers, layerId);
+  if (!layer) return false;
+
+  if (isLayerOrDescendantsLocked(layer)) {
+    return true;
+  }
+
+  let currentId = layerId;
+  let parent = findParentNode(layers, currentId);
+  while (parent) {
+    if (parent.locked) {
+      return true;
+    }
+    currentId = parent.id;
+    parent = findParentNode(layers, currentId);
+  }
+
+  return false;
+}
+

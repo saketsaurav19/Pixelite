@@ -56,9 +56,24 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
 
   setActiveLayer: (id) => set({ activeLayerId: id }),
 
-  updateLayer: (id, updates) => set((state) => ({
-    layers: updateNode(state.layers, id, updates)
-  })),
+  updateLayer: (id, updates) => set((state) => {
+    const targetLayer = findLayerById(state.layers, id);
+    let newLayers = state.layers;
+    if (targetLayer && targetLayer.type === 'artboard' && updates.locked !== undefined) {
+      const applyLockRecursively = (node: Layer, lockedVal: boolean): Layer => {
+        const nextNode = { ...node, locked: lockedVal };
+        if (nextNode.children) {
+          nextNode.children = nextNode.children.map(child => applyLockRecursively(child, lockedVal));
+        }
+        return nextNode;
+      };
+      const updatedArtboard = applyLockRecursively(targetLayer, updates.locked);
+      newLayers = updateNode(state.layers, id, updatedArtboard);
+    } else {
+      newLayers = updateNode(state.layers, id, updates);
+    }
+    return { layers: newLayers };
+  }),
 
   duplicateLayer: (id) => set((state) => {
     const layerToDup = findLayerById(state.layers, id);
