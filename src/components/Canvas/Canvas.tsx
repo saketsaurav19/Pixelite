@@ -30,6 +30,43 @@ import { RulerOverlay } from './UI/RulerOverlay';
 import { DraftOverlay } from './UI/DraftOverlay';
 import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
 import { SVGFilters } from './UI/SVGFilters';
+import { ArtboardOverlay } from './UI/ArtboardOverlay';
+
+interface AbsoluteRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+}
+
+const findLayerAbsoluteRect = (
+  layerId: string,
+  nodes: any[],
+  parentX = 0,
+  parentY = 0
+): AbsoluteRect | null => {
+  for (const node of nodes) {
+    const nodeX = parentX + (node.position?.x || 0);
+    const nodeY = parentY + (node.position?.y || 0);
+
+    if (node.id === layerId) {
+      return {
+        x: nodeX,
+        y: nodeY,
+        w: node.width || 0,
+        h: node.height || 0,
+        rotation: node.rotation || 0,
+      };
+    }
+
+    if (node.children && node.children.length > 0) {
+      const found = findLayerAbsoluteRect(layerId, node.children, nodeX, nodeY);
+      if (found) return found;
+    }
+  }
+  return null;
+};
 
 /**
  * The main Canvas component that acts as the primary viewport for the Photoshop clone.
@@ -143,9 +180,10 @@ const Canvas: React.FC = () => {
    */
 
   const getCoordinates = useCallback((clientX: number, clientY: number) => {
-    const allowOutside = activeTool === 'artboard';
+    const hasArtboards = layers.some(layer => layer.type === 'artboard');
+    const allowOutside = activeTool === 'artboard' || hasArtboards;
     return getCoordsUtil(clientX, clientY, stackRef.current, documentSize, allowOutside);
-  }, [documentSize, activeTool]);
+  }, [documentSize, activeTool, layers]);
   /**
    * Snaps coordinates to nearby anchor points, edges, or paths.
    * Used by vector and selection tools for precision.
@@ -316,13 +354,27 @@ const Canvas: React.FC = () => {
     // For artboard tool, allow starting drag even outside canvas bounds
     if (!rawCoords && activeTool !== 'artboard') return;
 
+    const activeLayer = layers.find(l => l.id === activeLayerId);
+    if (activeLayer) {
+      if (activeLayer.locked) return;
+      const modifyingTools = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'smudge', 'clone', 'gradient', 'paint_bucket'];
+      if (activeLayer.lockPixels && modifyingTools.includes(activeTool as string)) return;
+      if (activeLayer.lockPosition && activeTool === 'move') return;
+    }
+
+    const activeCanvas = activeLayerId ? canvasRefs.current[activeLayerId] : null;
+    const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
+    if (activeCtx && activeLayer?.lockTransparent) {
+      activeCtx.globalCompositeOperation = 'source-atop';
+    }
+
     const isStartVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
     const resolvedCoords = rawCoords ?? { x: 0, y: 0 };
     const coords = isStartVectorTool ? getSnappedCoords(resolvedCoords) : resolvedCoords;
 
     const context: any = {
-      canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
-      ctx: (activeLayerId ? canvasRefs.current[activeLayerId]?.getContext('2d', { willReadFrequently: true }) : null),
+      canvas: activeCanvas,
+      ctx: activeCtx,
       coords,
       startCoords: coords,
       lastPoint: lastPointRef.current,
@@ -444,9 +496,16 @@ const Canvas: React.FC = () => {
     const resolvedMoveCoords = rawCoords ?? { x: 0, y: 0 };
     const coords = isMoveVectorTool ? getSnappedCoords(resolvedMoveCoords) : resolvedMoveCoords;
 
+    const activeCanvas = activeLayerId ? canvasRefs.current[activeLayerId] : null;
+    const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
+    const activeLayer = layers.find(l => l.id === activeLayerId);
+    if (activeCtx && activeLayer?.lockTransparent) {
+      activeCtx.globalCompositeOperation = 'source-atop';
+    }
+
     const context: any = {
-      canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
-      ctx: (activeLayerId ? canvasRefs.current[activeLayerId]?.getContext('2d', { willReadFrequently: true }) : null),
+      canvas: activeCanvas,
+      ctx: activeCtx,
       coords,
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
@@ -493,9 +552,12 @@ const Canvas: React.FC = () => {
    * Commits changes to the history and cleans up temporary interaction state.
    */
   const endAction = useCallback(() => {
+    const activeCanvas = activeLayerId ? canvasRefs.current[activeLayerId] : null;
+    const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
+
     const context: any = {
-      canvas: (activeLayerId ? canvasRefs.current[activeLayerId] : null),
-      ctx: (activeLayerId ? canvasRefs.current[activeLayerId]?.getContext('2d', { willReadFrequently: true }) : null),
+      canvas: activeCanvas,
+      ctx: activeCtx,
       coords: currentMousePos || { x: 0, y: 0 },
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
@@ -529,6 +591,10 @@ const Canvas: React.FC = () => {
     }, {
       isInteracting, draftShape, gradientStart
     });
+
+    if (activeCtx) {
+      activeCtx.globalCompositeOperation = 'source-over';
+    }
   }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle, moveAutoSelect, moveShowTransform]);
 
 
@@ -736,7 +802,7 @@ const Canvas: React.FC = () => {
           transform: `scale(${zoom}) translate(${canvasOffset.x}px, ${canvasOffset.y}px) rotate(${canvasRotation}deg)`,
           width: `${documentSize.w}px`,
           height: `${documentSize.h}px`,
-          overflow: activeTool === 'artboard' ? 'visible' : 'hidden',
+          overflow: (activeTool === 'artboard' || hasArtboards) ? 'visible' : 'hidden',
           backgroundColor: hasArtboards ? 'transparent' : undefined,
           boxShadow: hasArtboards ? 'none' : undefined,
         }}
@@ -843,9 +909,7 @@ const Canvas: React.FC = () => {
           cancelText={cancelText}
         />
 
-        {currentMousePos && ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'smudge', 'clone'].includes(activeTool) && (
-          <div className="brush-cursor" style={{ left: currentMousePos.x / 2, top: currentMousePos.y / 2, width: brushSize / 2, height: brushSize / 2 }} />
-        )}
+
 
         {cloneSource && activeTool === 'clone' && (
           <div className="source-cursor" style={{ position: 'absolute', left: cloneSource.x / 2, top: cloneSource.y / 2, width: '20px', height: '20px', border: '1px solid white', borderRadius: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1000 }}>
@@ -864,9 +928,56 @@ const Canvas: React.FC = () => {
         {/* Selection rendering is now handled globally via SVG mask inside the layer loop or at doc level */}
 
 
-        {/* Other cursors and indicators */}
         <SVGFilters />
       </div>
+
+      <ArtboardOverlay />
+
+      {activeLayerId && activeTool === 'move' && (isInteracting || moveShowTransform) && (() => {
+        const rect = findLayerAbsoluteRect(activeLayerId, layers);
+        if (rect) {
+          const w = rect.w || documentSize.w;
+          const h = rect.h || documentSize.h;
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                width: `${documentSize.w}px`,
+                height: `${documentSize.h}px`,
+                transform: `translate(-50%, -50%) scale(${zoom}) translate(${canvasOffset.x}px, ${canvasOffset.y}px) rotate(${canvasRotation}deg)`,
+                transformOrigin: 'center center',
+                pointerEvents: 'none',
+                zIndex: 1999,
+              }}
+            >
+              <div
+                className="layer-move-outline"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: `${w}px`,
+                  height: `${h}px`,
+                  transform: `translate(${rect.x}px, ${rect.y}px) rotate(${rect.rotation}deg)`,
+                  transformOrigin: '0 0',
+                }}
+              >
+                <div className="handle tl" />
+                <div className="handle tm" />
+                <div className="handle tr" />
+                <div className="handle ml" />
+                <div className="handle mr" />
+                <div className="handle bl" />
+                <div className="handle bm" />
+                <div className="handle br" />
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
     </div>
   );
 };

@@ -3,6 +3,7 @@ import type { SceneNode, PathNode, TextNode } from '../types/SceneNode';
 import { TextEngine } from '../worker/engines/TextEngine';
 import { ImageEngine } from '../worker/engines/ImageEngine';
 import { VectorEngine } from '../worker/engines/VectorEngine';
+import { TableEngine } from '../worker/engines/TableEngine';
 import { GraphicsState } from './GraphicsState';
 import type { GraphicsStateSnapshot } from './GraphicsState';
 
@@ -274,21 +275,45 @@ export class PdfjsParser {
       }
       console.log(`[PdfjsParser] Walk complete. Processed ${pathCount} paths, ${imgCount} images/masks`);
 
-      // Emit all path nodes directly as shapes
+      // ── 4. Detect Tables ──────────────────────────────────────────────────
+      let tableNodes: any[] = [];
+      let usedPathIds = new Set<string>();
+      let usedTextIds = new Set<string>();
+      try {
+        console.log('[PdfjsParser] Running TableEngine to detect tables...');
+        const result = TableEngine.detectTables(pathNodes, textNodes as TextNode[]);
+        tableNodes = result.tableNodes;
+        usedPathIds = result.usedPathIds;
+        usedTextIds = result.usedTextIds;
+        console.log(`[PdfjsParser] Table detection completed. Found ${tableNodes.length} tables. Used paths: ${usedPathIds.size}, Used texts: ${usedTextIds.size}`);
+      } catch (tableErr) {
+        console.error('[PdfjsParser] Table detection failed:', tableErr);
+      }
+
+      // Emit all table nodes
+      for (const tbl of tableNodes) {
+        nodes.push(tbl);
+      }
+
+      // Emit all path nodes directly as shapes (excluding those used in tables)
       let regularPaths = 0;
       for (const p of pathNodes) {
-        nodes.push(p);
-        regularPaths++;
+        if (!usedPathIds.has(p.id)) {
+          nodes.push(p);
+          regularPaths++;
+        }
       }
-      console.log(`[PdfjsParser] Emitted ${regularPaths} regular paths`);
+      console.log(`[PdfjsParser] Emitted ${regularPaths} regular paths (excluding table lines)`);
 
-      // Emit all text nodes directly
+      // Emit all text nodes directly (excluding those used in tables)
       let regularTexts = 0;
       for (const t of textNodes) {
-        nodes.push(t as TextNode);
-        regularTexts++;
+        if (!usedTextIds.has(t.id)) {
+          nodes.push(t as TextNode);
+          regularTexts++;
+        }
       }
-      console.log(`[PdfjsParser] Emitted ${regularTexts} regular text nodes`);
+      console.log(`[PdfjsParser] Emitted ${regularTexts} regular text nodes (excluding table cells)`);
 
     } catch (e) {
       console.error('[PdfjsParser] Error parsing PDF page objects:', e);

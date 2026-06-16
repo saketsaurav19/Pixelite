@@ -29,7 +29,11 @@ export interface BaseLayer {
   name: string;
   visible: boolean;
   locked: boolean;
+  lockPixels?: boolean;
+  lockPosition?: boolean;
+  lockTransparent?: boolean;
   opacity: number;
+  fill?: number;
   dataUrl?: string;
   type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard' | 'table';
   blendMode: BlendMode;
@@ -270,6 +274,9 @@ export interface EditorState extends DocumentSpecificState {
     extras: boolean;
     rulers: boolean;
     guides: boolean;
+    swatches: boolean;
+    channels: boolean;
+    paths: boolean;
   };
   snapSettings: {
     guides: boolean;

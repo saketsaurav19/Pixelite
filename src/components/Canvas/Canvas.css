@@ -9,7 +9,14 @@
 .canvas-stack {
   position: relative;
   transform-origin: center center;
-  background-color: white;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.8);
   flex-shrink: 0;
 }
@@ -260,7 +267,8 @@
   margin: 0;
   resize: none;
   overflow: hidden;
-  font-size: 16px; /* Prevent auto-zoom on iOS */
+  font-size: 16px;
+  /* Prevent auto-zoom on iOS */
   line-height: 1.2;
 }
 
@@ -273,7 +281,7 @@
   background: #333;
   padding: 4px;
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -309,9 +317,72 @@
     gap: 10px;
     border-radius: 6px;
   }
+
   .text-action-bar button {
     width: 36px;
     height: 36px;
     font-size: 16px;
   }
 }
+
+/* Move Tool Bounding Box & Transform Handles */
+.layer-move-outline {
+  position: absolute;
+  border: 1.5px dashed #0078d4;
+  outline: 1px dashed rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  z-index: 9999;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+.layer-move-outline .handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: #ffffff;
+  border: 1.5px solid #0078d4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.layer-move-outline .handle.tl { top: 0; left: 0; }
+.layer-move-outline .handle.tm { top: 0; left: 50%; }
+.layer-move-outline .handle.tr { top: 0; left: 100%; }
+.layer-move-outline .handle.ml { top: 50%; left: 0; }
+.layer-move-outline .handle.mr { top: 50%; left: 100%; }
+.layer-move-outline .handle.bl { top: 100%; left: 0; }
+.layer-move-outline .handle.bm { top: 100%; left: 50%; }
+.layer-move-outline .handle.br { top: 100%; left: 100%; }
+
+/* Artboard Plus Button styling */
+.artboard-plus-btn {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: rgba(30, 30, 30, 0.75);
+  border: 1.5px solid #0078d4;
+  color: #0078d4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.artboard-plus-btn svg {
+  stroke: currentColor;
+}
+
+.artboard-plus-btn.top { top: -26px; left: 50%; transform: translate(-50%, -50%); }
+.artboard-plus-btn.bottom { bottom: -26px; left: 50%; transform: translate(-50%, 50%); }
+.artboard-plus-btn.left { left: -26px; top: 50%; transform: translate(-50%, -50%); }
+.artboard-plus-btn.right { right: -26px; top: 50%; transform: translate(50%, -50%); }
+
+.artboard-plus-btn.top:hover { background-color: #0078d4; color: #ffffff; transform: translate(-50%, -50%) scale(1.1); }
+.artboard-plus-btn.bottom:hover { background-color: #0078d4; color: #ffffff; transform: translate(-50%, 50%) scale(1.1); }
+.artboard-plus-btn.left:hover { background-color: #0078d4; color: #ffffff; transform: translate(-50%, -50%) scale(1.1); }
+.artboard-plus-btn.right:hover { background-color: #0078d4; color: #ffffff; transform: translate(50%, -50%) scale(1.1); }

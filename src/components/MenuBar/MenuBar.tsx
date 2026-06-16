@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import './MenuBar.css';
+import { useStore } from '../../store/useStore';
 
 interface MenuItem {
   label?: string;
@@ -9,6 +10,7 @@ interface MenuItem {
   subItems?: MenuItem[];
   divider?: boolean;
   disabled?: boolean;
+  checked?: boolean;
 }
 
 interface MenuSection {
@@ -104,6 +106,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const visiblePanels = useStore((s) => s.visiblePanels);
+  const togglePanel = useStore((s) => s.togglePanel);
 
 
   useEffect(() => {
@@ -588,15 +592,12 @@ const MenuBar: React.FC<MenuBarProps> = ({
       items: [
         { label: 'Arrange' },
         { divider: true },
-        { label: 'Actions' },
-        { label: 'Adjustments' },
-        { label: 'Brush' },
-        { label: 'Channels' },
-        { label: 'Character' },
-        { label: 'History' },
-        { label: 'Layers' },
-        { label: 'Paths' },
-        { label: 'Properties' },
+        { label: 'Adjustments', checked: visiblePanels.adjustments, action: () => togglePanel('adjustments') },
+        { label: 'Channels', checked: visiblePanels.channels, action: () => togglePanel('channels') },
+        { label: 'History', checked: visiblePanels.history, action: () => togglePanel('history') },
+        { label: 'Layers', checked: visiblePanels.layers, action: () => togglePanel('layers') },
+        { label: 'Paths', checked: visiblePanels.paths, action: () => togglePanel('paths') },
+        { label: 'Swatches', checked: visiblePanels.swatches, action: () => togglePanel('swatches') },
       ]
     },
     {
@@ -647,7 +648,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
         }}
       >
         <div className="menu-option-content">
-          <span>{item.label}</span>
+          <span className="menu-option-check">{item.checked ? '✓' : ''}</span>
+          <span style={{ flex: 1 }}>{item.label}</span>
           {item.shortcut && <span className="shortcut">{item.shortcut}</span>}
         </div>
         {item.subItems && <LucideIcons.ChevronRight size={12} className="submenu-arrow" />}

@@ -126,8 +126,14 @@ export const paintingTools: ToolModule[] = [
   },
   {
     id: 'eraser',
-    start: ({ coords, ctx, brushSize, setIsInteracting }) => {
-      ctx.globalCompositeOperation = 'destination-out';
+    start: ({ coords, ctx, brushSize, setIsInteracting, layers, activeLayerId, secondaryColor }) => {
+      const activeLayer = layers?.find((l: any) => l.id === activeLayerId);
+      if (activeLayer?.lockTransparent) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.strokeStyle = secondaryColor || '#ffffff';
+      } else {
+        ctx.globalCompositeOperation = 'destination-out';
+      }
       ctx.beginPath();
       ctx.moveTo(coords.x, coords.y);
       ctx.lineWidth = brushSize;
@@ -135,8 +141,12 @@ export const paintingTools: ToolModule[] = [
       ctx.lineJoin = 'round';
       setIsInteracting(true);
     },
-    move: ({ coords, ctx, lastPoint, brushSize }) => {
+    move: ({ coords, ctx, lastPoint, brushSize, layers, activeLayerId, secondaryColor }) => {
       if (!lastPoint) return;
+      const activeLayer = layers?.find((l: any) => l.id === activeLayerId);
+      if (activeLayer?.lockTransparent) {
+        ctx.strokeStyle = secondaryColor || '#ffffff';
+      }
       ctx.beginPath();
       ctx.moveTo(lastPoint.x, lastPoint.y);
       ctx.lineTo(coords.x, coords.y);
@@ -202,12 +212,24 @@ export const paintingTools: ToolModule[] = [
         }));
       }
     },
-    end: ({ coords, canvas, ctx, activeLayerId, selectionTolerance, updateLayer, recordHistory, setIsInteracting }) => {
+    end: ({ coords, canvas, ctx, activeLayerId, selectionTolerance, updateLayer, recordHistory, setIsInteracting, layers, secondaryColor }) => {
       const start = toolState._magicEraserStart;
       if (!ctx || !canvas || !activeLayerId || !start) {
         setIsInteracting(false);
         return;
       }
+
+      const activeLayer = layers?.find((l: any) => l.id === activeLayerId);
+      const hexToRgb = (hex: string) => {
+        const match = hex.replace(/^#/, '').match(/.{2}/g);
+        if (!match) return { r: 255, g: 255, b: 255 };
+        return {
+          r: parseInt(match[0], 16),
+          g: parseInt(match[1], 16),
+          b: parseInt(match[2], 16)
+        };
+      };
+      const bgRgb = hexToRgb(secondaryColor || '#ffffff');
 
       const dist = Math.hypot(coords.x - start.x, coords.y - start.y);
       
@@ -233,7 +255,13 @@ export const paintingTools: ToolModule[] = [
           const colorDist = Math.abs(r-tR) + Math.abs(g-tG) + Math.abs(b-tB) + Math.abs(a-tA);
           
           if (colorDist <= tolerance) {
-            data[idx+3] = 0; // Erase
+            if (activeLayer?.lockTransparent) {
+              data[idx] = bgRgb.r;
+              data[idx+1] = bgRgb.g;
+              data[idx+2] = bgRgb.b;
+            } else {
+              data[idx+3] = 0; // Erase
+            }
             visited[cy * canvas.width + cx] = 1;
             if (cx > 0) stack.push([cx - 1, cy]);
             if (cx < canvas.width - 1) stack.push([cx + 1, cy]);
@@ -249,31 +277,37 @@ export const paintingTools: ToolModule[] = [
         const ry = Math.round(Math.min(start.y, coords.y));
         const rw = Math.round(Math.abs(coords.x - start.x));
         const rh = Math.round(Math.abs(coords.y - start.y));
-
+ 
         if (rw > 0 && rh > 0) {
           // 1. Sample target color at the START point
           const sampleData = ctx.getImageData(Math.round(start.x), Math.round(start.y), 1, 1).data;
           const tR = sampleData[0], tG = sampleData[1], tB = sampleData[2], tA = sampleData[3];
           const tolerance = (selectionTolerance || 30) * 1.5; // Slightly higher concentration in area mode
-
+ 
           // 2. Get the whole rectangle area
           const imgData = ctx.getImageData(rx, ry, rw, rh);
           const data = imgData.data;
-
+ 
           // 3. Erase only matching pixels
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
             const colorDist = Math.abs(r-tR) + Math.abs(g-tG) + Math.abs(b-tB) + Math.abs(a-tA);
             
             if (colorDist <= tolerance) {
-              data[i+3] = 0; // Erase matching pixel
+              if (activeLayer?.lockTransparent) {
+                data[i] = bgRgb.r;
+                data[i+1] = bgRgb.g;
+                data[i+2] = bgRgb.b;
+              } else {
+                data[i+3] = 0; // Erase matching pixel
+              }
             }
           }
           ctx.putImageData(imgData, rx, ry);
           recordHistory('Magic Eraser (Targeted Area)');
         }
       }
-
+ 
       updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
       setIsInteracting(false);
       window.dispatchEvent(new CustomEvent('clear-draft-rect'));
@@ -573,7 +607,7 @@ export const paintingTools: ToolModule[] = [
         }));
       }
     },
-    end: ({ coords, canvas, ctx, activeLayerId, updateLayer, recordHistory, setIsInteracting }) => {
+    end: ({ coords, canvas, ctx, activeLayerId, updateLayer, recordHistory, setIsInteracting, layers, secondaryColor }) => {
       const start = toolState._rectEraserStart;
       if (start && ctx && canvas && activeLayerId) {
         const x = Math.min(start.x, coords.x);
@@ -581,7 +615,16 @@ export const paintingTools: ToolModule[] = [
         const w = Math.abs(coords.x - start.x);
         const h = Math.abs(coords.y - start.y);
         if (w > 0 && h > 0) {
-          ctx.clearRect(x, y, w, h);
+          const activeLayer = layers?.find((l: any) => l.id === activeLayerId);
+          if (activeLayer?.lockTransparent) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'source-atop';
+            ctx.fillStyle = secondaryColor || '#ffffff';
+            ctx.fillRect(x, y, w, h);
+            ctx.restore();
+          } else {
+            ctx.clearRect(x, y, w, h);
+          }
           updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
           recordHistory('Rectangle Erase');
         }
@@ -604,7 +647,7 @@ export const paintingTools: ToolModule[] = [
         window.dispatchEvent(new CustomEvent('draw-draft-lasso', { detail: path }));
       }
     },
-    end: ({ canvas, ctx, activeLayerId, updateLayer, recordHistory, setIsInteracting }) => {
+    end: ({ canvas, ctx, activeLayerId, updateLayer, recordHistory, setIsInteracting, layers, secondaryColor }) => {
       const path = toolState._lassoEraserPath;
       if (path && path.length > 2 && ctx && canvas && activeLayerId) {
         ctx.save();
@@ -613,7 +656,15 @@ export const paintingTools: ToolModule[] = [
         path.forEach((p: any) => ctx.lineTo(p.x, p.y));
         ctx.closePath();
         ctx.clip();
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const activeLayer = layers?.find((l: any) => l.id === activeLayerId);
+        if (activeLayer?.lockTransparent) {
+          ctx.globalCompositeOperation = 'source-atop';
+          ctx.fillStyle = secondaryColor || '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
         ctx.restore();
         
         updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });

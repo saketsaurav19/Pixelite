@@ -5,7 +5,7 @@
   width: 100vw;
   height: 100vh;
   background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(0.25rem);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16,17 +16,17 @@
 .modal-content {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  width: 450px;
+  border-radius: 0.75rem;
+  width: 28.12rem;
   max-width: 90vw;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1.25rem 2.5rem rgba(0, 0, 0, 0.5);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .modal-header {
-  padding: 16px 20px;
+  padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -36,7 +36,7 @@
 
 .modal-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -46,10 +46,10 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
+  padding: 0.25rem;
   display: flex;
   align-items: center;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   transition: all 0.2s;
 }
 
@@ -59,37 +59,37 @@
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 1.25rem;
 }
 
 .modal-actions {
-  padding: 16px 20px;
+  padding: 1rem 1.25rem;
   background: var(--bg-header);
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 /* Provider Selection */
 .provider-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .provider-card {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 0.5rem;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 0.625rem;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -107,17 +107,17 @@
 }
 
 .provider-icon {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
+  border-radius: 0.625rem;
 }
 
 .provider-name {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -130,21 +130,21 @@
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .form-group label {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
 .form-input {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 8px 12px;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 0.8125rem;
   outline: none;
 }
 
@@ -158,13 +158,13 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 16px;
-  padding: 20px 0;
+  gap: 1rem;
+  padding: 1.25rem 0;
 }
 
 .success-icon {
-  width: 60px;
-  height: 60px;
+  width: 3.75rem;
+  height: 3.75rem;
   background: rgba(76, 175, 80, 0.15);
   color: #4caf50;
   border-radius: 50%;
@@ -176,16 +176,16 @@
 .success-link-box {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 4px;
+  border-radius: 0.375rem;
+  padding: 0.25rem;
   display: flex;
   width: 100%;
 }
 
 .success-link {
   flex: 1;
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   background: transparent;
   border: none;
@@ -198,9 +198,9 @@
   background: var(--accent-primary);
   color: white;
   border: none;
-  border-radius: 4px;
-  padding: 4px 12px;
-  font-size: 12px;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -215,9 +215,9 @@
 }
 
 .btn {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -246,4 +246,11 @@
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 30rem) {
+  .provider-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
 }

@@ -62,7 +62,7 @@ export class WorkerExportBridge {
       imageData = ctx.createImageData(width, height);
 
       if (layer.visible && layer.opacity > 0) {
-          ctx.globalAlpha = layer.opacity;
+          ctx.globalAlpha = layer.opacity * (layer.fill !== undefined ? layer.fill : 1);
           if (layer.blendMode) {
              ctx.globalCompositeOperation = layer.blendMode;
           }

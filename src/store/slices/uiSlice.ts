@@ -32,6 +32,9 @@ export interface UISlice {
     extras: boolean;
     rulers: boolean;
     guides: boolean;
+    swatches: boolean;
+    channels: boolean;
+    paths: boolean;
   };
   snapSettings: {
     guides: boolean;
@@ -90,6 +93,9 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
     extras: true,
     rulers: false,
     guides: true,
+    swatches: true,
+    channels: true,
+    paths: true,
   },
   snapSettings: {
     guides: true,

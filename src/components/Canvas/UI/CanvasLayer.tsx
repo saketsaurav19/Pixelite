@@ -152,8 +152,8 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
           const runColor = run.color || textColor;
           const runFontWeight = run.fontWeight || fontWeight;
 
-          const rx = run.x - (layer.position?.x || 0);
-          const ry = run.y - (layer.position?.y || 0);
+          const rx = run.x;
+          const ry = run.y;
           const dx = rx * cosT + ry * sinT;
           const dy = -rx * sinT + ry * cosT;
 
@@ -332,6 +332,8 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   const textEditor = useStore(state => state.textEditor);
   const updateLayer = useStore(state => state.updateLayer);
   const isEditingThisLayer = textEditor?.layerId === layer.id;
+  const hasCustomFont = !!layer.fontChecksum;
+  const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
 
   // If it's a group or artboard, we wrap the children in an isolated div for compositing
   if (layer.type === 'group' || layer.type === 'artboard') {
@@ -580,120 +582,125 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         transformOrigin,
       }}
     >
-      <canvas
-        ref={(el) => { if (canvasRefs && canvasRefs.current) canvasRefs.current[layer.id] = el; }}
-        data-layer-id={layer.id}
-        width={canvasW}
-        height={canvasH}
-        className="layer-canvas"
-        style={{
-          width: '100%',
-          height: '100%',
-          opacity: isVector ? 0 : 1,
-        }}
-      />
-      {layer.type === 'text' && <VectorTextLayer layer={layer} />}
-      {layer.type === 'text' && isWatermark && (
-        // Watermark badge — shown above the text element in the editor
-        <div
+      <div style={{ opacity: layer.fill ?? 1, width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+        <canvas
+          ref={(el) => { if (canvasRefs && canvasRefs.current) canvasRefs.current[layer.id] = el; }}
+          data-layer-id={layer.id}
+          width={canvasW}
+          height={canvasH}
+          className="layer-canvas"
           style={{
-            position: 'absolute',
-            top: -20,
-            left: 0,
-            background: 'rgba(255, 180, 0, 0.9)',
-            color: '#1a1a1a',
-            fontSize: '10px',
-            fontWeight: '600',
-            fontFamily: 'Inter, system-ui, sans-serif',
-            padding: '2px 7px',
-            borderRadius: '3px',
-            pointerEvents: 'none',
-            whiteSpace: 'nowrap',
-            letterSpacing: '0.03em',
-            zIndex: 1000,
+            width: '100%',
+            height: '100%',
+            opacity: isVector ? 0 : 1,
           }}
-        >
-          💧 Watermark
-        </div>
-      )}
-      {layer.type === 'table' && layer.tableData && (
-        // PDF table rendered as a proper HTML table
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: `${layer.tableData.width}px`,
-            height: `${layer.tableData.height}px`,
-            overflow: 'visible',
-            pointerEvents: 'none',
-          }}
-        >
-          <table
+        />
+        {layer.type === 'text' && <VectorTextLayer layer={layer} />}
+        {layer.type === 'text' && isWatermark && (
+          // Watermark badge — shown above the text element in the editor
+          <div
+            style={{
+              position: 'absolute',
+              top: -20,
+              left: 0,
+              background: 'rgba(255, 180, 0, 0.9)',
+              color: '#1a1a1a',
+              fontSize: '10px',
+              fontWeight: '600',
+              fontFamily: 'Inter, system-ui, sans-serif',
+              padding: '2px 7px',
+              borderRadius: '3px',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+              letterSpacing: '0.03em',
+              zIndex: 1000,
+            }}
+          >
+            💧 Watermark
+          </div>
+        )}
+        {layer.type === 'table' && layer.tableData && (
+          // PDF table rendered as a proper HTML table
+          <div
             style={{
               position: 'absolute',
               top: 0,
               left: 0,
               width: `${layer.tableData.width}px`,
               height: `${layer.tableData.height}px`,
-              borderCollapse: 'collapse',
-              tableLayout: 'fixed',
+              overflow: 'visible',
+              pointerEvents: 'none',
             }}
           >
-            <colgroup>
-              {layer.tableData.colWidths.map((w, ci) => (
-                <col key={ci} style={{ width: `${w}px` }} />
-              ))}
-            </colgroup>
-            <tbody>
-              {Array.from({ length: layer.tableData.rows }, (_, ri) => (
-                <tr key={ri} style={{ height: `${layer.tableData!.rowHeights[ri]}px` }}>
-                  {layer.tableData!.cells
-                    .filter(c => c.row === ri)
-                    .sort((a, b) => a.col - b.col)
-                    .map(cell => (
-                      <td
-                        key={`${cell.row}-${cell.col}`}
-                        style={{
-                          border: '1px solid #333',
-                          padding: '2px 4px',
-                          fontSize: `${cell.fontSize}px`,
-                          fontWeight: cell.fontWeight,
-                          fontFamily: (!cell.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(cell.fontFamily.toLowerCase()))
-                            ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
-                            : `"${cell.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`,
-                          color: cell.color,
-                          textAlign: cell.textAlign,
-                          verticalAlign: 'middle',
-                          overflow: 'hidden',
-                          whiteSpace: 'nowrap',
-                          lineHeight: 1.3,
-                          fontFeatureSettings: '"kern" 1, "liga" 1',
-                        }}
-                      >
-                        {cell.text}
-                      </td>
-                    ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {layer.type === 'shape' && (
-        <svg
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            overflow: 'visible',
-          }}
-        >
-          {renderVectorShape(layer)}
-        </svg>
-      )}
+            <table
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: `${layer.tableData.width}px`,
+                height: `${layer.tableData.height}px`,
+                borderCollapse: 'collapse',
+                tableLayout: 'fixed',
+              }}
+            >
+              <colgroup>
+                {layer.tableData.colWidths.map((w, ci) => (
+                  <col key={ci} style={{ width: `${w}px` }} />
+                ))}
+              </colgroup>
+              <tbody>
+                {Array.from({ length: layer.tableData.rows }, (_, ri) => (
+                  <tr key={ri} style={{ height: `${layer.tableData!.rowHeights[ri]}px` }}>
+                    {layer.tableData!.cells
+                      .filter(c => c.row === ri)
+                      .sort((a, b) => a.col - b.col)
+                      .map(cell => (
+                        <td
+                          key={`${cell.row}-${cell.col}`}
+                          style={{
+                            border: '1px solid #cbd5e1',
+                            padding: '3px 6px',
+                            fontSize: `${cell.fontSize}px`,
+                            fontWeight: cell.fontWeight,
+                            fontFamily: hasCustomFont
+                              ? `"${customFontKey}", "${cell.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+                              : (!cell.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(cell.fontFamily.toLowerCase()))
+                                ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
+                                : `"${cell.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`,
+                            color: cell.color,
+                            textAlign: cell.textAlign,
+                            verticalAlign: 'middle',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                            overflowWrap: 'break-word',
+                            lineHeight: 1.3,
+                            fontFeatureSettings: '"kern" 1, "liga" 1',
+                          }}
+                        >
+                          {cell.text}
+                        </td>
+                      ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {layer.type === 'shape' && (
+          <svg
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'visible',
+            }}
+          >
+            {renderVectorShape(layer)}
+          </svg>
+        )}
+      </div>
     </div>
   );
 };

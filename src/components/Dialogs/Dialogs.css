@@ -6,26 +6,26 @@
   align-items: center;
   justify-content: center;
   z-index: 10000;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(0.25rem);
 }
 
 .dialog-content {
   background: #2a2a2a;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   width: 90%;
-  max-width: 600px;
+  max-width: 37.5rem;
   color: #fff;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  box-shadow: 0 0.625rem 1.875rem rgba(0,0,0,0.5);
   display: flex;
   flex-direction: column;
 }
 
 .export-dialog {
-    max-width: 800px;
+    max-width: 50rem;
 }
 
 .dialog-header {
-  padding: 16px 20px;
+  padding: 1rem 1.25rem;
   border-bottom: 1px solid #333;
   display: flex;
   justify-content: space-between;
@@ -34,7 +34,7 @@
 
 .dialog-header h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 500;
 }
 
@@ -43,7 +43,7 @@
   border: none;
   color: #888;
   cursor: pointer;
-  padding: 4px;
+  padding: 0.25rem;
 }
 
 .dialog-close:hover {
@@ -51,10 +51,10 @@
 }
 
 .dialog-body {
-  padding: 20px;
+  padding: 1.25rem;
   display: flex;
 flex-direction: column;
-  gap: 24px;
+  gap: 1.5rem;
 }
 
 .new-doc-body {
@@ -64,28 +64,28 @@ flex-direction: column;
 .presets-sidebar {
     flex: 1;
     border-right: 1px solid #333;
-    padding-right: 20px;
+    padding-right: 1.25rem;
 }
 
 .presets-sidebar h3 {
     margin-top: 0;
-    font-size: 12px;
+    font-size: 0.75rem;
     text-transform: uppercase;
     color: #888;
-    margin-bottom: 12px;
+    margin-bottom: 0.75rem;
 }
 
 .preset-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
 .preset-item {
     background: #333;
     border: 1px solid transparent;
-    padding: 10px;
-    border-radius: 4px;
+    padding: 0.625rem;
+    border-radius: 0.25rem;
     text-align: left;
     color: #fff;
     cursor: pointer;
@@ -99,30 +99,30 @@ flex-direction: column;
 
 .preset-name {
     font-weight: 500;
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .preset-dims {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: #aaa;
-    margin-top: 4px;
+    margin-top: 0.25rem;
 }
 
 .doc-settings {
     flex: 1.5;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 1rem;
 }
 
 .setting-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0.375rem;
 }
 
 .setting-group label {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: #aaa;
 }
 
@@ -131,8 +131,8 @@ flex-direction: column;
     background: #1a1a1a;
     border: 1px solid #444;
     color: #fff;
-    padding: 8px 12px;
-    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.25rem;
     font-family: inherit;
 }
 
@@ -143,17 +143,17 @@ flex-direction: column;
 }
 
 .dialog-footer {
-  padding: 16px 20px;
+  padding: 1rem 1.25rem;
   border-top: 1px solid #333;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .btn-primary, .btn-secondary {
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 14px;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
     cursor: pointer;
     border: none;
     font-weight: 500;
@@ -186,31 +186,31 @@ flex-direction: column;
     flex: 2;
     background: #1a1a1a;
     border: 1px solid #333;
-    border-radius: 4px;
+    border-radius: 0.25rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 1.25rem;
 }
 
 .export-settings {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 1.25rem;
 }
 
 .info-grid {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0.75rem;
 }
 
 .info-row {
     display: flex;
     justify-content: space-between;
     border-bottom: 1px solid #333;
-    padding-bottom: 8px;
+    padding-bottom: 0.5rem;
 }
 
 .info-label {
@@ -218,9 +218,9 @@ flex-direction: column;
 }
 
 .info-note {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: #888;
-    margin-top: 20px;
+    margin-top: 1.25rem;
     font-style: italic;
 }
 
@@ -231,7 +231,7 @@ flex-direction: column;
     flex-direction: column;
     background: #1e1e1e;
     border: 1px solid #333;
-    border-radius: 4px;
+    border-radius: 0.25rem;
     overflow: hidden;
 }
 
@@ -240,41 +240,41 @@ flex-direction: column;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 1.25rem;
     background: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAADFJREFUOE9jZCASMDKgCHb29v5HgAEYjUaDYTRgMBoMBoMhwIABnQ3AwE4YTYNBNBgAAGe9CRB2a1/uAAAAAElFTkSuQmCC") repeat;
 }
 
 .export-preview canvas {
     max-width: 100%;
-    max-height: 400px;
+    max-height: 25rem;
     object-fit: contain;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    box-shadow: 0 0.25rem 0.625rem rgba(0,0,0,0.5);
 }
 
 .export-preview-footer {
     display: flex;
     justify-content: space-between;
-    padding: 8px 12px;
+    padding: 0.5rem 0.75rem;
     background: #111;
     color: #aaa;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 
 .export-settings {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 1rem;
 }
 
 .export-row-2 {
     display: flex;
-    gap: 12px;
+    gap: 0.75rem;
 }
 
 .export-row-dims {
     display: flex;
-    gap: 8px;
+    gap: 0.5rem;
     align-items: center;
 }
 
@@ -296,8 +296,8 @@ flex-direction: column;
     border: 1px solid #444;
     color: #888;
     cursor: pointer;
-    border-radius: 4px;
-    padding: 6px;
+    border-radius: 0.25rem;
+    padding: 0.375rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -316,40 +316,40 @@ flex-direction: column;
 }
 
 .unit-select {
-    width: 60px;
+    width: 3.75rem;
 }
 
 .quality-group {
-    margin-top: 8px;
+    margin-top: 0.5rem;
 }
 
 .quality-header {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: 0.75rem;
     color: #aaa;
-    margin-bottom: 4px;
+    margin-bottom: 0.25rem;
 }
 
 .export-checkboxes {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 12px;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
 }
 
 .checkbox-label {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
     color: #ccc;
     cursor: pointer;
 }
 
 .export-actions {
     display: flex;
-    gap: 8px;
+    gap: 0.5rem;
     margin-top: auto;
 }
 
@@ -358,8 +358,8 @@ flex-direction: column;
     background: #4a4a4a;
     color: white;
     border: 1px solid #5a5a5a;
-    padding: 8px;
-    border-radius: 4px;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
     cursor: pointer;
     font-weight: 500;
 }
@@ -369,11 +369,11 @@ flex-direction: column;
 }
 
 .btn-more {
-    width: 36px;
+    width: 2.25rem;
     background: #4a4a4a;
     color: white;
     border: 1px solid #5a5a5a;
-    border-radius: 4px;
+    border-radius: 0.25rem;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -395,13 +395,13 @@ flex-direction: column;
 .dialog-tabs {
     display: flex;
     border-bottom: 1px solid var(--border-color);
-    margin-bottom: 15px;
+    margin-bottom: 0.9375rem;
 }
 
 .tab-btn {
     background: none;
     border: none;
-    padding: 10px 15px;
+    padding: 0.625rem 0.9375rem;
     color: var(--text-color);
     cursor: pointer;
     border-bottom: 2px solid transparent;
@@ -417,38 +417,38 @@ flex-direction: column;
 }
 
 .exif-toolbar {
-    margin-bottom: 15px;
+    margin-bottom: 0.9375rem;
     display: flex;
     justify-content: flex-end;
 }
 
 .exif-section {
-    margin-bottom: 20px;
+    margin-bottom: 1.25rem;
 }
 
 .exif-section h3 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
+    margin: 0 0 0.625rem 0;
+    font-size: 0.875rem;
     color: var(--text-color);
     border-bottom: 1px solid var(--border-color);
-    padding-bottom: 5px;
+    padding-bottom: 0.3125rem;
 }
 
 .exif-table {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
 .exif-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 0.625rem;
 }
 
 .exif-label {
-    width: 150px;
-    font-size: 12px;
+    width: 9.375rem;
+    font-size: 0.75rem;
     color: #999;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -460,47 +460,47 @@ flex-direction: column;
     background: var(--bg-dark);
     border: 1px solid var(--border-color);
     color: var(--text-color);
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
 }
 
 .btn-sm {
-    padding: 4px 8px;
-    font-size: 12px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
 }
 
 .exif-add-new {
-    margin-top: 20px;
-    padding-top: 15px;
+    margin-top: 1.25rem;
+    padding-top: 0.9375rem;
     border-top: 1px dashed var(--border-color);
 }
 
 .exif-add-new h4 {
-    margin: 0 0 10px 0;
-    font-size: 13px;
+    margin: 0 0 0.625rem 0;
+    font-size: 0.8125rem;
 }
 
 .add-tag-row {
     display: flex;
-    gap: 10px;
+    gap: 0.625rem;
 }
 
 .add-tag-row select, .add-tag-row input {
     background: var(--bg-dark);
     border: 1px solid var(--border-color);
     color: var(--text-color);
-    padding: 6px;
-    border-radius: 4px;
+    padding: 0.375rem;
+    border-radius: 0.25rem;
 }
 
 .add-tag-row input {
     flex: 1;
 }
 /* Mobile responsiveness for Export Dialog */
-@media (max-width: 768px) {
+@media (max-width: 48rem) {
     .export-body {
         flex-direction: column;
-        gap: 16px;
+        gap: 1rem;
         overflow-y: auto;
         max-height: 70vh; /* Ensure it doesn't overflow screen height */
     }
@@ -508,11 +508,11 @@ flex-direction: column;
     .export-preview-container {
         flex: none; /* remove flex: 2 */
         width: 100%;
-        max-height: 250px; /* Keep preview from taking up whole screen */
+        max-height: 15.62rem; /* Keep preview from taking up whole screen */
     }
 
     .export-preview canvas {
-        max-height: 200px; /* Adjust inner canvas max height */
+        max-height: 12.5rem; /* Adjust inner canvas max height */
     }
 
     .export-settings {
@@ -526,13 +526,13 @@ flex-direction: column;
     }
 
     .export-row-dims {
-        gap: 12px;
+        gap: 0.75rem;
     }
 
     .link-button-container {
         flex-direction: row;
         justify-content: center;
-        padding: 4px 0;
+        padding: 0.25rem 0;
     }
 
     /* Adjust dialog padding/width for mobile */
@@ -542,6 +542,24 @@ flex-direction: column;
     }
 
     .dialog-body {
-        padding: 16px;
+        padding: 1rem;
+    }
+
+    .new-doc-body {
+        flex-direction: column;
+        gap: 1rem;
+        overflow-y: auto;
+    }
+
+    .presets-sidebar {
+        border-right: none;
+        border-bottom: 1px solid #333;
+        padding-right: 0;
+        padding-bottom: 1rem;
+        flex: none;
+    }
+
+    .doc-settings {
+        flex: none;
     }
 }

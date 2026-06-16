@@ -34,6 +34,16 @@ import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
 
 
+const CheckerboardIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 12 12" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+    <rect width="6" height="6" fill="currentColor" opacity="0.4" />
+    <rect x="6" y="6" width="6" height="6" fill="currentColor" opacity="0.4" />
+    <rect x="6" width="6" height="6" fill="currentColor" opacity="0.8" />
+    <rect y="6" width="6" height="6" fill="currentColor" opacity="0.8" />
+  </svg>
+);
+
+
 const App: React.FC = () => {
   const [layerContextMenu, setLayerContextMenu] = React.useState<{ layerId: string; x: number; y: number } | null>(null);
   const [renamingLayerId, setRenamingLayerId] = React.useState<string | null>(null);
@@ -63,18 +73,84 @@ const App: React.FC = () => {
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
+
+            const rect = e.currentTarget.getBoundingClientRect();
+            const relativeY = e.clientY - rect.top;
+
+            // Clear existing indicator classes
+            e.currentTarget.classList.remove('drag-before', 'drag-after', 'drag-inside');
+
+            if (layer.type === 'group' || layer.type === 'artboard') {
+              const state = useStore.getState();
+              const draggedNode = findLayerById(state.layers, draggedIndex || '');
+              if (draggedNode?.type === 'artboard') {
+                // Artboards cannot go inside other groups/artboards, only before/after
+                if (relativeY < rect.height / 2) {
+                  e.currentTarget.classList.add('drag-before');
+                } else {
+                  e.currentTarget.classList.add('drag-after');
+                }
+              } else {
+                if (relativeY < rect.height * 0.25) {
+                  e.currentTarget.classList.add('drag-before');
+                } else if (relativeY > rect.height * 0.75) {
+                  e.currentTarget.classList.add('drag-after');
+                } else {
+                  e.currentTarget.classList.add('drag-inside');
+                }
+              }
+            } else {
+              if (relativeY < rect.height / 2) {
+                e.currentTarget.classList.add('drag-before');
+              } else {
+                e.currentTarget.classList.add('drag-after');
+              }
+            }
+          }}
+          onDragLeave={(e) => {
+            e.currentTarget.classList.remove('drag-before', 'drag-after', 'drag-inside');
           }}
           onDrop={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            e.currentTarget.classList.remove('drag-before', 'drag-after', 'drag-inside');
+
             if (draggedIndex && draggedIndex !== layer.id) {
-              // Very simple target logic for now: insert before
-              useStore.getState().reorderNodesAction?.(draggedIndex, layer.id, 'before');
+              const state = useStore.getState();
+              const draggedNode = findLayerById(state.layers, draggedIndex);
+
+              const rect = e.currentTarget.getBoundingClientRect();
+              const relativeY = e.clientY - rect.top;
+
+              let position: 'before' | 'after' | 'inside' = 'before';
+
+              if (layer.type === 'group' || layer.type === 'artboard') {
+                if (draggedNode?.type === 'artboard') {
+                  position = relativeY < rect.height / 2 ? 'before' : 'after';
+                } else {
+                  if (relativeY < rect.height * 0.25) {
+                    position = 'before';
+                  } else if (relativeY > rect.height * 0.75) {
+                    position = 'after';
+                  } else {
+                    position = 'inside';
+                  }
+                }
+              } else {
+                position = relativeY < rect.height / 2 ? 'before' : 'after';
+              }
+
+              state.reorderNodesAction?.(draggedIndex, layer.id, position);
               recordHistory('Reorder Layers');
             }
             setDraggedIndex(null);
           }}
-          onDragEnd={() => setDraggedIndex(null)}
+          onDragEnd={() => {
+            setDraggedIndex(null);
+            document.querySelectorAll('.layer-node').forEach(el => {
+              el.classList.remove('drag-before', 'drag-after', 'drag-inside');
+            });
+          }}
         >
           <div
             className={`layer-row ${activeLayerId === layer.id ? 'active' : ''} ${longPressActiveLayerId === layer.id ? 'long-press-active' : ''}`}
@@ -155,6 +231,11 @@ const App: React.FC = () => {
                 )}
               </span>
             )}
+            {(layer.locked || layer.lockPixels || layer.lockPosition || layer.lockTransparent) && (
+              <div className="layer-lock-indicator" title="Layer has active locks" style={{ display: 'flex', alignItems: 'center', marginRight: '6px' }}>
+                <LucideIcons.Lock size={10} style={{ opacity: 0.5 }} />
+              </div>
+            )}
             <div className="layer-order-btns">
               <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); recordHistory('Move Layer Up'); }} title="Move Up"><LucideIcons.ChevronUp size={12} /></button>
               <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); recordHistory('Move Layer Down'); }} title="Move Down"><LucideIcons.ChevronDown size={12} /></button>
@@ -172,6 +253,14 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     (window as any).app = new Application();
+
+    const handleGlobalDragEnd = () => {
+      document.querySelectorAll('.layer-node').forEach(el => {
+        el.classList.remove('drag-before', 'drag-after', 'drag-inside');
+      });
+    };
+    window.addEventListener('dragend', handleGlobalDragEnd);
+    return () => window.removeEventListener('dragend', handleGlobalDragEnd);
   }, []);
 
   const addAlert = useStore(state => state.addAlert);
@@ -208,14 +297,16 @@ const App: React.FC = () => {
     showRulers,
     showGrid,
     showGuides,
-    lights,
-    removeLight,
-    activeLightId,
+    // lights,
+    // removeLight,
+    // activeLightId,
     isMobileMenuOpen,
     setIsMobileMenuOpen,
     setDocumentSize,
     setActiveTool,
-    setToolVariant
+    setToolVariant,
+    visiblePanels,
+    // togglePanel
   } = useStore();
 
   const getMergedImageData = (format: string = 'image/png') => {
@@ -231,7 +322,7 @@ const App: React.FC = () => {
 
       const lx = currentOffsetX + (layer.position?.x || 0);
       const ly = currentOffsetY + (layer.position?.y || 0);
-      const currentOpacity = parentOpacity * layer.opacity;
+      const currentOpacity = parentOpacity * layer.opacity * (layer.fill !== undefined ? layer.fill : 1);
 
       if (layer.children) {
         // Render children bottom-to-top (reverse of the array order)
@@ -396,12 +487,18 @@ const App: React.FC = () => {
 
   const [fillColor, setFillColor] = React.useState('#ffffff');
   const [fillOpacity, setFillOpacity] = React.useState(1);
-  const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null);
+  const [draggedIndex, setDraggedIndex] = React.useState<string | null>(null);
   const [isEditingOpacity, setIsEditingOpacity] = React.useState(false);
   const [tempOpacityValue, setTempOpacityValue] = React.useState('');
+  const [isEditingFill, setIsEditingFill] = React.useState(false);
+  const [tempFillValue, setTempFillValue] = React.useState('');
 
   const [saveModal, setSaveModal] = React.useState<{ type: 'cloud' | 'public' | null; provider?: string }>({ type: null });
   const [isLightingProcessing, setIsLightingProcessing] = React.useState(false);
+  const [topDockTab, setTopDockTab] = React.useState<'history' | 'swatches'>('history');
+  const [bottomDockTab, setBottomDockTab] = React.useState<'layers' | 'channels' | 'paths'>('layers');
+  const [mobileActivePanel, setMobileActivePanel] = React.useState<'layers' | 'adjustments' | 'history'>('layers');
+
 
   const handleFade = () => { alert("Fade action triggered (Placeholder)"); };
   const handleCopyMerged = () => { alert("Copy Merged action triggered (Placeholder)"); };
@@ -410,12 +507,26 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      // Zoom operations (Ctrl + / Ctrl -)
+      if (isCtrl && (e.key === '=' || e.key === '+' || e.key === 'Add')) {
+        e.preventDefault();
+        const currentZoom = useStore.getState().zoom;
+        useStore.getState().setZoom(Math.min(32, currentZoom + 0.1));
+        return;
+      }
+      if (isCtrl && (e.key === '-' || e.key === 'Subtract')) {
+        e.preventDefault();
+        const currentZoom = useStore.getState().zoom;
+        useStore.getState().setZoom(Math.max(0.01, currentZoom - 0.1));
+        return;
+      }
+
       // Don't trigger shortcuts if user is typing in an input or textarea or custom text editor
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA' || useStore.getState().isTyping) {
         return;
       }
-
-      const isCtrl = e.ctrlKey || e.metaKey;
 
       // File operations
       // New Document
@@ -1203,7 +1314,7 @@ const App: React.FC = () => {
         );
 
         const dirHandle = await (window as any).showDirectoryPicker();
-        
+
         // Try direct resolution first
         let fileHandle = null;
         try {
@@ -1320,7 +1431,7 @@ const App: React.FC = () => {
       await handleFile(file);
     } catch (err: any) {
       console.error(err);
-      
+
       // Fallback: If it's a standard image URL, try loading via <img> tags directly
       console.warn('Fetch failed, falling back to standard image loader...');
       const img = new Image();
@@ -1482,7 +1593,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''}`}>
+    <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''} ${isMobileMenuOpen ? 'menu-active' : ''} ${isToolsOpen ? 'tools-active' : ''} ${isPanelsOpen ? 'panels-active' : ''}`}>
       <input type="file" id="global-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handleImageUpload} />
       <input type="file" id="place-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handlePlaceUpload} />
 
@@ -1500,7 +1611,14 @@ const App: React.FC = () => {
 
       <header className="app-header">
         <div className="header-left">
-          <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+          <button className="mobile-menu-btn" onClick={() => {
+            const nextState = !isMobileMenuOpen;
+            setIsMobileMenuOpen(nextState);
+            if (nextState) {
+              setIsToolsOpen(false);
+              setIsPanelsOpen(false);
+            }
+          }}>
             <LucideIcons.Menu size={20} />
           </button>
           <div className="app-logo">
@@ -1632,141 +1750,411 @@ const App: React.FC = () => {
           </footer>
         </main>
 
-        <aside className={`side-panels ${isPanelsOpen ? 'mobile-open' : ''}`}>
+        <aside className={`side-panels ${isPanelsOpen ? 'mobile-open' : ''} mobile-panel-${mobileActivePanel}`}>
           {isPanelsOpen && (
             <div className="mobile-panel-header">
-              <span>History & Layers</span>
+              <span>Panels</span>
               <button onClick={() => setIsPanelsOpen(false)}><LucideIcons.ChevronDown size={20} /></button>
             </div>
           )}
-          <div className="side-panel history-panel">
-            <div className="panel-tab">History</div>
-            <div className="panel-content">
-              {history.map((entry, idx) => (
-                <div key={idx} className={`history-item ${idx === historyIndex ? 'active' : ''} ${idx > historyIndex ? 'undone' : ''}`}>
-                  {entry.name}
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="side-panel layers-panel">
-            <div className="panel-tab">Layers</div>
-
-            {/* Global Layer Properties - Only visible if a layer is active */}
-            {activeLayerId && (() => {
-              const activeLayer = findLayerById(layers, activeLayerId);
-              if (!activeLayer) return null;
-              return (
-                <div className="layer-global-properties">
-                  <select
-                    className="blend-select"
-                    value={activeLayer.blendMode || 'source-over'}
-                    onChange={(e) => updateLayer(activeLayerId, { blendMode: e.target.value as any })}
-                  >
-                    <option value="source-over">Normal</option>
-                    <option value="multiply">Multiply</option>
-                    <option value="screen">Screen</option>
-                    <option value="overlay">Overlay</option>
-                  </select>
-                  <div className="opacity-control">
-                    <span>Op:</span>
-                    <input
-                      type="range"
-                      min="0" max="1" step="0.01"
-                      value={activeLayer.opacity || 1}
-                      onChange={(e) => updateLayer(activeLayerId, { opacity: parseFloat(e.target.value) })}
-                    />
-                    {isEditingOpacity ? (
-                      <input
-                        type="text"
-                        className="opacity-input"
-                        autoFocus
-                        value={tempOpacityValue}
-                        onChange={(e) => setTempOpacityValue(e.target.value)}
-                        onFocus={(e) => {
-                          e.target.select();
-                          setIsTyping(true);
-                        }}
-                        onBlur={() => {
-                          setIsEditingOpacity(false);
-                          setIsTyping(false);
-                          const val = parseInt(tempOpacityValue);
-                          if (!isNaN(val)) {
-                            updateLayer(activeLayerId, { opacity: Math.max(0, Math.min(1, val / 100)) });
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.currentTarget.blur();
-                          }
-                          if (e.key === 'Escape') {
-                            setIsEditingOpacity(false);
-                            setIsTyping(false);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span
-                        className="opacity-val"
-                        onDoubleClick={() => {
-                          setTempOpacityValue(Math.round((activeLayer.opacity || 1) * 100).toString());
-                          setIsEditingOpacity(true);
-                        }}
-                        title="Double-click to type exact value"
-                      >
-                        {Math.round((activeLayer.opacity || 1) * 100)}%
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="panel-content" onDrop={(e) => {
-              e.preventDefault();
-              if (draggedIndex && layers.length > 0) {
-                // Drop on empty space in panel -> move to root bottom
-                useStore.getState().reorderNodesAction?.(draggedIndex, layers[layers.length - 1].id, 'after');
-                recordHistory('Reorder Layers');
-              }
-              setDraggedIndex(null);
-            }} onDragOver={(e) => e.preventDefault()}>
-              {renderLayerTree(layers)}
-            </div>
-            <div className="panel-footer">
-              <button onClick={() => addLayer({ name: `Layer ${layers.length + 1}` })}><LucideIcons.Plus size={14} /></button>
-              <button onClick={() => activeLayerId && removeLayer(activeLayerId)} disabled={layers.length <= 1}><LucideIcons.Trash2 size={14} /></button>
-            </div>
-          </div>
-
-          <div className="side-panel lights-panel">
-            <div className="panel-tab">Lights</div>
-            <div className="panel-content">
-              {lights.length === 0 ? (
-                <div className="no-items">No lights added</div>
-              ) : (
-                lights.map((light, i) => (
-                  <div key={light.id} className={`layer-row light-row ${activeLightId === light.id ? 'active' : ''}`} onClick={() => useStore.getState().setActiveLightId(light.id)}>
-                    <LucideIcons.Sun size={12} style={{ marginRight: '8px', color: light.color, filter: `drop-shadow(0 0 2px ${light.color})` }} />
-                    <span className="light-name" style={{ flex: 1 }}>{light.name || `Light ${i + 1}`}</span>
-                    <button
-                      className="layer-action-btn"
-                      title="Delete Light"
-                      onClick={() => {
-                        removeLight(light.id);
-                        recordHistory('Remove Light');
-                      }}
-                    >
-                      <LucideIcons.Trash2 size={12} />
-                    </button>
-                  </div>
-                ))
+          {isPanelsOpen && (
+            <div className="mobile-panel-tabs">
+              {visiblePanels.layers && (
+                <button
+                  className={`mobile-panel-tab ${mobileActivePanel === 'layers' ? 'active' : ''}`}
+                  onClick={() => { setMobileActivePanel('layers'); setBottomDockTab('layers'); }}
+                >Layers</button>
+              )}
+              {visiblePanels.adjustments && (
+                <button
+                  className={`mobile-panel-tab ${mobileActivePanel === 'adjustments' ? 'active' : ''}`}
+                  onClick={() => setMobileActivePanel('adjustments')}
+                >Adjustments</button>
+              )}
+              {visiblePanels.history && (
+                <button
+                  className={`mobile-panel-tab ${mobileActivePanel === 'history' ? 'active' : ''}`}
+                  onClick={() => { setMobileActivePanel('history'); setTopDockTab('history'); }}
+                >History</button>
               )}
             </div>
-          </div>
+          )}
+
+          {/* TOP DOCK: History / Swatches */}
+          {(visiblePanels.history || visiblePanels.swatches) && (
+            <div className="side-panel dock-panel top-dock">
+              <div className="dock-tabs">
+                {visiblePanels.history && (
+                  <button
+                    className={`dock-tab ${topDockTab === 'history' ? 'active' : ''}`}
+                    onClick={() => setTopDockTab('history')}
+                  >History</button>
+                )}
+                {visiblePanels.swatches && (
+                  <button
+                    className={`dock-tab ${topDockTab === 'swatches' ? 'active' : ''}`}
+                    onClick={() => setTopDockTab('swatches')}
+                  >Swatches</button>
+                )}
+              </div>
+
+              {topDockTab === 'history' && visiblePanels.history && (
+                <div className="panel-content">
+                  {history.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      className={`history-item ${idx === historyIndex ? 'active' : ''} ${idx > historyIndex ? 'undone' : ''}`}
+                      onClick={() => {
+                        const diff = idx - historyIndex;
+                        if (diff > 0) { for (let i = 0; i < diff; i++) redo(); }
+                        else if (diff < 0) { for (let i = 0; i < -diff; i++) undo(); }
+                      }}
+                    >
+                      <LucideIcons.History size={10} style={{ marginRight: 6, opacity: 0.5 }} />
+                      {entry.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {topDockTab === 'swatches' && visiblePanels.swatches && (
+                <div className="panel-content swatches-panel-content">
+                  <div className="swatches-grid">
+                    {['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff',
+                      '#ff6600', '#9900ff', '#006600', '#003399', '#cc0066', '#669900', '#ff9999', '#99ccff',
+                      '#663300', '#336699', '#ffcc00', '#cccccc', '#888888', '#444444', '#111111', '#ffeedd'].map(color => (
+                        <button
+                          key={color}
+                          className="swatch-btn"
+                          style={{ background: color }}
+                          title={color}
+                          onClick={() => useStore.getState().setBrushColor?.(color)}
+                        />
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MIDDLE DOCK: Adjustments */}
+          {visiblePanels.adjustments && (
+            <div className="side-panel dock-panel adjustments-dock">
+              <div className="dock-tabs">
+                <button className="dock-tab active">Adjustments</button>
+              </div>
+              <div className="panel-content adjustments-panel-content">
+                <div className="adj-grid">
+                  {[
+                    { icon: <LucideIcons.Sun size={16} />, label: 'Brightness' },
+                    { icon: <LucideIcons.TrendingUp size={16} />, label: 'Levels' },
+                    { icon: <LucideIcons.Activity size={16} />, label: 'Curves' },
+                    { icon: <LucideIcons.Aperture size={16} />, label: 'Exposure' },
+                    { icon: <LucideIcons.Droplet size={16} />, label: 'Vibrance' },
+                    { icon: <LucideIcons.Palette size={16} />, label: 'Hue/Sat' },
+                    { icon: <LucideIcons.Scale size={16} />, label: 'Color Bal' },
+                    { icon: <LucideIcons.Contrast size={16} />, label: 'B&W' },
+                    { icon: <LucideIcons.Camera size={16} />, label: 'Photo Flt' },
+                    { icon: <LucideIcons.Sliders size={16} />, label: 'Ch. Mixer' },
+                    { icon: <LucideIcons.Layers size={16} />, label: 'Color Lkp' },
+                    { icon: <LucideIcons.RefreshCw size={16} />, label: 'Invert' },
+                    { icon: <LucideIcons.BarChart2 size={16} />, label: 'Posterize' },
+                    { icon: <LucideIcons.Triangle size={16} />, label: 'Threshold' },
+                    { icon: <LucideIcons.Map size={16} />, label: 'Grad Map' },
+                    { icon: <LucideIcons.Filter size={16} />, label: 'Sel. Color' },
+                  ].map(({ icon, label }) => (
+                    <button key={label} className="adj-btn" title={label}>
+                      {icon}
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BOTTOM DOCK: Layers / Channels / Paths */}
+          {(visiblePanels.layers || visiblePanels.channels || visiblePanels.paths) && (
+            <div className="side-panel dock-panel bottom-dock">
+              <div className="dock-tabs">
+                {visiblePanels.layers && (
+                  <button
+                    className={`dock-tab ${bottomDockTab === 'layers' ? 'active' : ''}`}
+                    onClick={() => setBottomDockTab('layers')}
+                  >Layers</button>
+                )}
+                {visiblePanels.channels && (
+                  <button
+                    className={`dock-tab ${bottomDockTab === 'channels' ? 'active' : ''}`}
+                    onClick={() => setBottomDockTab('channels')}
+                  >Channels</button>
+                )}
+                {visiblePanels.paths && (
+                  <button
+                    className={`dock-tab ${bottomDockTab === 'paths' ? 'active' : ''}`}
+                    onClick={() => setBottomDockTab('paths')}
+                  >Paths</button>
+                )}
+              </div>
+
+              {bottomDockTab === 'layers' && visiblePanels.layers && (
+                <>
+                  {/* Layer blend + opacity controls */}
+                  {activeLayerId && (() => {
+                    const activeLayer = findLayerById(layers, activeLayerId);
+                    if (!activeLayer) return null;
+                    return (
+                      <div className="layer-global-properties">
+                        <div className="layer-properties-row">
+                          <select
+                            className="blend-select"
+                            value={activeLayer.blendMode || 'source-over'}
+                            onChange={(e) => updateLayer(activeLayerId, { blendMode: e.target.value as any })}
+                          >
+                            <option value="source-over">Normal</option>
+                            <option value="multiply">Multiply</option>
+                            <option value="screen">Screen</option>
+                            <option value="overlay">Overlay</option>
+                            <option value="darken">Darken</option>
+                            <option value="lighten">Lighten</option>
+                            <option value="color-dodge">Color Dodge</option>
+                            <option value="color-burn">Color Burn</option>
+                            <option value="hard-light">Hard Light</option>
+                            <option value="soft-light">Soft Light</option>
+                            <option value="difference">Difference</option>
+                            <option value="exclusion">Exclusion</option>
+                            <option value="hue">Hue</option>
+                            <option value="saturation">Saturation</option>
+                            <option value="color">Color</option>
+                            <option value="luminosity">Luminosity</option>
+                          </select>
+                          <div className="opacity-control">
+                            <span>Op:</span>
+                            <input
+                              type="range"
+                              min="0" max="1" step="0.01"
+                              value={activeLayer.opacity || 0}
+                              onChange={(e) => updateLayer(activeLayerId, { opacity: parseFloat(e.target.value) })}
+                            />
+                            {isEditingOpacity ? (
+                              <input
+                                type="text"
+                                className="opacity-input"
+                                autoFocus
+                                value={tempOpacityValue}
+                                onChange={(e) => setTempOpacityValue(e.target.value)}
+                                onFocus={(e) => { e.target.select(); setIsTyping(true); }}
+                                onBlur={() => {
+                                  setIsEditingOpacity(false);
+                                  setIsTyping(false);
+                                  const val = parseInt(tempOpacityValue);
+                                  if (!isNaN(val)) {
+                                    updateLayer(activeLayerId, { opacity: Math.max(0, Math.min(1, val / 100)) });
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                  if (e.key === 'Escape') { setIsEditingOpacity(false); setIsTyping(false); }
+                                }}
+                              />
+                            ) : (
+                              <span
+                                className="opacity-val"
+                                onDoubleClick={() => {
+                                  setTempOpacityValue(Math.round((activeLayer.opacity || 0) * 100).toString());
+                                  setIsEditingOpacity(true);
+                                }}
+                                title="Double-click to type exact value"
+                              >
+                                {Math.round((activeLayer.opacity || 0) * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="layer-properties-row">
+                          <div className="lock-control">
+                            <span>Lock:</span>
+                            <button
+                              className={`lock-btn ${activeLayer.lockTransparent ? 'active' : ''}`}
+                              disabled={activeLayer.locked}
+                              onClick={() => {
+                                const newVal = !activeLayer.lockTransparent;
+                                updateLayer(activeLayerId, { lockTransparent: newVal });
+                                recordHistory(`Toggle Lock Transparency`);
+                              }}
+                              title="Lock transparent pixels"
+                            >
+                              <CheckerboardIcon />
+                            </button>
+                            <button
+                              className={`lock-btn ${activeLayer.lockPixels ? 'active' : ''}`}
+                              disabled={activeLayer.locked}
+                              onClick={() => {
+                                const newVal = !activeLayer.lockPixels;
+                                updateLayer(activeLayerId, { lockPixels: newVal });
+                                recordHistory(`Toggle Lock Pixels`);
+                              }}
+                              title="Lock image pixels"
+                            >
+                              <LucideIcons.Paintbrush size={11} />
+                            </button>
+                            <button
+                              className={`lock-btn ${activeLayer.lockPosition ? 'active' : ''}`}
+                              disabled={activeLayer.locked}
+                              onClick={() => {
+                                const newVal = !activeLayer.lockPosition;
+                                updateLayer(activeLayerId, { lockPosition: newVal });
+                                recordHistory(`Toggle Lock Position`);
+                              }}
+                              title="Lock position"
+                            >
+                              <LucideIcons.Move size={11} />
+                            </button>
+                            <button
+                              className={`lock-btn ${activeLayer.locked ? 'active' : ''}`}
+                              onClick={() => {
+                                const newVal = !activeLayer.locked;
+                                updateLayer(activeLayerId, { locked: newVal });
+                                recordHistory(`Toggle Lock All`);
+                              }}
+                              title="Lock all"
+                            >
+                              <LucideIcons.Lock size={11} />
+                            </button>
+                          </div>
+
+                          <div className="fill-control">
+                            <span>Fill:</span>
+                            <input
+                              type="range"
+                              min="0" max="1" step="0.01"
+                              value={activeLayer.fill !== undefined ? activeLayer.fill : 1}
+                              onChange={(e) => updateLayer(activeLayerId, { fill: parseFloat(e.target.value) })}
+                            />
+                            {isEditingFill ? (
+                              <input
+                                type="text"
+                                className="opacity-input"
+                                autoFocus
+                                value={tempFillValue}
+                                onChange={(e) => setTempFillValue(e.target.value)}
+                                onFocus={(e) => { e.target.select(); setIsTyping(true); }}
+                                onBlur={() => {
+                                  setIsEditingFill(false);
+                                  setIsTyping(false);
+                                  const val = parseInt(tempFillValue);
+                                  if (!isNaN(val)) {
+                                    updateLayer(activeLayerId, { fill: Math.max(0, Math.min(1, val / 100)) });
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                  if (e.key === 'Escape') { setIsEditingFill(false); setIsTyping(false); }
+                                }}
+                              />
+                            ) : (
+                              <span
+                                className="opacity-val"
+                                onDoubleClick={() => {
+                                  setTempFillValue(Math.round((activeLayer.fill !== undefined ? activeLayer.fill : 1) * 100).toString());
+                                  setIsEditingFill(true);
+                                }}
+                                title="Double-click to type exact value"
+                              >
+                                {Math.round((activeLayer.fill !== undefined ? activeLayer.fill : 1) * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="panel-content" onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedIndex && layers.length > 0) {
+                      useStore.getState().reorderNodesAction?.(draggedIndex, layers[layers.length - 1].id, 'after');
+                      recordHistory('Reorder Layers');
+                    }
+                    setDraggedIndex(null);
+                  }} onDragOver={(e) => e.preventDefault()}>
+                    {renderLayerTree(layers)}
+                  </div>
+
+                  {/* Photoshop-style layers panel footer */}
+                  <div className="panel-footer layers-footer">
+                    <button title="Link Layers" className="layers-footer-btn">
+                      <LucideIcons.Link size={13} />
+                    </button>
+                    <button title="Layer Effects" className="layers-footer-btn">
+                      <LucideIcons.Wand2 size={13} />
+                    </button>
+                    <button title="Add Layer Mask" className="layers-footer-btn">
+                      <LucideIcons.Square size={13} />
+                    </button>
+                    <button title="New Adjustment Layer" className="layers-footer-btn">
+                      <LucideIcons.SatelliteDish size={13} />
+                    </button>
+                    <button
+                      title="New Group"
+                      className="layers-footer-btn"
+                      onClick={() => addLayer({ name: `Group ${layers.length + 1}`, type: 'group' } as any)}
+                    >
+                      <LucideIcons.Folder size={13} />
+                    </button>
+                    <button
+                      title="New Layer"
+                      className="layers-footer-btn"
+                      onClick={() => addLayer({ name: `Layer ${layers.length + 1}` })}
+                    >
+                      <LucideIcons.Plus size={13} />
+                    </button>
+                    <button
+                      title="Delete Layer"
+                      className="layers-footer-btn layers-footer-delete"
+                      onClick={() => activeLayerId && removeLayer(activeLayerId)}
+                      disabled={layers.length <= 1}
+                    >
+                      <LucideIcons.Trash2 size={13} />
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {bottomDockTab === 'channels' && visiblePanels.channels && (
+                <div className="panel-content channels-panel-content">
+                  {(['RGB', 'Red', 'Green', 'Blue'] as const).map((ch, i) => (
+                    <div key={ch} className="channel-row">
+                      <div className="channel-eye"><LucideIcons.Eye size={11} /></div>
+                      <div className="channel-swatch" style={{
+                        background: i === 0 ? 'linear-gradient(90deg, #000, #fff)' :
+                          i === 1 ? 'linear-gradient(90deg, #000, #f00)' :
+                            i === 2 ? 'linear-gradient(90deg, #000, #0f0)' :
+                              'linear-gradient(90deg, #000, #00f)'
+                      }} />
+                      <span className="channel-name">{ch}</span>
+                      <span className="channel-shortcut">{i === 0 ? 'Ctrl+~' : `Ctrl+${i}`}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {bottomDockTab === 'paths' && visiblePanels.paths && (
+                <div className="panel-content paths-panel-content">
+                  <div className="no-items" style={{ paddingTop: 24 }}>
+                    <LucideIcons.PenTool size={24} style={{ marginBottom: 8, opacity: 0.3 }} />
+                    <div>No paths</div>
+                    <div style={{ fontSize: 10, marginTop: 4, opacity: 0.6 }}>Use the Pen tool to create paths</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </aside>
       </div>
+
       {/* Fill Color Picker Modal */}
       {isFillPickerOpen && (
         <div className="modal-overlay" onClick={() => setIsFillPickerOpen(false)}>

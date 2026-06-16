@@ -102,7 +102,11 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
       name: 'Background',
       visible: true,
       locked: false,
+      lockPixels: false,
+      lockPosition: false,
+      lockTransparent: false,
       opacity: 1,
+      fill: 1,
       type: 'paint',
       position: { x: 0, y: 0 },
       blendMode: 'source-over',
@@ -111,7 +115,7 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
     history: [],
     historyIndex: 0,
     documentSize: size || { w: 1920, h: 1080 },
-    zoom: 1,
+    zoom: 0.5,
     canvasOffset: { x: 0, y: 0 },
     canvasRotation: 0,
     lassoPaths: [],
@@ -158,7 +162,7 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   clipboardDataRect: null,
   setClipboardDataUrl: (url) => set({ clipboardDataUrl: url }),
   setClipboardDataRect: (rect) => set({ clipboardDataRect: rect }),
-  zoom: 1,
+  zoom: 0.5,
   canvasOffset: { x: 0, y: 0 },
   canvasRotation: 0,
   documentSize: { w: 2000, h: 1400 },
@@ -222,16 +226,41 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
       };
     }
 
+    // Helper to check if a document state is empty
+    const isStateEmpty = (docState: DocumentSpecificState) => {
+      return !docState.layers || docState.layers.length === 0 || (
+        docState.layers.length === 1 &&
+        docState.layers[0].name === 'Background' &&
+        docState.layers[0].type === 'paint' &&
+        !docState.layers[0].dataUrl
+      );
+    };
+
+    let targetIndex = -1;
+    // Only replace an empty document if a name is provided (which indicates opening an image/file)
+    if (name) {
+      if (currentDocIndex !== -1 && isStateEmpty(updatedDocuments[currentDocIndex].state)) {
+        targetIndex = currentDocIndex;
+      } else {
+        targetIndex = updatedDocuments.findIndex(d => isStateEmpty(d.state));
+      }
+    }
+
     const newId = nanoid();
     const newName = name || `Untitled-${state.documents.length + 1}`;
-    
+
     const defaultState = createInitialDocumentState(size);
     const newDocState = initialState
       ? { ...defaultState, ...initialState }
       : defaultState;
 
-    if (newDocState.layers && newDocState.layers.length > 0 && !newDocState.activeLayerId) {
-      newDocState.activeLayerId = newDocState.layers[0].id;
+    // Validate that activeLayerId points to an actual layer in the new document.
+    // When merging defaultState (which has a background layer ID) with an initialState
+    // that replaces layers (e.g. opening an image), the activeLayerId may point to a
+    // layer that no longer exists. Always correct it to point to the first real layer.
+    const layerIds = new Set((newDocState.layers || []).map((l: any) => l.id));
+    if (!newDocState.activeLayerId || !layerIds.has(newDocState.activeLayerId)) {
+      newDocState.activeLayerId = newDocState.layers?.[0]?.id ?? null;
     }
 
     const newDoc: DocumentArchive = {
@@ -240,8 +269,14 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
       state: newDocState
     };
 
+    if (targetIndex !== -1) {
+      updatedDocuments[targetIndex] = newDoc;
+    } else {
+      updatedDocuments.push(newDoc);
+    }
+
     return {
-      documents: [...updatedDocuments, newDoc],
+      documents: updatedDocuments,
       activeDocumentId: newId,
       activeDocumentName: newName,
       ...newDocState

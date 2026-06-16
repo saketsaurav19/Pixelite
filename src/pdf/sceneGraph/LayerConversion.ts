@@ -140,7 +140,11 @@ export function convertSceneNodeToLayer(
         fontWeight:  geo.fontWeight,
         rotation:    rotation || undefined,
         isWatermark: geo.isWatermark || undefined,
-        runs:        geo.runs,
+        runs:        geo.runs?.map(run => ({
+          ...run,
+          x: run.x - position.x,
+          y: run.y - position.y,
+        })),
         shapedPositions: (geo as any).shapedPositions || undefined,
         fontChecksum: geo.fontChecksum,
         fontName:     geo.fontName,

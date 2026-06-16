@@ -17,13 +17,13 @@ const ToolContextMenu: React.FC<ToolContextMenuProps> = ({ tools, activeTool, po
   }, [onClose]);
 
   return (
-    <div 
+    <div
       className="tool-context-menu"
-      style={{ 
-        position: 'fixed', 
-        left: position.x, 
+      style={{
+        position: 'fixed',
+        left: position.x,
         top: position.y,
-        zIndex: 1000
+        zIndex: 1001
       }}
       onClick={(e) => e.stopPropagation()}
     >
