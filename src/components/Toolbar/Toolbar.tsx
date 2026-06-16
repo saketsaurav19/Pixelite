@@ -28,7 +28,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     id: 'move',
     tools: [
       { id: 'move', icon: LucideIcons.Move, label: 'Move Tool', shortcut: 'V' },
-      { id: 'artboard', icon: LucideIcons.Layout, label: 'Artboard Tool', shortcut: 'V' },
+      { id: 'artboard', icon: LucideIcons.FilePlusCorner, label: 'Artboard Tool', shortcut: 'V' },
     ],
   },
   {
@@ -234,7 +234,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onAction }) => {
           );
         })}
       </div>
-      
+
       {contextMenu && (
         <ToolContextMenu
           tools={TOOL_GROUPS.find(g => g.id === contextMenu.groupId)?.tools || []}

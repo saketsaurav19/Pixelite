@@ -45,17 +45,23 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
       onMouseDown={handleMouseDown('move')}
       onTouchStart={handleTouchStart('move')}
       style={{
-        left: cropRect.w >= 0 ? cropRect.x / 2 : (cropRect.x + cropRect.w) / 2,
-        top: cropRect.h >= 0 ? cropRect.y / 2 : (cropRect.y + cropRect.h) / 2,
-        width: Math.abs(cropRect.w) / 2,
-        height: Math.abs(cropRect.h) / 2,
+        left: cropRect.w >= 0 ? cropRect.x : cropRect.x + cropRect.w,
+        top: cropRect.h >= 0 ? cropRect.y : cropRect.y + cropRect.h,
+        width: Math.abs(cropRect.w),
+        height: Math.abs(cropRect.h),
         position: 'absolute',
-        border: '2px solid #fff',
+        border: '4px solid #008cffff',
         outline: '2000px solid rgba(0,0,0,0.5)',
         zIndex: 10000,
         cursor: 'move'
       }}
     >
+      {/* 3x3 Grid Lines */}
+      <div style={{ position: 'absolute', top: 0, left: '33.33%', width: '3px', height: '100%', borderLeft: '1px solid #008cffff', mixBlendMode: 'difference', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: 0, left: '66.66%', width: '3px', height: '100%', borderLeft: '1px solid #008cffff', mixBlendMode: 'difference', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '33.33%', left: 0, height: '3px', width: '100%', borderTop: '1px solid #008cffff', mixBlendMode: 'difference', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '66.66%', left: 0, height: '3px', width: '100%', borderTop: '1px solid #008cffff', mixBlendMode: 'difference', pointerEvents: 'none' }} />
+
       {/* 4 Corner Handles Only */}
       {['tl', 'tr', 'bl', 'br'].map(handle => (
         <div

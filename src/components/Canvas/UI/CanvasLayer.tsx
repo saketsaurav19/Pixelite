@@ -563,7 +563,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
 
   // We ALWAYS use transform-origin: 0 0 for all layers (including watermarks)
   // to ensure that absolute run coordinate projection in VectorTextLayer aligns perfectly.
-  const isWatermark = layer.isWatermark === true;
+  // const isWatermark = layer.isWatermark === true;
   const transformOrigin = '0 0';
 
   return (

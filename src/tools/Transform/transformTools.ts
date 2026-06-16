@@ -1,7 +1,7 @@
 import type { ToolModule } from '../types';
 import { warpPerspective } from '../../utils/canvasUtils';
 import { toolState } from '../toolState';
-import { isLayerOrAncestorsLocked, findLayerById } from '../../utils/layerUtils';
+import { findLayerById } from '../../utils/layerUtils';
 
 
 const getLayerAtCoords = (

@@ -135,6 +135,31 @@ const Canvas: React.FC = () => {
     return () => setIsTyping(false);
   }, [textEditor, setIsTyping]);
 
+  const lastActiveToolRef = useRef<string | null>(null);
+  const lastActiveLayerIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activeTool === 'crop') {
+      const toolChanged = lastActiveToolRef.current !== 'crop';
+      const layerChanged = lastActiveLayerIdRef.current !== activeLayerId;
+      
+      if (toolChanged || layerChanged) {
+        const activeLayer = findLayerById(layers, activeLayerId || '');
+        const x = activeLayer?.position?.x || 0;
+        const y = activeLayer?.position?.y || 0;
+        const w = activeLayer?.width || documentSize.w;
+        const h = activeLayer?.height || documentSize.h;
+        setCropRect({ x, y, w, h });
+      }
+    } else {
+      if (lastActiveToolRef.current === 'crop') {
+        setCropRect(null);
+      }
+    }
+    lastActiveToolRef.current = activeTool as string;
+    lastActiveLayerIdRef.current = activeLayerId;
+  }, [activeTool, activeLayerId, layers, documentSize, setCropRect]);
+
   useEffect(() => {
     if (activeLayerId) {
       const activeLayer = findLayerById(useStore.getState().layers, activeLayerId);
@@ -181,8 +206,17 @@ const Canvas: React.FC = () => {
 
   const getCoordinates = useCallback((clientX: number, clientY: number) => {
     const hasArtboards = layers.some(layer => layer.type === 'artboard');
-    const allowOutside = activeTool === 'artboard' || hasArtboards;
-    return getCoordsUtil(clientX, clientY, stackRef.current, documentSize, allowOutside);
+    const isClamp = ['marquee', 'ellipse_marquee', 'lasso', 'polygonal_lasso', 'magnetic_lasso'].includes(activeTool as string);
+    const allowOutside =
+      activeTool === 'artboard' ||
+      activeTool === 'crop' ||
+      activeTool === 'perspective_crop' ||
+      activeTool === 'slice' ||
+      activeTool === 'slice_select' ||
+      ['pen', 'free_pen', 'curvature_pen', 'add_anchor'].includes(activeTool as string) ||
+      hasArtboards ||
+      isClamp;
+    return getCoordsUtil(clientX, clientY, stackRef.current, documentSize, allowOutside, isClamp);
   }, [documentSize, activeTool, layers]);
   /**
    * Snaps coordinates to nearby anchor points, edges, or paths.
@@ -807,7 +841,7 @@ const Canvas: React.FC = () => {
           transform: `scale(${zoom}) translate(${canvasOffset.x}px, ${canvasOffset.y}px) rotate(${canvasRotation}deg)`,
           width: `${documentSize.w}px`,
           height: `${documentSize.h}px`,
-          overflow: (activeTool === 'artboard' || hasArtboards) ? 'visible' : 'hidden',
+          overflow: (activeTool === 'artboard' || activeTool === 'crop' || activeTool === 'perspective_crop' || activeTool === 'slice' || hasArtboards) ? 'visible' : 'hidden',
           backgroundColor: hasArtboards ? 'transparent' : undefined,
           backgroundImage: hasArtboards ? 'none' : undefined,
           boxShadow: hasArtboards ? 'none' : undefined,
@@ -867,24 +901,28 @@ const Canvas: React.FC = () => {
           selectedPoint={selectedPoint}
         />
 
-        <CropOverlay
-          cropRect={cropRect}
-          getCoordinates={getCoordinates}
-          lastPointRef={lastPointRef}
-          setActiveCropHandle={setActiveCropHandle}
-          setIsInteracting={setIsInteracting}
-          applyCrop={applyCrop}
-          setCropRect={setCropRect}
-        />
+        {activeTool === 'crop' && (
+          <CropOverlay
+            cropRect={cropRect}
+            getCoordinates={getCoordinates}
+            lastPointRef={lastPointRef}
+            setActiveCropHandle={setActiveCropHandle}
+            setIsInteracting={setIsInteracting}
+            applyCrop={applyCrop}
+            setCropRect={setCropRect}
+          />
+        )}
 
-        <PerspectiveCropOverlay
-          lassoPaths={lassoPaths}
-          getCoordinates={getCoordinates}
-          setIsInteracting={setIsInteracting}
-          lastPointRef={lastPointRef}
-          handleDoubleClick={handleDoubleClick}
-          setLassoPaths={setLassoPaths}
-        />
+        {activeTool === 'perspective_crop' && (
+          <PerspectiveCropOverlay
+            lassoPaths={lassoPaths}
+            getCoordinates={getCoordinates}
+            setIsInteracting={setIsInteracting}
+            lastPointRef={lastPointRef}
+            handleDoubleClick={handleDoubleClick}
+            setLassoPaths={setLassoPaths}
+          />
+        )}
 
         <DraftOverlay
           draftShape={draftShape}

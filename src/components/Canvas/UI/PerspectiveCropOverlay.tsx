@@ -42,10 +42,10 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
     { x: (p[3].x + p[0].x) / 2, y: (p[3].y + p[0].y) / 2 }  // Left
   ];
 
-  // Grid lines
+  // Grid lines (4/4 grid)
   const gridLines = [];
-  for (let i = 1; i <= 2; i++) {
-    const t = i / 3;
+  for (let i = 1; i <= 3; i++) {
+    const t = i / 4;
     // Horizontal lines
     const hStart = { x: p[0].x * (1 - t) + p[3].x * t, y: p[0].y * (1 - t) + p[3].y * t };
     const hEnd = { x: p[1].x * (1 - t) + p[2].x * t, y: p[1].y * (1 - t) + p[2].y * t };
@@ -59,140 +59,126 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
 
   return (
     <>
-      <svg style={{ 
-        position: 'absolute', 
-        top: -2000, 
-        left: -2000, 
-        width: 'calc(100% + 4000px)', 
-        height: 'calc(100% + 4000px)', 
-        pointerEvents: 'none', 
+      <svg style={{
+        position: 'absolute',
+        top: -2000,
+        left: -2000,
+        width: 'calc(100% + 4000px)',
+        height: 'calc(100% + 4000px)',
+        pointerEvents: 'none',
         zIndex: 10000,
         overflow: 'visible'
       }}>
         <g transform="translate(2000, 2000)">
-        {/* Quad Area */}
-        <path
-          d={`M ${p[0].x / 2},${p[0].y / 2} L ${p[1].x / 2},${p[1].y / 2} L ${p[2].x / 2},${p[2].y / 2} L ${p[3].x / 2},${p[3].y / 2} Z`}
-          fill="rgba(0, 170, 255, 0.1)"
-          stroke="#00aaff"
-          strokeWidth={1}
-          style={{ pointerEvents: 'auto', cursor: 'move' }}
-          onMouseDown={handleMouseDown}
-        />
-
-        {/* Grid Lines */}
-        {gridLines.map((line, i) => (
-          <line
-            key={i}
-            x1={line.start.x / 2}
-            y1={line.start.y / 2}
-            x2={line.end.x / 2}
-            y2={line.end.y / 2}
-            stroke="rgba(255, 255, 255, 0.5)"
-            strokeWidth={0.5}
-            strokeDasharray="2,2"
+          {/* Quad Area */}
+          <path
+            d={`M ${p[0].x},${p[0].y} L ${p[1].x},${p[1].y} L ${p[2].x},${p[2].y} L ${p[3].x},${p[3].y} Z`}
+            fill="rgba(0, 170, 255, 0)"
+            stroke="#00aaff"
+            strokeWidth={1.5}
+            style={{ pointerEvents: 'auto', cursor: 'move' }}
+            onMouseDown={handleMouseDown}
           />
-        ))}
-
-        {/* Corner Handles */}
-        {p.map((point, i) => (
-          <g key={`corner-g-${i}`} 
-            onMouseDown={(e) => {
-              stopOverlayEvent(e);
-              const c = getCoordinates(e.clientX, e.clientY);
-              if (c) lastPointRef.current = c;
-              toolState._pcDragIdx = i;
-              setIsInteracting(true);
-            }}
-            onTouchStart={(e) => {
-              stopOverlayEvent(e);
-              const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY);
-              if (c) lastPointRef.current = c;
-              (window as any)._pcDragIdx = i;
-              setIsInteracting(true);
-            }}
-            style={{ cursor: i % 2 === 0 ? 'nwse-resize' : 'nesw-resize', pointerEvents: 'auto' }}
-          >
-            {/* Hit Area */}
-            <rect
-              x={point.x / 2 - 15}
-              y={point.y / 2 - 15}
-              width={30}
-              height={30}
-              fill="transparent"
-            />
-            {/* Visual Handle */}
-            <rect
-              x={point.x / 2 - 5}
-              y={point.y / 2 - 5}
-              width={10}
-              height={10}
-              fill="#fff"
+          {/* Grid Lines */}
+          {gridLines.map((line, i) => (
+            <line
+              key={i}
+              x1={line.start.x}
+              y1={line.start.y}
+              x2={line.end.x}
+              y2={line.end.y}
               stroke="#00aaff"
-              strokeWidth={1}
+              strokeWidth={1.5}
             />
-          </g>
-        ))}
-
-        {/* Midpoint Handles */}
-        {midpoints.map((point, i) => (
-          <g key={`mid-g-${i}`}
-            onMouseDown={(e) => {
-              stopOverlayEvent(e);
-              const c = getCoordinates(e.clientX, e.clientY);
-              toolState._pcDragIdx = i + 4; // Midpoint indices are 4-7
-              toolState._pcStartPoint = { ...c };
-              toolState._pcOrigPoints = p.map(pt => ({ ...pt }));
-              setIsInteracting(true);
-            }}
-            onTouchStart={(e) => {
-              stopOverlayEvent(e);
-              const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY);
-              if (c) lastPointRef.current = c;
-              (window as any)._pcDragIdx = i + 4;
-              (window as any)._pcStartPoint = { ...c };
-              (window as any)._pcOrigPoints = p.map(pt => ({ ...pt }));
-              setIsInteracting(true);
-            }}
-            style={{ cursor: i % 2 === 0 ? 'ns-resize' : 'ew-resize', pointerEvents: 'auto' }}
-          >
-            {/* Hit Area */}
-            <rect
-              x={point.x / 2 - 12}
-              y={point.y / 2 - 12}
-              width={24}
-              height={24}
-              fill="transparent"
-            />
-            {/* Visual Handle */}
-            <rect
-              x={point.x / 2 - 4}
-              y={point.y / 2 - 4}
-              width={8}
-              height={8}
-              fill="#fff"
-              stroke="#00aaff"
-              strokeWidth={1}
-            />
-          </g>
-        ))}
+          ))}
+          {/* Corner Handles */}
+          {p.map((point, i) => (
+            <g key={`corner-g-${i}`}
+              onMouseDown={(e) => {
+                stopOverlayEvent(e);
+                const c = getCoordinates(e.clientX, e.clientY);
+                if (c) lastPointRef.current = c;
+                toolState._pcDragIdx = i;
+                setIsInteracting(true);
+              }}
+              onTouchStart={(e) => {
+                stopOverlayEvent(e);
+                const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY);
+                if (c) lastPointRef.current = c;
+                (window as any)._pcDragIdx = i;
+                setIsInteracting(true);
+              }}
+              style={{ cursor: i % 2 === 0 ? 'nwse-resize' : 'nesw-resize', pointerEvents: 'auto' }}
+            >
+              <rect x={point.x - 15} y={point.y - 15} width={30} height={30} fill="transparent" />
+              <rect x={point.x - 5} y={point.y - 5} width={10} height={10} fill="#fff" stroke="#00aaff" strokeWidth={1} />
+            </g>
+          ))}
+          {/* Midpoint Handles */}
+          {midpoints.map((point, i) => (
+            <g key={`mid-g-${i}`}
+              onMouseDown={(e) => {
+                stopOverlayEvent(e);
+                const c = getCoordinates(e.clientX, e.clientY);
+                toolState._pcDragIdx = i + 4;
+                toolState._pcStartPoint = { ...c };
+                toolState._pcOrigPoints = p.map(pt => ({ ...pt }));
+                setIsInteracting(true);
+              }}
+              onTouchStart={(e) => {
+                stopOverlayEvent(e);
+                const c = getCoordinates(e.touches[0].clientX, e.touches[0].clientY);
+                if (c) lastPointRef.current = c;
+                (window as any)._pcDragIdx = i + 4;
+                (window as any)._pcStartPoint = { ...c };
+                (window as any)._pcOrigPoints = p.map(pt => ({ ...pt }));
+                setIsInteracting(true);
+              }}
+              style={{ cursor: i % 2 === 0 ? 'ns-resize' : 'ew-resize', pointerEvents: 'auto' }}
+            >
+              <rect x={point.x - 12} y={point.y - 12} width={24} height={24} fill="transparent" />
+              <rect x={point.x - 4} y={point.y - 4} width={8} height={8} fill="#fff" stroke="#00aaff" strokeWidth={1} />
+            </g>
+          ))}
         </g>
       </svg>
-
       <div
-        className="perspective-actions-bar"
+        className="crop-actions-bar"
         style={{
           position: 'absolute',
-          left: Math.min(...p.map(point => point.x)) / 2,
-          top: Math.max(...p.map(point => point.y)) / 2 + 15,
+          left: Math.min(...p.map(point => point.x)),
+          top: Math.max(...p.map(point => point.y)) + 15,
+          bottom: 'auto',
+          right: 'auto',
           zIndex: 20000,
-          display: 'flex', gap: '10px', background: '#222', padding: '8px', borderRadius: '6px', border: '1px solid #444',
+          display: 'flex',
+          gap: '8px',
           width: 'fit-content'
         }}
         onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
       >
-        <button onClick={handleDoubleClick} style={{ background: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}>✓</button>
-        <button onClick={() => { delete toolState._pcPoints; setLassoPaths([]); setIsInteracting(false); }} style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', padding: '8px', cursor: 'pointer' }}>✕</button>
+        <button
+          className="crop-action-btn confirm"
+          onClick={(e) => { e.stopPropagation(); handleDoubleClick(); }}
+          title="Apply Perspective Crop"
+          style={{ cursor: 'pointer' }}
+        >
+          ✓
+        </button>
+        <button
+          className="crop-action-btn cancel"
+          onClick={(e) => {
+            e.stopPropagation();
+            delete toolState._pcPoints;
+            setLassoPaths([]);
+            setIsInteracting(false);
+          }}
+          title="Cancel Perspective Crop"
+          style={{ cursor: 'pointer' }}
+        >
+          ✕
+        </button>
       </div>
     </>
   );

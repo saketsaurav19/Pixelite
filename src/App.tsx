@@ -188,11 +188,11 @@ const App: React.FC = () => {
             <div className="layer-eye" onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(layer.id); }}>
               {layer.visible ? <LucideIcons.Eye size={12} /> : <LucideIcons.EyeOff size={12} />}
             </div>
-            <div className="layer-thumb">
+            <div className="layer-thumb ">
               {layer.thumbnail ? (
                 <img src={layer.thumbnail} alt="" />
               ) : layer.type === 'artboard' ? (
-                <LucideIcons.Layout size={16} />
+                <LucideIcons.File size={16} />
               ) : layer.type === 'group' ? (
                 <LucideIcons.Folder size={16} />
               ) : null}
@@ -233,7 +233,7 @@ const App: React.FC = () => {
             )}
             {(isLayerOrDescendantsLocked(layer) || layer.lockPixels || layer.lockPosition || layer.lockTransparent) && (
               <div className="layer-lock-indicator" title="Layer has active locks" style={{ display: 'flex', alignItems: 'center', marginRight: '6px' }}>
-                <LucideIcons.Lock size={10} style={{ opacity: 0.5 }} />
+                <LucideIcons.Lock size={15} style={{ opacity: 1 }} />
               </div>
             )}
             <div className="layer-order-btns">
