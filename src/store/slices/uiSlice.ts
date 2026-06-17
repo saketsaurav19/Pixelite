@@ -21,6 +21,8 @@ export interface UISlice {
   isMobileMenuOpen: boolean;
   showRulers: boolean;
   rulerUnit: 'px' | 'in' | 'cm';
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | null) => void;
   activeMobileSubmenu: string | null;
   screenMode: 'standard' | 'full-menu' | 'full';
   visiblePanels: {
@@ -82,6 +84,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isMobileMenuOpen: false,
   showRulers: false,
   rulerUnit: 'px',
+  activeAdjustmentModal: null,
   activeMobileSubmenu: null,
   screenMode: 'standard',
   visiblePanels: {
@@ -119,6 +122,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
   setShowRulers: (show) => set({ showRulers: show }),
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
+  setActiveAdjustmentModal: (modal) => set({ activeAdjustmentModal: modal }),
   setActiveMobileSubmenu: (menu) => set({ activeMobileSubmenu: menu }),
   setScreenMode: (screenMode) => set({ screenMode }),
   togglePanel: (panel) => set((state) => ({

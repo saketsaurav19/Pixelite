@@ -29,6 +29,7 @@ import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
 import { SignatureDialog } from './components/Dialogs/SignatureDialog';
 import { CameraDialog } from "./components/Dialogs/CameraDialog";
 import { MobileCameraDialog } from "./components/Dialogs/MobileCameraDialog";
+import { AdjustmentDialog } from './components/Dialogs/AdjustmentDialog';
 import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
@@ -1847,15 +1848,15 @@ const App: React.FC = () => {
               <div className="panel-content adjustments-panel-content">
                 <div className="adj-grid">
                   {[
-                    { icon: <LucideIcons.Sun size={16} />, label: 'Brightness' },
+                    { icon: <LucideIcons.Sun size={16} />, label: 'Brightness', action: 'brightness_contrast' },
                     { icon: <LucideIcons.TrendingUp size={16} />, label: 'Levels' },
                     { icon: <LucideIcons.Activity size={16} />, label: 'Curves' },
                     { icon: <LucideIcons.Aperture size={16} />, label: 'Exposure' },
                     { icon: <LucideIcons.Droplet size={16} />, label: 'Vibrance' },
-                    { icon: <LucideIcons.Palette size={16} />, label: 'Hue/Sat' },
+                    { icon: <LucideIcons.Palette size={16} />, label: 'Hue/Sat', action: 'hue_saturation' },
                     { icon: <LucideIcons.Scale size={16} />, label: 'Color Bal' },
-                    { icon: <LucideIcons.Contrast size={16} />, label: 'B&W' },
-                    { icon: <LucideIcons.Camera size={16} />, label: 'Photo Flt' },
+                    { icon: <LucideIcons.Contrast size={16} />, label: 'B&W', action: 'black_white' },
+                    { icon: <LucideIcons.Camera size={16} />, label: 'Photo Flt', action: 'photo_effects' },
                     { icon: <LucideIcons.Sliders size={16} />, label: 'Ch. Mixer' },
                     { icon: <LucideIcons.Layers size={16} />, label: 'Color Lkp' },
                     { icon: <LucideIcons.RefreshCw size={16} />, label: 'Invert' },
@@ -1863,8 +1864,17 @@ const App: React.FC = () => {
                     { icon: <LucideIcons.Triangle size={16} />, label: 'Threshold' },
                     { icon: <LucideIcons.Map size={16} />, label: 'Grad Map' },
                     { icon: <LucideIcons.Filter size={16} />, label: 'Sel. Color' },
-                  ].map(({ icon, label }) => (
-                    <button key={label} className="adj-btn" title={label}>
+                  ].map(({ icon, label, action }) => (
+                    <button
+                      key={label}
+                      className="adj-btn"
+                      title={label}
+                      onClick={() => {
+                        if (action) {
+                          useStore.getState().setActiveAdjustmentModal(action as any);
+                        }
+                      }}
+                    >
                       {icon}
                       <span>{label}</span>
                     </button>
@@ -2298,6 +2308,7 @@ const App: React.FC = () => {
       <SignatureDialog />
       <CameraDialog />
       <MobileCameraDialog />
+      <AdjustmentDialog />
 
       <AlertContainer />
     </div>

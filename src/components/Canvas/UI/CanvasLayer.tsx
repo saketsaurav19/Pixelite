@@ -355,6 +355,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
           isolation: 'isolate',
           mixBlendMode: (layer.blendMode === 'source-over' || layer.blendMode === 'pass through' ? 'normal' : (layer.blendMode || 'normal')) as any,
           opacity: layer.opacity,
+          touchAction: 'none',
         }}
       >
         {layer.children?.map((childLayer, childIndex) => (

@@ -104,10 +104,11 @@ const MenuBar: React.FC<MenuBarProps> = ({
   onSaveToPublic
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
+  const [activeSubmenus, setActiveSubmenus] = useState<Record<string, boolean>>({});
   const menuRef = useRef<HTMLDivElement>(null);
   const visiblePanels = useStore((s) => s.visiblePanels);
   const togglePanel = useStore((s) => s.togglePanel);
+  const setActiveAdjustmentModal = useStore((s) => s.setActiveAdjustmentModal);
 
 
   useEffect(() => {
@@ -271,16 +272,16 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Adjustments',
           subItems: [
-            { label: 'Brightness/Contrast...' },
+            { label: 'Brightness/Contrast...', action: () => setActiveAdjustmentModal('brightness_contrast') },
             { label: 'Levels...', shortcut: 'Ctrl+L' },
             { label: 'Curves...', shortcut: 'Ctrl+M' },
             { label: 'Exposure...' },
             { divider: true },
             { label: 'Vibrance...' },
-            { label: 'Hue/Saturation...', shortcut: 'Ctrl+U' },
+            { label: 'Hue/Saturation...', shortcut: 'Ctrl+U', action: () => setActiveAdjustmentModal('hue_saturation') },
             { label: 'Color Balance...', shortcut: 'Ctrl+B' },
-            { label: 'Black & White...', shortcut: 'Alt+Shift+Ctrl+B' },
-            { label: 'Photo Filter...' },
+            { label: 'Black & White...', shortcut: 'Alt+Shift+Ctrl+B', action: () => setActiveAdjustmentModal('black_white') },
+            { label: 'Photo Filter...', action: () => setActiveAdjustmentModal('photo_effects') },
             { label: 'Channel Mixer...' },
             { label: 'Color Lookup...' },
             { divider: true },
@@ -614,16 +615,18 @@ const MenuBar: React.FC<MenuBarProps> = ({
     }
   ];
 
-  const renderMenuItem = (item: MenuItem, index: number, parentLabel?: string) => {
+  const renderMenuItem = (item: MenuItem, index: number, parentLabel?: string, depth = 1) => {
     if (item.divider) {
       return <div key={`div-${index}-${parentLabel}`} className="menu-divider" />;
     }
 
-    const isSubmenuActive = activeSubmenu === `${parentLabel}-${item.label}`;
+    const submenuKey = `${parentLabel}-${item.label}`;
+    const isSubmenuActive = Boolean(activeSubmenus[submenuKey]);
 
     return (
       <div
         key={`${parentLabel}-${item.label}-${index}`}
+        style={{ '--depth': depth } as React.CSSProperties}
         className={`menu-option ${item.subItems ? 'submenu-parent' : ''} ${isSubmenuActive ? 'active' : ''} ${item.disabled ? 'disabled' : ''}`}
         onClick={(e) => {
           if (item.disabled) {
@@ -632,18 +635,21 @@ const MenuBar: React.FC<MenuBarProps> = ({
           }
           if (item.subItems) {
             e.stopPropagation();
-            setActiveSubmenu(isSubmenuActive ? null : `${parentLabel}-${item.label}`);
+            setActiveSubmenus((prev) => ({
+              ...prev,
+              [submenuKey]: !prev[submenuKey]
+            }));
           } else if (item.action) {
             e.stopPropagation();
             item.action();
             setActiveMenu(null);
-            setActiveSubmenu(null);
+            setActiveSubmenus({});
             onCloseMobile?.();
           }
         }}
         onMouseEnter={() => {
           if (window.innerWidth > 768 && item.subItems && !item.disabled) {
-            setActiveSubmenu(`${parentLabel}-${item.label}`);
+            setActiveSubmenus({ [submenuKey]: true });
           }
         }}
       >
@@ -654,8 +660,12 @@ const MenuBar: React.FC<MenuBarProps> = ({
         </div>
         {item.subItems && <LucideIcons.ChevronRight size={12} className="submenu-arrow" />}
         {item.subItems && (
-          <div className="menu-submenu">
-            {item.subItems.map((subItem, subIndex) => renderMenuItem(subItem, subIndex, `${parentLabel}-${item.label}`))}
+          <div className={`menu-submenu-wrapper ${isSubmenuActive ? 'open' : ''}`}>
+            <div className="menu-submenu-inner">
+              <div className="menu-submenu">
+                {item.subItems.map((subItem, subIndex) => renderMenuItem(subItem, subIndex, `${parentLabel}-${item.label}`, depth + 1))}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -677,21 +687,31 @@ const MenuBar: React.FC<MenuBarProps> = ({
             className={`menu-item-container ${activeMenu === section.label ? 'active' : ''}`}
             onClick={() => {
               setActiveMenu(activeMenu === section.label ? null : section.label);
-              setActiveSubmenu(null);
+              setActiveSubmenus({});
             }}
             onMouseEnter={() => {
               if (window.innerWidth > 768 && activeMenu) {
                 setActiveMenu(section.label);
-                setActiveSubmenu(null);
+                setActiveSubmenus({});
               }
             }}
           >
-            <span>{section.label}</span>
-            {(activeMenu === section.label || (isMobileOpen && activeMenu === section.label)) && (
-              <div className="menu-dropdown">
-                {section.items.map((item, index) => renderMenuItem(item, index, section.label))}
+            <div className="menu-title-row">
+              <span>{section.label}</span>
+              {isMobileOpen && (
+                <LucideIcons.ChevronRight
+                  size={14}
+                  className="submenu-icon"
+                />
+              )}
+            </div>
+            <div className={`menu-dropdown-wrapper ${activeMenu === section.label ? 'open' : ''}`}>
+              <div className="menu-dropdown-inner">
+                <div className="menu-dropdown">
+                  {section.items.map((item, index) => renderMenuItem(item, index, section.label, 1))}
+                </div>
               </div>
-            )}
+            </div>
           </div>
         ))}
       </div>

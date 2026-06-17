@@ -24,6 +24,20 @@
   color: var(--text-primary);
 }
 
+.menu-title-row {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.menu-dropdown-wrapper {
+  display: none;
+}
+
+.menu-item-container.active .menu-dropdown-wrapper {
+  display: block;
+}
+
 .menu-dropdown {
   position: absolute;
   top: 100%;
@@ -44,6 +58,7 @@
     opacity: 0;
     transform: translateY(0.3125rem);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -114,26 +129,22 @@
   margin: 0.25rem 0;
 }
 
-.menu-submenu {
+.menu-submenu-wrapper {
+  display: none;
+}
+
+.menubar .menu-submenu {
   position: absolute;
   top: -0.25rem;
   left: 100%;
   background: var(--bg-header);
   border: 1px solid var(--border-color);
   min-width: 12.5rem;
-  display: none;
+  display: flex;
   flex-direction: column;
   box-shadow: 0.625rem 0.625rem 1.875rem rgba(0, 0, 0, 0.5);
   padding: 0.25rem 0;
   z-index: 2100;
-}
-
-.menu-option.submenu-parent:hover > .menu-submenu {
-  display: flex;
-}
-
-.menu-option.active > .menu-submenu {
-  display: flex;
 }
 
 /* Mobile adjustments */
@@ -169,7 +180,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.9375rem 1.25rem;
+    padding: 0.625rem 1.25rem;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-secondary);
     width: 100%;
@@ -192,10 +203,48 @@
 
   .menu-item-container {
     width: 100%;
-    height: 3rem;
+    height: auto;
+    min-height: 2.25rem;
     padding: 0 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .menu-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    height: 2.25rem;
+    flex-shrink: 0;
+  }
+
+  .menu-title-row .submenu-icon {
+    transition: transform 0.2s ease;
+    transform: rotate(0deg);
+  }
+
+  .menu-item-container.active .menu-title-row .submenu-icon {
+    transform: rotate(90deg);
+  }
+
+  .menu-dropdown-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .menu-dropdown-wrapper.open {
+    grid-template-rows: 1fr;
+  }
+
+  .menu-dropdown-inner {
+    min-height: 0;
   }
 
   .menu-dropdown {
@@ -204,40 +253,58 @@
     box-shadow: none;
     border: none;
     background: var(--bg-secondary);
-    padding-left: 0;
-    display: none;
+    padding: 0.25rem 0;
+    display: flex;
+    flex-direction: column;
     animation: none;
   }
 
-  .menu-item-container.active .menu-dropdown {
-    display: flex;
-  }
-
   .menu-option {
-    padding: 0.75rem 1.562rem;
+    padding: 0.5rem 1.25rem 0.5rem calc(1.25rem + var(--depth, 1) * 0.75rem);
     border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    width: 100%;
+    box-sizing: border-box;
   }
 
-  .menu-submenu {
+  .menu-option.submenu-parent {
+    flex-wrap: wrap;
+    padding: 0.5rem 1.25rem 0.5rem calc(1.25rem + var(--depth, 1) * 0.75rem);
+  }
+
+  .menu-submenu-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .menu-submenu-wrapper.open {
+    grid-template-rows: 1fr;
+  }
+
+  .menu-submenu-inner {
+    min-height: 0;
+  }
+
+  .menubar .menu-submenu {
     position: static;
     width: 100%;
     box-shadow: none;
     border: none;
-    background: rgba(0, 0, 0, 0.2);
-    padding-left: 0;
-    display: none;
-  }
-
-  .menu-option.submenu-parent.active > .menu-submenu {
+    background: rgba(0, 0, 0, 0.15);
+    padding: 0;
     display: flex;
+    flex-direction: column;
   }
 
-  .menu-option.submenu-parent:hover > .menu-submenu {
-    display: none;
+  .menu-option .submenu-arrow {
+    transition: transform 0.25s ease;
+    transform: rotate(0deg);
   }
 
-  .menu-option.submenu-parent.active > .menu-submenu {
-    display: flex;
+  .menu-option.active>.submenu-arrow {
+    transform: rotate(90deg);
   }
 }
 
@@ -249,5 +316,14 @@
 
   .mobile-menu-header {
     display: none;
+  }
+
+  .menu-submenu-wrapper {
+    display: none;
+  }
+
+  .menu-option.submenu-parent:hover>.menu-submenu-wrapper,
+  .menu-option.submenu-parent.active>.menu-submenu-wrapper {
+    display: block;
   }
 }

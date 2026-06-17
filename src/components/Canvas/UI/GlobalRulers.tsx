@@ -1,149 +1,189 @@
 import React, { useRef, useEffect } from 'react';
 import { useStore } from '../../../store/useStore';
+import Guides from '@scena/react-guides';
+
+const getRulerSettings = (rulerUnit: 'px' | 'in' | 'cm', zoom: number) => {
+  const unitMultiplier = rulerUnit === 'in' ? 96 : rulerUnit === 'cm' ? 37.795 : 1;
+  const calculatedZoom = zoom * unitMultiplier;
+
+  // We want the physical spacing (unit * calculatedZoom) on screen to be >= 50px
+  let unit = 50;
+  let segment = 10;
+
+  if (rulerUnit === 'px') {
+    const niceIntervals = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+    const bestInterval = niceIntervals.find(interval => interval * calculatedZoom >= 50) || 10000;
+    unit = bestInterval;
+
+    // Choose sensible segments
+    if (unit <= 2) segment = unit;
+    else if (unit === 5) segment = 5;
+    else if (unit === 10) segment = 10;
+    else if (unit === 20) segment = 4;
+    else if (unit === 50) segment = 5;
+    else if (unit === 100) segment = 10;
+    else if (unit === 200) segment = 4;
+    else if (unit === 500) segment = 5;
+    else if (unit === 1000) segment = 10;
+    else segment = 10;
+  } else if (rulerUnit === 'in') {
+    const niceIntervals = [0.0625, 0.125, 0.25, 0.5, 1, 2, 5, 10, 20, 50];
+    const bestInterval = niceIntervals.find(interval => interval * calculatedZoom >= 50) || 50;
+    unit = bestInterval;
+
+    if (unit === 0.0625) segment = 4;
+    else if (unit === 0.125) segment = 4;
+    else if (unit === 0.25) segment = 4;
+    else if (unit === 0.5) segment = 4;
+    else if (unit === 1) segment = 8;
+    else if (unit === 2) segment = 8;
+    else segment = 10;
+  } else { // cm
+    const niceIntervals = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50];
+    const bestInterval = niceIntervals.find(interval => interval * calculatedZoom >= 50) || 50;
+    unit = bestInterval;
+
+    if (unit === 0.1) segment = 10;
+    else if (unit === 0.2) segment = 10;
+    else if (unit === 0.5) segment = 5;
+    else if (unit === 1) segment = 10;
+    else if (unit === 2) segment = 10;
+    else if (unit === 5) segment = 5;
+    else segment = 10;
+  }
+
+  return { calculatedZoom, unit, segment };
+};
 
 export const GlobalRulers: React.FC = () => {
-  const { showRulers, rulerUnit, zoom, canvasOffset, documentSize } = useStore();
-  const topRulerRef = useRef<HTMLCanvasElement>(null);
-  const leftRulerRef = useRef<HTMLCanvasElement>(null);
+  const { showRulers, rulerUnit, zoom, canvasOffset, documentSize, showGuides } = useStore();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const topGuidesRef = useRef<any>(null);
+  const leftGuidesRef = useRef<any>(null);
+
+  const [viewportWidth, setViewportWidth] = React.useState(0);
+  const [viewportHeight, setViewportHeight] = React.useState(0);
 
   useEffect(() => {
     if (!showRulers) return;
 
-    const drawRuler = (canvas: HTMLCanvasElement, isVertical: boolean) => {
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      const width = canvas.width;
-      const height = canvas.height;
-
-      ctx.clearRect(0, 0, width, height);
-
-      // Ruler background
-      ctx.fillStyle = '#2c2c2c';
-      ctx.fillRect(0, 0, width, height);
-
-      ctx.fillStyle = '#b0b0b0';
-      ctx.font = '10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.strokeStyle = '#555';
-      ctx.lineWidth = 1;
-
-      // Ruler lines (bottom edge for top ruler, right edge for left ruler)
-      ctx.beginPath();
-      if (isVertical) {
-        ctx.moveTo(width - 1, 0);
-        ctx.lineTo(width - 1, height);
-      } else {
-        ctx.moveTo(0, height - 1);
-        ctx.lineTo(width, height - 1);
-      }
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.strokeStyle = '#b0b0b0';
-
-      const unitMultiplier = rulerUnit === 'in' ? 96 : rulerUnit === 'cm' ? 37.795 : 1; // Approximate pixels per unit
-      const pixelsPerUnit = unitMultiplier * zoom;
-
-      // Determine tick intervals
-      let tickInterval = pixelsPerUnit;
-      let subdivisions = 10;
-
-      if (rulerUnit === 'in') subdivisions = 8;
-
-      while (tickInterval < 50) {
-        tickInterval *= 2;
-        subdivisions = rulerUnit === 'in' ? 8 : 10;
-      }
-
-      const majorTickStep = tickInterval / zoom;
-      const subTickStep = majorTickStep / subdivisions;
-
-      const viewportSize = isVertical ? height : width;
-
-      // Calculate zero point relative to canvas element
-      // offset is centered, viewport is centered.
-      // The canvas offset needs to be mapped to screen coordinates.
-
-      const docDim = isVertical ? documentSize.h : documentSize.w;
-
-      // Offset applied to document center
-      const centerOffset = isVertical ? canvasOffset.y : canvasOffset.x;
-
-      // Start of document in screen space:
-      // Viewport center is at viewportSize / 2
-      // Document is centered there, plus centerOffset.
-      const docStartScreen = (viewportSize / 2) + centerOffset - (docDim * zoom / 2);
-
-      // Start calculating ticks slightly before the visible area
-      const startDocPos = -docStartScreen / zoom;
-      const endDocPos = (viewportSize - docStartScreen) / zoom;
-
-      const startMajor = Math.floor(startDocPos / majorTickStep) * majorTickStep;
-
-      for (let pos = startMajor; pos <= endDocPos; pos += subTickStep) {
-        // Document position scaled by 2 (matching the rest of the app)
-        const screenPos = docStartScreen + (pos * zoom);
-
-        if (screenPos < 0 || screenPos > viewportSize) continue;
-
-        const isMajor = Math.abs(pos % majorTickStep) < 0.01;
-        const tickLength = isMajor ? (isVertical ? width : height) : (isVertical ? width * 0.4 : height * 0.4);
-
-        if (isVertical) {
-          ctx.moveTo(width - tickLength, screenPos);
-          ctx.lineTo(width, screenPos);
-        } else {
-          ctx.moveTo(screenPos, height - tickLength);
-          ctx.lineTo(screenPos, height);
-        }
-
-        if (isMajor) {
-          const valStr = Math.round(pos / unitMultiplier).toString();
-          if (isVertical) {
-             ctx.save();
-             ctx.translate(width - 10, screenPos);
-             ctx.rotate(-Math.PI / 2);
-             ctx.fillText(valStr, 0, 0);
-             ctx.restore();
-          } else {
-             ctx.fillText(valStr, screenPos + 2, 8);
-          }
-        }
-      }
-      ctx.stroke();
-    };
-
     const handleResize = () => {
-      if (topRulerRef.current && topRulerRef.current.parentElement) {
-        topRulerRef.current.width = topRulerRef.current.parentElement.clientWidth;
-        topRulerRef.current.height = 20;
-        drawRuler(topRulerRef.current, false);
-      }
-      if (leftRulerRef.current && leftRulerRef.current.parentElement) {
-        leftRulerRef.current.width = 20;
-        leftRulerRef.current.height = leftRulerRef.current.parentElement.clientHeight;
-        drawRuler(leftRulerRef.current, true);
+      if (containerRef.current) {
+        const parent = containerRef.current.parentElement;
+        if (parent) {
+          setViewportWidth(parent.clientWidth);
+          setViewportHeight(parent.clientHeight);
+        }
       }
     };
 
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [showRulers, rulerUnit, zoom, canvasOffset, documentSize]);
+  }, [showRulers]);
+
+  useEffect(() => {
+    if (topGuidesRef.current) topGuidesRef.current.resize();
+    if (leftGuidesRef.current) leftGuidesRef.current.resize();
+  }, [zoom, canvasOffset, documentSize, rulerUnit, viewportWidth, viewportHeight]);
 
   if (!showRulers) return null;
 
+  const { calculatedZoom, unit, segment } = getRulerSettings(rulerUnit, zoom);
+
+  // docStartScreen calculation:
+  // Relative to top ruler container, document starts at docStartScreenX - 20
+  const docStartScreenX = (viewportWidth / 2) + (canvasOffset.x * zoom) - (documentSize.w * zoom / 2);
+  const docStartScreenY = (viewportHeight / 2) + (canvasOffset.y * zoom) - (documentSize.h * zoom / 2);
+
+  const horizontalScrollPos = -(docStartScreenX - 20) / calculatedZoom;
+  const verticalScrollPos = -(docStartScreenY - 20) / calculatedZoom;
+
+  const textFormat = (val: number) => {
+    const rounded = Math.round(val * 10000) / 10000;
+    return rounded.toString();
+  };
+
   return (
-    <>
-      <div style={{ position: 'absolute', top: 0, left: 20, right: 0, height: 20, zIndex: 1000, pointerEvents: 'none' }}>
-        <canvas ref={topRulerRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+    <div ref={containerRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1000 }}>
+      {/* Top Ruler Container */}
+      <div style={{ position: 'absolute', top: 0, left: 40, right: 0, height: 40, pointerEvents: 'auto' }}>
+        <Guides
+          ref={topGuidesRef}
+          type="horizontal"
+          useResizeObserver={true}
+          zoom={calculatedZoom}
+          unit={unit}
+          segment={segment}
+          scrollPos={horizontalScrollPos}
+          backgroundColor="#2c2c2c"
+          lineColor="#555"
+          textColor="#b0b0b0"
+          showGuides={showGuides}
+          textFormat={textFormat}
+          displayDragPos={true}
+          displayGuidePos={true}
+          guideStyle={{ backgroundColor: '#00ffff' }}
+          dragGuideStyle={{ backgroundColor: '#00ffff' }}
+          style={{ width: '100%', height: '100%' }}
+        />
       </div>
-      <div style={{ position: 'absolute', top: 20, left: 0, bottom: 0, width: 20, zIndex: 1000, pointerEvents: 'none' }}>
-        <canvas ref={leftRulerRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+
+      {/* Left Ruler Container */}
+      <div style={{ position: 'absolute', top: 40, left: 0, bottom: 0, width: 40, pointerEvents: 'auto' }}>
+        <Guides
+          ref={leftGuidesRef}
+          type="vertical"
+          useResizeObserver={true}
+          zoom={calculatedZoom}
+          unit={unit}
+          segment={segment}
+          scrollPos={verticalScrollPos}
+          backgroundColor="#2c2c2c"
+          lineColor="#555"
+          textColor="#b0b0b0"
+          showGuides={showGuides}
+          textFormat={textFormat}
+          displayDragPos={true}
+          displayGuidePos={true}
+          guideStyle={{ backgroundColor: '#00ffff' }}
+          dragGuideStyle={{ backgroundColor: '#00ffff' }}
+          style={{ width: '100%', height: '100%' }}
+        />
       </div>
-      <div style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, background: '#2c2c2c', zIndex: 1001, borderRight: '1px solid #555', borderBottom: '1px solid #555', boxSizing: 'border-box' }} />
-    </>
+
+      {/* Corner Intersection Box */}
+      <div
+        onClick={() => {
+          const units: ('px' | 'in' | 'cm')[] = ['px', 'in', 'cm'];
+          const nextIndex = (units.indexOf(rulerUnit) + 1) % units.length;
+          useStore.getState().setRulerUnit(units[nextIndex]);
+        }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: 40,
+          height: 40,
+          background: '#2c2c2c',
+          zIndex: 1001,
+          borderRight: '1px solid #555',
+          borderBottom: '1px solid #555',
+          boxSizing: 'border-box',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#b0b0b0',
+          fontSize: '11px',
+          fontWeight: 'bold',
+          userSelect: 'none',
+          pointerEvents: 'auto'
+        }}
+        title="Click to toggle ruler units"
+      >
+        {rulerUnit}
+      </div>
+    </div>
   );
 };

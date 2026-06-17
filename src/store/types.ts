@@ -259,6 +259,8 @@ export interface EditorState extends DocumentSpecificState {
   isSignatureDialogOpen: boolean;
   mobileCapturedImage: string | null;
   rulerUnit: 'px' | 'in' | 'cm';
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | null) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
   setShowRulers: (show: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
