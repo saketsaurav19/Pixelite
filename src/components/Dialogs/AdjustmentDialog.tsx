@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import { loadImage, applyPixiAdjustments } from '../../utils/pixiUtils';
 import * as LucideIcons from 'lucide-react';
@@ -30,6 +30,20 @@ export const AdjustmentDialog: React.FC = () => {
   const [lightness, setLightness] = useState(0);
   const [effect, setEffect] = useState<'sepia' | 'vintage' | 'polaroid' | 'technicolor' | 'lsd' | 'kodachrome' | 'brownie' | 'night' | 'negative' | 'predator' | 'none'>('none');
 
+  // Refs for debouncing and preventing concurrent calls
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isApplyingRef = useRef(false);
+  const pendingSettingsRef = useRef<Parameters<typeof applyPixiAdjustments>[1] | null>(null);
+  const isClosingRef = useRef(false);
+
+  // Use refs for slider values to avoid re-registering keyboard handlers
+  const sliderValuesRef = useRef({ brightness: 0, contrast: 0, hue: 0, saturation: 0, lightness: 0, effect: 'none' as typeof effect });
+
+  // Keep sliderValuesRef in sync with state
+  useEffect(() => {
+    sliderValuesRef.current = { brightness, contrast, hue, saturation, lightness, effect };
+  }, [brightness, contrast, hue, saturation, lightness, effect]);
+
   // Load the layer's image once when modal opens
   useEffect(() => {
     if (activeAdjustmentModal) {
@@ -60,6 +74,7 @@ export const AdjustmentDialog: React.FC = () => {
       if (dataUrl) {
         originalDataUrlRef.current = dataUrl;
         activeLayerIdRef.current = currentLayer.id;
+        isClosingRef.current = false;
         setIsLoaded(false);
 
         // Reset values
@@ -69,6 +84,7 @@ export const AdjustmentDialog: React.FC = () => {
         setSaturation(0);
         setLightness(0);
         setEffect('none');
+        sliderValuesRef.current = { brightness: 0, contrast: 0, hue: 0, saturation: 0, lightness: 0, effect: 'none' };
 
         loadImage(dataUrl)
           .then((img) => {
@@ -86,94 +102,181 @@ export const AdjustmentDialog: React.FC = () => {
     }
 
     return () => {
+      // Clear any pending debounce
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = null;
+      }
       originalImageRef.current = null;
     };
   }, [activeAdjustmentModal]);
 
   // Handle keyboard listener for Escape/Enter keys
+  // Uses refs to avoid re-registering on every slider change
   useEffect(() => {
+    if (!activeAdjustmentModal) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!activeAdjustmentModal) return;
       if (e.key === 'Escape') {
-        handleCancel();
+        handleCancelRef.current();
       } else if (e.key === 'Enter') {
-        handleOK();
+        handleOKRef.current();
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeAdjustmentModal, brightness, contrast, hue, saturation, lightness, effect]);
+  }, [activeAdjustmentModal]);
 
-  if (!activeAdjustmentModal) return null;
+  // Use refs for handlers to avoid stale closures in keyboard listener
+  const handleCancelRef = useRef(() => {});
+  const handleOKRef = useRef(() => {});
 
-  const handleCancel = () => {
+  handleCancelRef.current = () => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    // Clear any pending debounce
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+
     if (originalDataUrlRef.current && activeLayerIdRef.current) {
       updateLayer(activeLayerIdRef.current, { dataUrl: originalDataUrlRef.current });
     }
     setActiveAdjustmentModal(null);
   };
 
-  const handleOK = () => {
+  handleOKRef.current = () => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    // Clear any pending debounce and flush immediately
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+      debounceTimeoutRef.current = null;
+    }
+    // Apply any pending settings immediately before closing
+    if (pendingSettingsRef.current) {
+      flushPendingPreview();
+    }
+
     let actionName = 'Adjustment';
     if (activeAdjustmentModal === 'brightness_contrast') actionName = 'Brightness/Contrast';
     else if (activeAdjustmentModal === 'hue_saturation') actionName = 'Hue/Saturation';
     else if (activeAdjustmentModal === 'black_white') actionName = 'Black & White';
-    else if (activeAdjustmentModal === 'photo_effects') actionName = `Photo Effect: ${effect}`;
+    else if (activeAdjustmentModal === 'photo_effects') actionName = `Photo Effect: ${sliderValuesRef.current.effect}`;
 
     recordHistory(actionName);
     setActiveAdjustmentModal(null);
   };
 
-  const applyPreview = async (currentSettings: {
-    brightness?: number;
-    contrast?: number;
-    hue?: number;
-    saturation?: number;
-    lightness?: number;
-    greyscale?: boolean;
-    effect?: any;
-  }) => {
+  const handleCancel = () => handleCancelRef.current();
+  const handleOK = () => handleOKRef.current();
+
+  // Debounced preview application
+  const applyPreviewDebounced = useCallback((settings: Parameters<typeof applyPixiAdjustments>[1]) => {
+    // Store the most recent settings
+    pendingSettingsRef.current = settings;
+
+    // Clear existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set new timeout - 80ms debounce for smooth but responsive UX
+    debounceTimeoutRef.current = setTimeout(() => {
+      flushPendingPreview();
+    }, 80);
+  }, []);
+
+  // Immediately flush any pending preview
+  const flushPendingPreview = useCallback(async () => {
+    if (isApplyingRef.current) {
+      // If currently applying, retry after a short delay
+      setTimeout(() => flushPendingPreview(), 50);
+      return;
+    }
+
+    const settings = pendingSettingsRef.current;
+    if (!settings) return;
+    pendingSettingsRef.current = null;
+
+    const originalImage = originalImageRef.current;
+    const layerId = activeLayerIdRef.current;
+    if (!originalImage || !layerId) return;
+
+    isApplyingRef.current = true;
+    try {
+      const resultDataUrl = await applyPixiAdjustments(originalImage, settings);
+      // Only update if dialog hasn't been closed
+      if (!isClosingRef.current && activeLayerIdRef.current === layerId) {
+        updateLayer(layerId, { dataUrl: resultDataUrl });
+      }
+    } catch (err) {
+      console.error('Failed to apply adjustment preview:', err);
+    } finally {
+      isApplyingRef.current = false;
+    }
+  }, [updateLayer]);
+
+  // Non-debounced direct apply (for immediate effects like B&W on load)
+  const applyPreview = useCallback(async (settings: Parameters<typeof applyPixiAdjustments>[1]) => {
     const originalImage = originalImageRef.current;
     const layerId = activeLayerIdRef.current;
     if (!originalImage || !layerId) return;
 
     try {
-      const resultDataUrl = await applyPixiAdjustments(originalImage, currentSettings);
-      updateLayer(layerId, { dataUrl: resultDataUrl });
+      const resultDataUrl = await applyPixiAdjustments(originalImage, settings);
+      if (!isClosingRef.current) {
+        updateLayer(layerId, { dataUrl: resultDataUrl });
+      }
     } catch (err) {
       console.error('Failed to apply adjustment preview:', err);
     }
-  };
+  }, [updateLayer]);
 
+  // Slider handlers with debounced preview
   const handleBrightnessChange = (val: number) => {
     setBrightness(val);
-    applyPreview({ brightness: val, contrast });
+    const { contrast } = sliderValuesRef.current;
+    applyPreviewDebounced({ brightness: val, contrast });
   };
 
   const handleContrastChange = (val: number) => {
     setContrast(val);
-    applyPreview({ brightness, contrast: val });
+    const { brightness } = sliderValuesRef.current;
+    applyPreviewDebounced({ brightness, contrast: val });
   };
 
   const handleHueChange = (val: number) => {
     setHue(val);
-    applyPreview({ hue: val, saturation, lightness });
+    const { saturation, lightness } = sliderValuesRef.current;
+    applyPreviewDebounced({ hue: val, saturation, lightness });
   };
 
   const handleSaturationChange = (val: number) => {
     setSaturation(val);
-    applyPreview({ hue, saturation: val, lightness });
+    const { hue, lightness } = sliderValuesRef.current;
+    applyPreviewDebounced({ hue, saturation: val, lightness });
   };
 
   const handleLightnessChange = (val: number) => {
     setLightness(val);
-    applyPreview({ hue, saturation, lightness: val });
+    const { hue, saturation } = sliderValuesRef.current;
+    applyPreviewDebounced({ hue, saturation, lightness: val });
   };
 
   const handleEffectChange = (eff: typeof effect) => {
     setEffect(eff);
-    applyPreview({ effect: eff });
+    // FIX: Preserve all current slider values when changing effects
+    const { brightness, contrast, hue, saturation, lightness } = sliderValuesRef.current;
+    applyPreviewDebounced({ brightness, contrast, hue, saturation, lightness, effect: eff });
   };
+
+  if (!activeAdjustmentModal) return null;
 
   if (!activeLayer || !activeLayer.dataUrl) {
     return (
