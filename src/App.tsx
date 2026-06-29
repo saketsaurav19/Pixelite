@@ -38,7 +38,7 @@ const BACKGROUND_REMOVAL_REMOTE_PUBLIC_PATH =
   'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
 
 const getBackgroundRemovalLocalPublicPath = () =>
-  new URL('models/', window.location.href).toString();
+  new URL(`${import.meta.env.BASE_URL}models/`, window.location.origin).toString();
 
 const createBackgroundRemovalConfig = (publicPath?: string) => ({
   ...(publicPath ? { publicPath } : {}),
