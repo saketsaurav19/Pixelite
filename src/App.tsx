@@ -34,6 +34,21 @@ import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
 
+const BACKGROUND_REMOVAL_REMOTE_PUBLIC_PATH =
+  'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
+
+const getBackgroundRemovalLocalPublicPath = () =>
+  new URL(`${import.meta.env.BASE_URL}models/`, window.location.origin).toString();
+
+const createBackgroundRemovalConfig = (publicPath?: string) => ({
+  ...(publicPath ? { publicPath } : {}),
+  output: { format: 'image/png' as const, quality: 0.92 },
+  // The WebGPU backend can be unavailable even when the browser exposes a
+  // GPU adapter (for example, when the required ONNX WebGPU bundle is not
+  // present). Use WASM/CPU so background removal works reliably everywhere.
+  device: 'cpu' as const
+});
+
 
 const CheckerboardIcon = () => (
   <svg width="11" height="11" viewBox="0 0 12 12" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
@@ -1079,17 +1094,16 @@ const App: React.FC = () => {
 
       let outputBlob: Blob;
       try {
-        outputBlob = await removeBackground(inputBlob, {
-          publicPath: `${window.location.origin}${import.meta.env.BASE_URL}models/`,
-          output: { format: 'image/png', quality: 0.92 },
-          device: 'gpu'
-        });
+        outputBlob = await removeBackground(
+          inputBlob,
+          createBackgroundRemovalConfig(getBackgroundRemovalLocalPublicPath())
+        );
       } catch (localError) {
         console.warn('Failed to load local background removal models, falling back to remote source:', localError);
-        outputBlob = await removeBackground(inputBlob, {
-          output: { format: 'image/png', quality: 0.92 },
-          device: 'gpu'
-        });
+        outputBlob = await removeBackground(
+          inputBlob,
+          createBackgroundRemovalConfig(BACKGROUND_REMOVAL_REMOTE_PUBLIC_PATH)
+        );
       }
 
       // Helper to convert blob to data URL
