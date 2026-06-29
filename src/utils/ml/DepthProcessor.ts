@@ -6,8 +6,8 @@ export class DepthProcessor {
   private readonly inputWidth = 256;
   private readonly inputHeight = 256;
   private modelUrls: string[] = [
-    '/models/midas-official.onnx',
-    '/models/midas-v21-small.onnx'
+    `${window.location.origin}${import.meta.env.BASE_URL}models/midas-official.onnx`,
+    `${window.location.origin}${import.meta.env.BASE_URL}models/midas-v21-small.onnx`
   ];
 
   async init() {

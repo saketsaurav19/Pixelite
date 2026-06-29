@@ -1080,7 +1080,7 @@ const App: React.FC = () => {
       let outputBlob: Blob;
       try {
         outputBlob = await removeBackground(inputBlob, {
-          publicPath: '/models/',
+          publicPath: `${window.location.origin}${import.meta.env.BASE_URL}models/`,
           output: { format: 'image/png', quality: 0.92 },
           device: 'gpu'
         });

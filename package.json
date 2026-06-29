@@ -26,7 +26,7 @@
     "localforage": "^1.10.0",
     "lucide-react": "^1.11.0",
     "nanoid": "^5.1.9",
-    "onnxruntime-web": "^1.21.0",
+    "onnxruntime-web": "1.21.0",
     "pdfjs-dist": "^6.0.227",
     "piexifjs": "^1.0.6",
     "pixi.js": "^8.19.0",
