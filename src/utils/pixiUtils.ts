@@ -1,4 +1,4 @@
-import { Application, Sprite, ColorMatrixFilter, Texture, Container } from 'pixi.js';
+import { Application, Sprite, ColorMatrixFilter, Texture } from 'pixi.js';
 
 let sharedApp: Application | null = null;
 let initPromise: Promise<Application> | null = null;
@@ -76,16 +76,10 @@ export async function applyPixiAdjustments(
 
   // Destroy previous sprites/textures from the old children to prevent memory leaks
   previousChildren.forEach((child) => {
-    if (child instanceof Sprite) {
-      if (child.texture) {
-        child.texture.destroy(true);
-      }
-      child.destroy({ children: true });
-    } else if (child instanceof Container) {
-      child.destroy({ children: true });
-    } else {
-      child.destroy();
+    if (child instanceof Sprite && child.texture) {
+      child.texture.destroy(true);
     }
+    child.destroy({ children: true });
   });
 
   // Create texture and sprite
