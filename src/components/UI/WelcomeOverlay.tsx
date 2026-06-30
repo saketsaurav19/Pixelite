@@ -199,7 +199,7 @@ export const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ onOpenImage }) =
         animate={{ opacity: 1 }}
         transition={{ delay: 1 }}
       >
-        <p>Pixelite v0.8.0 • High-Performance Web Editor</p>
+        <p>Pixelite v{__APP_VERSION__} • High-Performance Web Editor</p>
       </motion.div>
     </motion.div>
   );
