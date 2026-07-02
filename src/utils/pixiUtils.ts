@@ -13,7 +13,6 @@ export async function getSharedApp(): Promise<Application> {
       width: 100,
       height: 100,
       backgroundAlpha: 0,
-      manageImports: false,
     });
     sharedApp = app;
     return app;
@@ -54,7 +53,7 @@ export interface AdjustmentSettings {
  * - Caller should implement debouncing/concurrency guards for best performance
  */
 export async function applyPixiAdjustments(
-  imageElement: HTMLImageElement,
+  imageElement: HTMLImageElement | HTMLCanvasElement,
   settings: AdjustmentSettings
 ): Promise<string> {
   // Validate input

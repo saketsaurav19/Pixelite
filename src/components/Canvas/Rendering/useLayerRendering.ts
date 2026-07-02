@@ -1,21 +1,26 @@
 import { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import type { CanvasRefs } from '../types';
+import { useStore } from '../../../store/useStore';
+import { applyPixiAdjustments } from '../../../utils/pixiUtils';
+import { flattenTree } from '../../../utils/layerUtils';
 
 const renderLayer = (
   layer: Layer,
   documentSize: { w: number; h: number },
   canvasRefs: CanvasRefs,
   isInteracting: boolean,
-  activeLayerId: string | null
+  activeLayerId: string | null,
+  activeAdjustmentModal: string | null,
+  allLayers: Layer[]
 ): void => {
   // Skip re-rendering the active layer if we are currently interacting with it
   if (isInteracting && layer.id === activeLayerId) return;
 
-  // If it's a group, recursively render children
+  // If it's a group, recursively render children in bottom-to-top order
   if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
-    layer.children.forEach(child => {
-      renderLayer(child, documentSize, canvasRefs, isInteracting, activeLayerId);
+    [...layer.children].reverse().forEach(child => {
+      renderLayer(child, documentSize, canvasRefs, isInteracting, activeLayerId, activeAdjustmentModal, allLayers);
     });
     return;
   }
@@ -23,6 +28,64 @@ const renderLayer = (
   const canvas = canvasRefs.current[layer.id];
   const ctx = canvas?.getContext('2d', { willReadFrequently: true });
   if (!ctx || !canvas) return;
+
+  if (layer.type === 'adjustment') {
+    // If we are currently interacting with/editing this adjustment layer, let AdjustmentDialog handle it (via dataUrl)
+    if (activeAdjustmentModal && activeLayerId === layer.id) {
+      if (layer.dataUrl) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+        };
+        img.src = layer.dataUrl;
+      }
+      return;
+    }
+
+    // Otherwise, dynamically render the adjustment layer
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = documentSize.w;
+    tempCanvas.height = documentSize.h;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    const flat = flattenTree(allLayers);
+    const adjIdx = flat.findIndex(l => l.id === layer.id);
+    if (adjIdx !== -1) {
+      // Draw visible layers below bottom-up
+      for (let k = flat.length - 1; k > adjIdx; k--) {
+        const l = flat[k];
+        if (!l.visible || l.type === 'group' || l.type === 'artboard') continue;
+
+        const lCanvas = canvasRefs.current[l.id];
+        if (lCanvas) {
+          tempCtx.save();
+          tempCtx.globalAlpha = l.opacity ?? 1;
+          const lx = l.position?.x || 0;
+          const ly = l.position?.y || 0;
+          tempCtx.drawImage(lCanvas, lx, ly);
+          tempCtx.restore();
+        }
+      }
+    }
+
+    if (layer.adjustmentData?.settings) {
+      applyPixiAdjustments(tempCanvas, layer.adjustmentData.settings)
+        .then((resultDataUrl) => {
+          const img = new Image();
+          img.onload = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+          };
+          img.src = resultDataUrl;
+        })
+        .catch((err) => {
+          console.error('Failed to render adjustment layer:', err);
+        });
+    }
+    return;
+  }
 
   if (layer.dataUrl) {
     const img = new Image();
@@ -150,9 +213,13 @@ export const useLayerRendering = (
   isInteracting: boolean,
   activeLayerId: string | null
 ) => {
+  const activeAdjustmentModal = useStore((state) => state.activeAdjustmentModal);
+
   useEffect(() => {
-    layers.forEach(layer => {
-      renderLayer(layer, documentSize, canvasRefs, isInteracting, activeLayerId);
+    // Render bottom-to-top so adjustment layers composite correctly
+    const reversedLayers = [...layers].reverse();
+    reversedLayers.forEach(layer => {
+      renderLayer(layer, documentSize, canvasRefs, isInteracting, activeLayerId, activeAdjustmentModal, layers);
     });
-  }, [layers, documentSize, isInteracting, activeLayerId]);
+  }, [layers, documentSize, isInteracting, activeLayerId, activeAdjustmentModal]);
 };

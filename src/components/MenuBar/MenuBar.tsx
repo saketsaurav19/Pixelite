@@ -108,7 +108,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const visiblePanels = useStore((s) => s.visiblePanels);
   const togglePanel = useStore((s) => s.togglePanel);
-  const setActiveAdjustmentModal = useStore((s) => s.setActiveAdjustmentModal);
+  const addAdjustmentLayer = useStore((s) => s.addAdjustmentLayer);
 
 
   useEffect(() => {
@@ -272,16 +272,16 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Adjustments',
           subItems: [
-            { label: 'Brightness/Contrast...', action: () => setActiveAdjustmentModal('brightness_contrast') },
+            { label: 'Brightness/Contrast...', action: () => addAdjustmentLayer('brightness_contrast') },
             { label: 'Levels...', shortcut: 'Ctrl+L' },
             { label: 'Curves...', shortcut: 'Ctrl+M' },
             { label: 'Exposure...' },
             { divider: true },
             { label: 'Vibrance...' },
-            { label: 'Hue/Saturation...', shortcut: 'Ctrl+U', action: () => setActiveAdjustmentModal('hue_saturation') },
+            { label: 'Hue/Saturation...', shortcut: 'Ctrl+U', action: () => addAdjustmentLayer('hue_saturation') },
             { label: 'Color Balance...', shortcut: 'Ctrl+B' },
-            { label: 'Black & White...', shortcut: 'Alt+Shift+Ctrl+B', action: () => setActiveAdjustmentModal('black_white') },
-            { label: 'Photo Filter...', action: () => setActiveAdjustmentModal('photo_effects') },
+            { label: 'Black & White...', shortcut: 'Alt+Shift+Ctrl+B', action: () => addAdjustmentLayer('black_white') },
+            { label: 'Photo Filter...', action: () => addAdjustmentLayer('photo_effects') },
             { label: 'Channel Mixer...' },
             { label: 'Color Lookup...' },
             { divider: true },

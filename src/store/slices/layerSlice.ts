@@ -2,7 +2,7 @@
 import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { EditorState, Layer } from '../types';
-import { findLayerById, removeNode, insertNode, updateNode, flattenTree, moveNode, reorderNodes } from '../../utils/layerUtils';
+import { findLayerById, findParentNode, removeNode, insertNode, updateNode, flattenTree, moveNode, reorderNodes } from '../../utils/layerUtils';
 
 export interface LayerSlice {
   layers: Layer[];
@@ -21,6 +21,7 @@ export interface LayerSlice {
   mergeLayers: (ids: string[]) => void;
   flattenImage: () => void;
   rasterizeLayer: (id: string) => void;
+  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects') => void;
 }
 
 export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set) => ({
@@ -144,4 +145,66 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
   rasterizeLayer: (id) => set((state) => ({
     layers: updateNode(state.layers, id, { type: 'paint' })
   })),
+
+  addAdjustmentLayer: (type) => set((state) => {
+    let name = 'Adjustment Layer';
+    let defaultSettings: any = {};
+    if (type === 'brightness_contrast') {
+      name = 'Brightness/Contrast';
+      defaultSettings = { brightness: 0, contrast: 0 };
+    } else if (type === 'hue_saturation') {
+      name = 'Hue/Saturation';
+      defaultSettings = { hue: 0, saturation: 0, lightness: 0 };
+    } else if (type === 'black_white') {
+      name = 'Black & White';
+      defaultSettings = { greyscale: true };
+    } else if (type === 'photo_effects') {
+      name = 'Photo Effects';
+      defaultSettings = { effect: 'none' };
+    }
+
+    const count = flattenTree(state.layers).filter(l => l.type === 'adjustment' && l.adjustmentData?.type === type).length + 1;
+
+    const newLayer: Layer = {
+      id: nanoid(),
+      name: `${name} ${count}`,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      type: 'adjustment',
+      position: { x: 0, y: 0 },
+      blendMode: 'source-over',
+      isNew: true,
+      adjustmentData: {
+        type,
+        settings: defaultSettings
+      }
+    } as Layer;
+
+    let newLayers = [...state.layers];
+    if (state.activeLayerId) {
+      const parent = findParentNode(state.layers, state.activeLayerId);
+      if (parent && parent.children) {
+        const activeIdx = parent.children.findIndex(c => c.id === state.activeLayerId);
+        const updatedChildren = [...parent.children];
+        updatedChildren.splice(activeIdx, 0, newLayer);
+        newLayers = updateNode(state.layers, parent.id, { children: updatedChildren });
+      } else {
+        const activeIdx = state.layers.findIndex(l => l.id === state.activeLayerId);
+        if (activeIdx !== -1) {
+          newLayers.splice(activeIdx, 0, newLayer);
+        } else {
+          newLayers = [newLayer, ...newLayers];
+        }
+      }
+    } else {
+      newLayers = [newLayer, ...newLayers];
+    }
+
+    return {
+      layers: newLayers,
+      activeLayerId: newLayer.id,
+      activeAdjustmentModal: type
+    };
+  }),
 });

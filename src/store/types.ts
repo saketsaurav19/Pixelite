@@ -35,7 +35,7 @@ export interface BaseLayer {
   opacity: number;
   fill?: number;
   dataUrl?: string;
-  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard' | 'table';
+  type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard' | 'table' | 'adjustment';
   blendMode: BlendMode;
   position?: { x: number; y: number };
 }
@@ -57,11 +57,24 @@ export interface AnnotationData {
 }
 
 export type Layer = BaseLayer & {
-  type: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'artboard' | 'table';
+  type: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'artboard' | 'table' | 'adjustment';
   width?: number;
   height?: number;
   children?: Layer[];
   collapsed?: boolean;
+  isNew?: boolean;
+  adjustmentData?: {
+    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects';
+    settings: {
+      brightness?: number;
+      contrast?: number;
+      hue?: number;
+      saturation?: number;
+      lightness?: number;
+      effect?: 'sepia' | 'vintage' | 'polaroid' | 'technicolor' | 'lsd' | 'kodachrome' | 'brownie' | 'night' | 'negative' | 'predator' | 'none';
+      greyscale?: boolean;
+    };
+  };
 
   // Artboard properties
   backgroundColor?: string;

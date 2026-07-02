@@ -223,10 +223,9 @@ body {
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  overflow: visible;
-  /* Allow color picker popover to show */
   position: relative;
   z-index: 1001;
+  height: 100%;
 }
 
 .tools-container {
@@ -487,8 +486,8 @@ body {
   display: flex;
   flex-direction: column;
   border-bottom: 1px solid var(--border-color);
-  flex: 1;
   overflow: scroll;
+  flex: 1;
 }
 
 .history-panel {
@@ -1588,7 +1587,7 @@ body {
     position: relative;
     bottom: auto;
     left: auto;
-    height: auto;
+    height: 100%;
     width: auto;
     border-radius: 0;
     box-shadow: none;
@@ -1827,12 +1826,12 @@ body {
 }
 
 /* DOCK PANEL and TABS */
-.dock-panel {
+/* .dock-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-}
+} */
 
 .dock-tabs {
   display: flex;
@@ -1873,12 +1872,7 @@ body {
 }
 
 .top-dock {
-  flex: 0 0 auto;
   max-height: 10rem;
-}
-
-.adjustments-dock {
-  flex: 0 0 auto;
 }
 
 .bottom-dock {

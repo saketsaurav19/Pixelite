@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import { loadImage, applyPixiAdjustments } from '../../utils/pixiUtils';
+import { flattenTree } from '../../utils/layerUtils';
 import * as LucideIcons from 'lucide-react';
 import { motion, useDragControls } from 'framer-motion';
 import './Dialogs.css';
@@ -20,6 +21,7 @@ export const AdjustmentDialog: React.FC = () => {
   const originalDataUrlRef = useRef<string | null>(null);
   const activeLayerIdRef = useRef<string | null>(null);
   const originalImageRef = useRef<HTMLImageElement | null>(null);
+  const originalSettingsRef = useRef<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Slider / selection states
@@ -53,6 +55,34 @@ export const AdjustmentDialog: React.FC = () => {
 
       let dataUrl = currentLayer.dataUrl;
 
+      if (currentLayer.type === 'adjustment') {
+        // Construct composite of all visible layers below it
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = state.documentSize.w;
+        tempCanvas.height = state.documentSize.h;
+        const tempCtx = tempCanvas.getContext('2d');
+        if (tempCtx) {
+          const flat = flattenTree(state.layers);
+          const adjIdx = flat.findIndex(l => l.id === currentLayer.id);
+          if (adjIdx !== -1) {
+            for (let k = flat.length - 1; k > adjIdx; k--) {
+              const l = flat[k];
+              if (!l.visible || l.type === 'group' || l.type === 'artboard') continue;
+              const lCanvas = document.querySelector(`canvas[data-layer-id="${l.id}"]`) as HTMLCanvasElement;
+              if (lCanvas) {
+                tempCtx.save();
+                tempCtx.globalAlpha = l.opacity ?? 1;
+                const lx = l.position?.x || 0;
+                const ly = l.position?.y || 0;
+                tempCtx.drawImage(lCanvas, lx, ly);
+                tempCtx.restore();
+              }
+            }
+          }
+        }
+        dataUrl = tempCanvas.toDataURL();
+      }
+
       // If it's a paint layer and doesn't have a dataUrl, initialize it
       if (!dataUrl && currentLayer.type === 'paint') {
         const tempCanvas = document.createElement('canvas');
@@ -72,26 +102,46 @@ export const AdjustmentDialog: React.FC = () => {
       }
 
       if (dataUrl) {
-        originalDataUrlRef.current = dataUrl;
+        originalDataUrlRef.current = currentLayer.dataUrl || null;
         activeLayerIdRef.current = currentLayer.id;
         isClosingRef.current = false;
         setIsLoaded(false);
 
-        // Reset values
-        setBrightness(0);
-        setContrast(0);
-        setHue(0);
-        setSaturation(0);
-        setLightness(0);
-        setEffect('none');
-        sliderValuesRef.current = { brightness: 0, contrast: 0, hue: 0, saturation: 0, lightness: 0, effect: 'none' };
+        // Load settings if adjustment layer, otherwise reset
+        if (currentLayer.type === 'adjustment' && currentLayer.adjustmentData) {
+          const settings = currentLayer.adjustmentData.settings;
+          setBrightness(settings.brightness ?? 0);
+          setContrast(settings.contrast ?? 0);
+          setHue(settings.hue ?? 0);
+          setSaturation(settings.saturation ?? 0);
+          setLightness(settings.lightness ?? 0);
+          setEffect(settings.effect ?? 'none');
+          sliderValuesRef.current = {
+            brightness: settings.brightness ?? 0,
+            contrast: settings.contrast ?? 0,
+            hue: settings.hue ?? 0,
+            saturation: settings.saturation ?? 0,
+            lightness: settings.lightness ?? 0,
+            effect: settings.effect ?? 'none',
+          };
+          originalSettingsRef.current = { ...settings };
+        } else {
+          setBrightness(0);
+          setContrast(0);
+          setHue(0);
+          setSaturation(0);
+          setLightness(0);
+          setEffect('none');
+          sliderValuesRef.current = { brightness: 0, contrast: 0, hue: 0, saturation: 0, lightness: 0, effect: 'none' };
+          originalSettingsRef.current = null;
+        }
 
         loadImage(dataUrl)
           .then((img) => {
             originalImageRef.current = img;
             setIsLoaded(true);
             // For Black & White, apply immediately on load
-            if (activeAdjustmentModal === 'black_white') {
+            if (activeAdjustmentModal === 'black_white' && currentLayer.type !== 'adjustment') {
               applyPreview({ greyscale: true });
             }
           })
@@ -143,8 +193,25 @@ export const AdjustmentDialog: React.FC = () => {
       debounceTimeoutRef.current = null;
     }
 
-    if (originalDataUrlRef.current && activeLayerIdRef.current) {
-      updateLayer(activeLayerIdRef.current, { dataUrl: originalDataUrlRef.current });
+    const state = useStore.getState();
+    const currentLayer = state.layers.find((l: any) => l.id === state.activeLayerId);
+
+    if (currentLayer && currentLayer.type === 'adjustment') {
+      if (currentLayer.isNew) {
+        state.removeLayer(currentLayer.id);
+      } else if (originalSettingsRef.current) {
+        updateLayer(currentLayer.id, {
+          adjustmentData: {
+            type: currentLayer.adjustmentData.type,
+            settings: originalSettingsRef.current
+          },
+          dataUrl: originalDataUrlRef.current || undefined
+        });
+      }
+    } else {
+      if (originalDataUrlRef.current && activeLayerIdRef.current) {
+        updateLayer(activeLayerIdRef.current, { dataUrl: originalDataUrlRef.current });
+      }
     }
     setActiveAdjustmentModal(null);
   };
@@ -161,6 +228,28 @@ export const AdjustmentDialog: React.FC = () => {
     // Apply any pending settings immediately before closing
     if (pendingSettingsRef.current) {
       flushPendingPreview();
+    }
+
+    const state = useStore.getState();
+    const currentLayer = state.layers.find((l: any) => l.id === state.activeLayerId);
+
+    if (currentLayer && currentLayer.type === 'adjustment') {
+      updateLayer(currentLayer.id, {
+        isNew: false,
+        dataUrl: undefined,
+        adjustmentData: {
+          type: currentLayer.adjustmentData.type,
+          settings: {
+            brightness: sliderValuesRef.current.brightness,
+            contrast: sliderValuesRef.current.contrast,
+            hue: sliderValuesRef.current.hue,
+            saturation: sliderValuesRef.current.saturation,
+            lightness: sliderValuesRef.current.lightness,
+            effect: sliderValuesRef.current.effect,
+            greyscale: activeAdjustmentModal === 'black_white' ? true : undefined
+          }
+        }
+      });
     }
 
     let actionName = 'Adjustment';
@@ -278,7 +367,7 @@ export const AdjustmentDialog: React.FC = () => {
 
   if (!activeAdjustmentModal) return null;
 
-  if (!activeLayer || !activeLayer.dataUrl) {
+  if (!activeLayer || (activeLayer.type !== 'adjustment' && !activeLayer.dataUrl)) {
     return (
       <div className="dialog-overlay" onClick={handleCancel}>
         <div className="dialog-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '30rem' }}>

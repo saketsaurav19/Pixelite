@@ -173,6 +173,9 @@ const App: React.FC = () => {
             onClick={(e) => {
               e.stopPropagation();
               setActiveLayer(layer.id);
+              if (layer.type === 'adjustment' && layer.adjustmentData) {
+                useStore.getState().setActiveAdjustmentModal(layer.adjustmentData.type);
+              }
             }}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -211,6 +214,8 @@ const App: React.FC = () => {
                 <LucideIcons.File size={16} />
               ) : layer.type === 'group' ? (
                 <LucideIcons.Folder size={16} />
+              ) : layer.type === 'adjustment' ? (
+                <LucideIcons.Sliders size={16} />
               ) : null}
             </div>
             {renamingLayerId === layer.id ? (
@@ -1885,7 +1890,7 @@ const App: React.FC = () => {
                       title={label}
                       onClick={() => {
                         if (action) {
-                          useStore.getState().setActiveAdjustmentModal(action as any);
+                          useStore.getState().addAdjustmentLayer(action as any);
                         }
                       }}
                     >
