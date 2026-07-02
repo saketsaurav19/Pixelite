@@ -25,10 +25,6 @@ dist-ssr
 node_modules/
 dist/
 
-public/models/*
-!public/models/midas-official-small.onnx
-!public/models/midas-v21-small.tflite
-
 # Agent / Debug scripts (not part of the app)
 _agents/uploads/
 
