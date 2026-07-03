@@ -519,6 +519,9 @@ const App: React.FC = () => {
   const [topDockTab, setTopDockTab] = React.useState<'history' | 'swatches'>('history');
   const [bottomDockTab, setBottomDockTab] = React.useState<'layers' | 'channels' | 'paths'>('layers');
   const [mobileActivePanel, setMobileActivePanel] = React.useState<'layers' | 'adjustments' | 'history'>('layers');
+  const [topDockCollapsed, setTopDockCollapsed] = React.useState(false);
+  const [adjustmentsCollapsed, setAdjustmentsCollapsed] = React.useState(false);
+  const [bottomDockCollapsed, setBottomDockCollapsed] = React.useState(false);
 
 
   const handleFade = () => { alert("Fade action triggered (Placeholder)"); };
@@ -1803,23 +1806,43 @@ const App: React.FC = () => {
 
           {/* TOP DOCK: History / Swatches */}
           {(visiblePanels.history || visiblePanels.swatches) && (
-            <div className="side-panel dock-panel top-dock">
-              <div className="dock-tabs">
-                {visiblePanels.history && (
-                  <button
-                    className={`dock-tab ${topDockTab === 'history' ? 'active' : ''}`}
-                    onClick={() => setTopDockTab('history')}
-                  >History</button>
-                )}
-                {visiblePanels.swatches && (
-                  <button
-                    className={`dock-tab ${topDockTab === 'swatches' ? 'active' : ''}`}
-                    onClick={() => setTopDockTab('swatches')}
-                  >Swatches</button>
-                )}
+            <div className={`side-panel dock-panel top-dock ${topDockCollapsed ? 'collapsed' : ''}`}>
+              <div className="dock-tabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex' }}>
+                  {visiblePanels.history && (
+                    <button
+                      className={`dock-tab ${topDockTab === 'history' ? 'active' : ''}`}
+                      onClick={() => { setTopDockTab('history'); setTopDockCollapsed(false); }}
+                    >History</button>
+                  )}
+                  {visiblePanels.swatches && (
+                    <button
+                      className={`dock-tab ${topDockTab === 'swatches' ? 'active' : ''}`}
+                      onClick={() => { setTopDockTab('swatches'); setTopDockCollapsed(false); }}
+                    >Swatches</button>
+                  )}
+                </div>
+                <button
+                  className="dock-collapse-btn"
+                  onClick={() => setTopDockCollapsed(!topDockCollapsed)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%'
+                  }}
+                  title={topDockCollapsed ? "Expand Panel" : "Collapse Panel"}
+                >
+                  {topDockCollapsed ? <LucideIcons.Plus size={12} /> : <LucideIcons.Minus size={12} />}
+                </button>
               </div>
 
-              {topDockTab === 'history' && visiblePanels.history && (
+              {!topDockCollapsed && topDockTab === 'history' && visiblePanels.history && (
                 <div className="panel-content">
                   {history.map((entry, idx) => (
                     <div
@@ -1838,7 +1861,7 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              {topDockTab === 'swatches' && visiblePanels.swatches && (
+              {!topDockCollapsed && topDockTab === 'swatches' && visiblePanels.swatches && (
                 <div className="panel-content swatches-panel-content">
                   <div className="swatches-grid">
                     {['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff',
@@ -1860,74 +1883,116 @@ const App: React.FC = () => {
 
           {/* MIDDLE DOCK: Adjustments */}
           {visiblePanels.adjustments && (
-            <div className="side-panel dock-panel adjustments-dock">
-              <div className="dock-tabs">
-                <button className="dock-tab active">Adjustments</button>
-              </div>
-              <div className="panel-content adjustments-panel-content">
-                <div className="adj-grid">
-                  {[
-                    { icon: <LucideIcons.Sun size={16} />, label: 'Brightness', action: 'brightness_contrast' },
-                    { icon: <LucideIcons.TrendingUp size={16} />, label: 'Levels' },
-                    { icon: <LucideIcons.Activity size={16} />, label: 'Curves' },
-                    { icon: <LucideIcons.Aperture size={16} />, label: 'Exposure' },
-                    { icon: <LucideIcons.Droplet size={16} />, label: 'Vibrance' },
-                    { icon: <LucideIcons.Palette size={16} />, label: 'Hue/Sat', action: 'hue_saturation' },
-                    { icon: <LucideIcons.Scale size={16} />, label: 'Color Bal' },
-                    { icon: <LucideIcons.Contrast size={16} />, label: 'B&W', action: 'black_white' },
-                    { icon: <LucideIcons.Camera size={16} />, label: 'Photo Flt', action: 'photo_effects' },
-                    { icon: <LucideIcons.Sliders size={16} />, label: 'Ch. Mixer' },
-                    { icon: <LucideIcons.Layers size={16} />, label: 'Color Lkp' },
-                    { icon: <LucideIcons.RefreshCw size={16} />, label: 'Invert' },
-                    { icon: <LucideIcons.BarChart2 size={16} />, label: 'Posterize' },
-                    { icon: <LucideIcons.Triangle size={16} />, label: 'Threshold' },
-                    { icon: <LucideIcons.Map size={16} />, label: 'Grad Map' },
-                    { icon: <LucideIcons.Filter size={16} />, label: 'Sel. Color' },
-                  ].map(({ icon, label, action }) => (
-                    <button
-                      key={label}
-                      className="adj-btn"
-                      title={label}
-                      onClick={() => {
-                        if (action) {
-                          useStore.getState().addAdjustmentLayer(action as any);
-                        }
-                      }}
-                    >
-                      {icon}
-                      <span>{label}</span>
-                    </button>
-                  ))}
+            <div className={`side-panel dock-panel adjustments-dock ${adjustmentsCollapsed ? 'collapsed' : ''}`}>
+              <div className="dock-tabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex' }}>
+                  <button className="dock-tab active" onClick={() => setAdjustmentsCollapsed(false)}>Adjustments</button>
                 </div>
+                <button
+                  className="dock-collapse-btn"
+                  onClick={() => setAdjustmentsCollapsed(!adjustmentsCollapsed)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%'
+                  }}
+                  title={adjustmentsCollapsed ? "Expand Panel" : "Collapse Panel"}
+                >
+                  {adjustmentsCollapsed ? <LucideIcons.Plus size={12} /> : <LucideIcons.Minus size={12} />}
+                </button>
               </div>
+              {!adjustmentsCollapsed && (
+                <div className="panel-content adjustments-panel-content">
+                  <div className="adj-grid">
+                    {[
+                      { icon: <LucideIcons.Sun size={16} />, label: 'Brightness', action: 'brightness_contrast' },
+                      { icon: <LucideIcons.TrendingUp size={16} />, label: 'Levels', action: 'levels' },
+                      { icon: <LucideIcons.Activity size={16} />, label: 'Curves', action: 'curves' },
+                      { icon: <LucideIcons.Aperture size={16} />, label: 'Exposure', action: 'exposure' },
+                      { icon: <LucideIcons.Droplet size={16} />, label: 'Vibrance', action: 'vibrance' },
+                      { icon: <LucideIcons.Palette size={16} />, label: 'Hue/Sat', action: 'hue_saturation' },
+                      { icon: <LucideIcons.Scale size={16} />, label: 'Color Bal', action: 'color_balance' },
+                      { icon: <LucideIcons.Contrast size={16} />, label: 'B&W', action: 'black_white' },
+                      { icon: <LucideIcons.Camera size={16} />, label: 'Photo Flt', action: 'photo_effects' },
+                      { icon: <LucideIcons.Sliders size={16} />, label: 'Ch. Mixer' },
+                      { icon: <LucideIcons.Layers size={16} />, label: 'Color Lkp' },
+                      { icon: <LucideIcons.RefreshCw size={16} />, label: 'Invert' },
+                      { icon: <LucideIcons.BarChart2 size={16} />, label: 'Posterize' },
+                      { icon: <LucideIcons.Triangle size={16} />, label: 'Threshold' },
+                      { icon: <LucideIcons.Map size={16} />, label: 'Grad Map' },
+                      { icon: <LucideIcons.Filter size={16} />, label: 'Sel. Color' },
+                    ].map(({ icon, label, action }) => (
+                      <button
+                        key={label}
+                        className="adj-btn"
+                        title={label}
+                        onClick={() => {
+                          if (action) {
+                            useStore.getState().addAdjustmentLayer(action as any);
+                          }
+                        }}
+                      >
+                        {icon}
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* BOTTOM DOCK: Layers / Channels / Paths */}
           {(visiblePanels.layers || visiblePanels.channels || visiblePanels.paths) && (
-            <div className="side-panel dock-panel bottom-dock">
-              <div className="dock-tabs">
-                {visiblePanels.layers && (
-                  <button
-                    className={`dock-tab ${bottomDockTab === 'layers' ? 'active' : ''}`}
-                    onClick={() => setBottomDockTab('layers')}
-                  >Layers</button>
-                )}
-                {visiblePanels.channels && (
-                  <button
-                    className={`dock-tab ${bottomDockTab === 'channels' ? 'active' : ''}`}
-                    onClick={() => setBottomDockTab('channels')}
-                  >Channels</button>
-                )}
-                {visiblePanels.paths && (
-                  <button
-                    className={`dock-tab ${bottomDockTab === 'paths' ? 'active' : ''}`}
-                    onClick={() => setBottomDockTab('paths')}
-                  >Paths</button>
-                )}
+            <div className={`side-panel dock-panel bottom-dock ${bottomDockCollapsed ? 'collapsed' : ''}`}>
+              <div className="dock-tabs" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex' }}>
+                  {visiblePanels.layers && (
+                    <button
+                      className={`dock-tab ${bottomDockTab === 'layers' ? 'active' : ''}`}
+                      onClick={() => { setBottomDockTab('layers'); setBottomDockCollapsed(false); }}
+                    >Layers</button>
+                  )}
+                  {visiblePanels.channels && (
+                    <button
+                      className={`dock-tab ${bottomDockTab === 'channels' ? 'active' : ''}`}
+                      onClick={() => { setBottomDockTab('channels'); setBottomDockCollapsed(false); }}
+                    >Channels</button>
+                  )}
+                  {visiblePanels.paths && (
+                    <button
+                      className={`dock-tab ${bottomDockTab === 'paths' ? 'active' : ''}`}
+                      onClick={() => { setBottomDockTab('paths'); setBottomDockCollapsed(false); }}
+                    >Paths</button>
+                  )}
+                </div>
+                <button
+                  className="dock-collapse-btn"
+                  onClick={() => setBottomDockCollapsed(!bottomDockCollapsed)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '0 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%'
+                  }}
+                  title={bottomDockCollapsed ? "Expand Panel" : "Collapse Panel"}
+                >
+                  {bottomDockCollapsed ? <LucideIcons.Plus size={12} /> : <LucideIcons.Minus size={12} />}
+                </button>
               </div>
 
-              {bottomDockTab === 'layers' && visiblePanels.layers && (
+              {!bottomDockCollapsed && bottomDockTab === 'layers' && visiblePanels.layers && (
                 <>
                   {/* Layer blend + opacity controls */}
                   {activeLayerId && (() => {
@@ -2152,7 +2217,7 @@ const App: React.FC = () => {
                 </>
               )}
 
-              {bottomDockTab === 'channels' && visiblePanels.channels && (
+              {!bottomDockCollapsed && bottomDockTab === 'channels' && visiblePanels.channels && (
                 <div className="panel-content channels-panel-content">
                   {(['RGB', 'Red', 'Green', 'Blue'] as const).map((ch, i) => (
                     <div key={ch} className="channel-row">
@@ -2170,7 +2235,7 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              {bottomDockTab === 'paths' && visiblePanels.paths && (
+              {!bottomDockCollapsed && bottomDockTab === 'paths' && visiblePanels.paths && (
                 <div className="panel-content paths-panel-content">
                   <div className="no-items" style={{ paddingTop: 24 }}>
                     <LucideIcons.PenTool size={24} style={{ marginBottom: 8, opacity: 0.3 }} />

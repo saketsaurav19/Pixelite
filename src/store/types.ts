@@ -64,7 +64,7 @@ export type Layer = BaseLayer & {
   collapsed?: boolean;
   isNew?: boolean;
   adjustmentData?: {
-    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects';
+    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance';
     settings: {
       brightness?: number;
       contrast?: number;
@@ -73,6 +73,30 @@ export type Layer = BaseLayer & {
       lightness?: number;
       effect?: 'sepia' | 'vintage' | 'polaroid' | 'technicolor' | 'lsd' | 'kodachrome' | 'brownie' | 'night' | 'negative' | 'predator' | 'none';
       greyscale?: boolean;
+      exposure?: {
+        exposure: number;
+        offset: number;
+        gamma: number;
+      };
+      vibrance?: number;
+      colorBalance?: {
+        shadows: { cyanRed: number; magentaGreen: number; yellowBlue: number };
+        midtones: { cyanRed: number; magentaGreen: number; yellowBlue: number };
+        highlights: { cyanRed: number; magentaGreen: number; yellowBlue: number };
+        preserveLuminosity: boolean;
+      };
+      levels?: {
+        master: { inBlack: number; inGamma: number; inWhite: number; outBlack: number; outWhite: number };
+        red: { inBlack: number; inGamma: number; inWhite: number; outBlack: number; outWhite: number };
+        green: { inBlack: number; inGamma: number; inWhite: number; outBlack: number; outWhite: number };
+        blue: { inBlack: number; inGamma: number; inWhite: number; outBlack: number; outWhite: number };
+      };
+      curves?: {
+        master: { x: number; y: number }[];
+        red: { x: number; y: number }[];
+        green: { x: number; y: number }[];
+        blue: { x: number; y: number }[];
+      };
     };
   };
 
@@ -272,8 +296,8 @@ export interface EditorState extends DocumentSpecificState {
   isSignatureDialogOpen: boolean;
   mobileCapturedImage: string | null;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
   setShowRulers: (show: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;

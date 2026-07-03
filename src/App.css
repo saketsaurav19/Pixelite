@@ -2197,3 +2197,22 @@ body {
     color: #fff;
   }
 }
+
+/* Accordion side-panel collapse styles */
+.side-panel.collapsed {
+  flex: 0 0 auto !important;
+  max-height: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.dock-collapse-btn {
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.dock-collapse-btn:hover {
+  opacity: 1;
+  color: var(--accent-primary) !important;
+}

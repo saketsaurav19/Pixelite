@@ -21,7 +21,7 @@ export interface LayerSlice {
   mergeLayers: (ids: string[]) => void;
   flattenImage: () => void;
   rasterizeLayer: (id: string) => void;
-  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects') => void;
+  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance') => void;
 }
 
 export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set) => ({
@@ -161,6 +161,42 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     } else if (type === 'photo_effects') {
       name = 'Photo Effects';
       defaultSettings = { effect: 'none' };
+    } else if (type === 'exposure') {
+      name = 'Exposure';
+      defaultSettings = { exposure: { exposure: 0, offset: 0, gamma: 1.0 } };
+    } else if (type === 'vibrance') {
+      name = 'Vibrance';
+      defaultSettings = { vibrance: 0 };
+    } else if (type === 'color_balance') {
+      name = 'Color Balance';
+      defaultSettings = {
+        colorBalance: {
+          shadows: { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 },
+          midtones: { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 },
+          highlights: { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 },
+          preserveLuminosity: true
+        }
+      };
+    } else if (type === 'levels') {
+      name = 'Levels';
+      defaultSettings = {
+        levels: {
+          master: { inBlack: 0, inGamma: 1.0, inWhite: 255, outBlack: 0, outWhite: 255 },
+          red: { inBlack: 0, inGamma: 1.0, inWhite: 255, outBlack: 0, outWhite: 255 },
+          green: { inBlack: 0, inGamma: 1.0, inWhite: 255, outBlack: 0, outWhite: 255 },
+          blue: { inBlack: 0, inGamma: 1.0, inWhite: 255, outBlack: 0, outWhite: 255 }
+        }
+      };
+    } else if (type === 'curves') {
+      name = 'Curves';
+      defaultSettings = {
+        curves: {
+          master: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
+          red: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
+          green: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
+          blue: [{ x: 0, y: 0 }, { x: 255, y: 255 }]
+        }
+      };
     }
 
     const count = flattenTree(state.layers).filter(l => l.type === 'adjustment' && l.adjustmentData?.type === type).length + 1;
