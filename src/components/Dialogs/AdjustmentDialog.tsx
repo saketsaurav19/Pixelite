@@ -130,6 +130,13 @@ export const AdjustmentDialog: React.FC = () => {
   const updateLayer = useStore((state) => state.updateLayer);
   const recordHistory = useStore((state) => state.recordHistory);
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
   // Store the original layer state
@@ -314,6 +321,9 @@ export const AdjustmentDialog: React.FC = () => {
       }
 
       if (dataUrl) {
+        if (currentLayer.type === 'adjustment' && !currentLayer.dataUrl) {
+          updateLayer(currentLayer.id, { dataUrl });
+        }
         originalDataUrlRef.current = currentLayer.dataUrl || null;
         activeLayerIdRef.current = currentLayer.id;
         isClosingRef.current = false;
@@ -465,7 +475,14 @@ export const AdjustmentDialog: React.FC = () => {
 
     if (currentLayer && currentLayer.type === 'adjustment') {
       if (currentLayer.isNew) {
+        const sourceLayerId = state.adjustmentSourceLayerId;
         state.removeLayer(currentLayer.id);
+        if (sourceLayerId) {
+          const sourceExists = flattenTree(useStore.getState().layers).some((l: any) => l.id === sourceLayerId);
+          if (sourceExists) {
+            useStore.getState().setActiveLayer(sourceLayerId);
+          }
+        }
       } else if (originalSettingsRef.current) {
         updateLayer(currentLayer.id, {
           adjustmentData: {
@@ -1620,17 +1637,17 @@ export const AdjustmentDialog: React.FC = () => {
   return (
     <div className="dialog-overlay adjustment-overlay">
       <motion.div
-        drag
-        dragControls={dragControls}
+        drag={!isMobile}
+        dragControls={isMobile ? undefined : dragControls}
         dragListener={false}
         dragMomentum={false}
         dragElastic={0}
         className="dialog-content adjustment-dialog-content"
-        style={{ maxWidth: '34rem' }}
+        style={isMobile ? {} : { maxWidth: '34rem' }}
       >
         <div
-          className="dialog-header draggable-header"
-          onPointerDown={(e) => dragControls.start(e)}
+          className={`dialog-header ${isMobile ? '' : 'draggable-header'}`}
+          onPointerDown={(e) => !isMobile && dragControls.start(e)}
         >
           <h2>{getModalTitle()}</h2>
           <button className="dialog-close" onClick={handleCancel}>
@@ -1638,6 +1655,11 @@ export const AdjustmentDialog: React.FC = () => {
           </button>
         </div>
         <div className="dialog-body">
+          {isMobile && activeLayer?.dataUrl && (
+            <div className="adjustment-mobile-preview-container">
+              <img src={activeLayer.dataUrl} alt="Preview" className="adjustment-mobile-preview-image" />
+            </div>
+          )}
           {renderContent()}
         </div>
         <div className="dialog-footer">
@@ -1649,6 +1671,62 @@ export const AdjustmentDialog: React.FC = () => {
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+          .dialog-overlay.adjustment-overlay {
+            background: #1e1e1e !important;
+            backdrop-filter: none !important;
+            align-items: stretch !important;
+            justify-content: stretch !important;
+            padding: 0 !important;
+          }
+          .adjustment-dialog-content {
+            width: 100vw !important;
+            height: 100dvh !important;
+            max-width: 100vw !important;
+            max-height: 100dvh !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            box-shadow: none !important;
+            background: #1e1e1e !important;
+          }
+          .adjustment-dialog-content .dialog-body {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            padding: 1rem !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 1.25rem !important;
+          }
+          .adjustment-mobile-preview-container {
+            width: 100% !important;
+            height: 35vh !important;
+            background: #0d0d0d !important;
+            border-radius: 0.375rem !important;
+            border: 1px solid #333 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+            position: relative !important;
+            margin-bottom: 0.25rem !important;
+            flex-shrink: 0 !important;
+          }
+          .adjustment-mobile-preview-image {
+            max-width: 100% !important;
+            max-height: 100% !important;
+            object-fit: contain !important;
+          }
+          .adjustment-dialog-content .dialog-footer {
+            padding: 0.75rem 1rem !important;
+            border-top: 1px solid #333 !important;
+            background: #181818 !important;
+            display: flex !important;
+            justify-content: flex-end !important;
+            gap: 0.75rem !important;
+            flex-shrink: 0 !important;
+          }
         }
       `}</style>
     </div>

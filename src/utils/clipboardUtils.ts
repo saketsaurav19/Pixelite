@@ -144,6 +144,8 @@ export const pasteFromClipboard = async (
     addLayer({
       dataUrl: clipboardDataUrl,
       position: { x, y },
+      width: img.width,
+      height: img.height,
       type: 'paint',
       name: 'Pasted Layer',
     });

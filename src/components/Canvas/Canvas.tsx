@@ -31,6 +31,7 @@ import { DraftOverlay } from './UI/DraftOverlay';
 import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
 import { SVGFilters } from './UI/SVGFilters';
 import { ArtboardOverlay } from './UI/ArtboardOverlay';
+import { TransformOverlay } from './UI/TransformOverlay';
 
 interface AbsoluteRect {
   x: number;
@@ -142,7 +143,7 @@ const Canvas: React.FC = () => {
     if (activeTool === 'crop') {
       const toolChanged = lastActiveToolRef.current !== 'crop';
       const layerChanged = lastActiveLayerIdRef.current !== activeLayerId;
-      
+
       if (toolChanged || layerChanged) {
         const activeLayer = findLayerById(layers, activeLayerId || '');
         const x = activeLayer?.position?.x || 0;
@@ -689,10 +690,84 @@ const Canvas: React.FC = () => {
     };
   }, [isInteracting, initialTouchDistance, handleTouchMove]);
 
+  const handleConfirmTransform = useCallback(() => {
+    recordHistory('Free Transform');
+    delete toolState._transformStartCoords;
+    delete toolState._transformStartLayerPos;
+    delete toolState._transformStartLayerSize;
+    delete toolState._transformStartLayerRotation;
+    delete toolState._transformActiveHandle;
+    delete toolState._transformOriginalLayerProperties;
+    setActiveTool('move');
+  }, [recordHistory, setActiveTool]);
+
+  const handleCancelTransform = useCallback(() => {
+    const orig = toolState._transformOriginalLayerProperties;
+    if (orig && activeLayerId === orig.id) {
+      updateLayer(orig.id, {
+        position: orig.position,
+        width: orig.width,
+        height: orig.height,
+        rotation: orig.rotation
+      });
+    }
+    delete toolState._transformStartCoords;
+    delete toolState._transformStartLayerPos;
+    delete toolState._transformStartLayerSize;
+    delete toolState._transformStartLayerRotation;
+    delete toolState._transformActiveHandle;
+    delete toolState._transformOriginalLayerProperties;
+    setActiveTool('move');
+  }, [activeLayerId, updateLayer, setActiveTool]);
+
+  // Auto-commit on switching tools
+  const lastToolRef = useRef(activeTool);
+  useEffect(() => {
+    if (lastToolRef.current === 'transform' && activeTool !== 'transform') {
+      recordHistory('Free Transform');
+      delete toolState._transformStartCoords;
+      delete toolState._transformStartLayerPos;
+      delete toolState._transformStartLayerSize;
+      delete toolState._transformStartLayerRotation;
+      delete toolState._transformActiveHandle;
+      delete toolState._transformOriginalLayerProperties;
+    }
+    lastToolRef.current = activeTool;
+  }, [activeTool, recordHistory]);
+
+  // Auto-initialize original layer properties when entering transform tool
+  useEffect(() => {
+    if (activeTool === 'transform' && activeLayerId) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      if (layer && !toolState._transformOriginalLayerProperties) {
+        toolState._transformOriginalLayerProperties = {
+          id: activeLayerId,
+          position: { ...layer.position },
+          width: layer.width || documentSize.w,
+          height: layer.height || documentSize.h,
+          rotation: layer.rotation || 0
+        };
+      }
+    }
+  }, [activeTool, activeLayerId, layers, documentSize]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Alt') setIsAltPressed(true);
       if (e.key === 'Control' || e.key === 'Meta') setIsCtrlPressed(true);
+
+      if (activeTool === 'transform') {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleConfirmTransform();
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancelTransform();
+          return;
+        }
+      }
 
       if (textEditor) {
         if (e.key === 'Escape') {
@@ -729,7 +804,7 @@ const Canvas: React.FC = () => {
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('keydown', preventScroll, { capture: true });
     };
-  }, [clearSelection, textEditor, commitText, cropRect, applyCrop, setCropRect]);
+  }, [clearSelection, textEditor, commitText, cropRect, applyCrop, setCropRect, activeTool, handleConfirmTransform, handleCancelTransform]);
 
   // Redundant canvas text rendering effect removed. useTextRendering manages real-time preview and caret rendering.
 
@@ -922,6 +997,24 @@ const Canvas: React.FC = () => {
             lastPointRef={lastPointRef}
             handleDoubleClick={handleDoubleClick}
             setLassoPaths={setLassoPaths}
+          />
+        )}
+
+        {activeTool === 'transform' && activeLayerId && (
+          <TransformOverlay
+            activeLayerId={activeLayerId}
+            layers={layers}
+            documentSize={documentSize}
+            zoom={zoom}
+            canvasOffset={canvasOffset}
+            canvasRotation={canvasRotation}
+            findLayerAbsoluteRect={findLayerAbsoluteRect}
+            setActiveCropHandle={setActiveCropHandle}
+            setIsInteracting={setIsInteracting}
+            getCoordinates={getCoordinates}
+            lastPointRef={lastPointRef}
+            onConfirm={handleConfirmTransform}
+            onCancel={handleCancelTransform}
           />
         )}
 

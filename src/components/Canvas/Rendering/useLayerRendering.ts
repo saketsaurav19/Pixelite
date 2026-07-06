@@ -102,7 +102,20 @@ const renderLayer = (
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, documentSize.w, documentSize.h);
   } else if (layer.type === 'text' && layer.textContent) {
+    ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (layer.rotation) {
+      const rad = (layer.rotation * Math.PI) / 180;
+      const normalizedRot = ((layer.rotation % 360) + 360) % 360;
+      if (normalizedRot === 90) {
+        ctx.translate(canvas.width, 0);
+      } else if (normalizedRot === 180) {
+        ctx.translate(canvas.width, canvas.height);
+      } else if (normalizedRot === 270) {
+        ctx.translate(0, canvas.height);
+      }
+      ctx.rotate(rad);
+    }
     ctx.fillStyle = layer.color || '#000000';
     const fs = layer.fontSize || 40;
     ctx.font = `${fs}px "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
@@ -130,8 +143,22 @@ const renderLayer = (
         ctx.fillText(line, 0, yPos);
       }
     });
+    ctx.restore();
   } else if (layer.type === 'shape' && layer.shapeData) {
+    ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (layer.rotation) {
+      const rad = (layer.rotation * Math.PI) / 180;
+      const normalizedRot = ((layer.rotation % 360) + 360) % 360;
+      if (normalizedRot === 90) {
+        ctx.translate(canvas.width, 0);
+      } else if (normalizedRot === 180) {
+        ctx.translate(canvas.width, canvas.height);
+      } else if (normalizedRot === 270) {
+        ctx.translate(0, canvas.height);
+      }
+      ctx.rotate(rad);
+    }
     const { type, w, h, points, fill, stroke, strokeWidth: sw } = layer.shapeData as any;
 
     if (type === 'rect' || !type) {
@@ -203,6 +230,7 @@ const renderLayer = (
         }
       }
     }
+    ctx.restore();
   }
 };
 

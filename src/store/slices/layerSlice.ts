@@ -41,6 +41,8 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       fill: 1,
       type: 'paint',
       position: { x: 0, y: 0 },
+      width: layer.width !== undefined ? layer.width : state.documentSize.w,
+      height: layer.height !== undefined ? layer.height : state.documentSize.h,
       blendMode: 'source-over',
       ...layer,
     } as Layer;
@@ -50,10 +52,44 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     };
   }),
 
-  removeLayer: (id) => set((state) => ({
-    layers: removeNode(state.layers, id),
-    activeLayerId: state.activeLayerId === id ? (state.layers[0]?.id || null) : state.activeLayerId
-  })),
+  removeLayer: (id) => set((state) => {
+    const flatLayers = flattenTree(state.layers);
+    const index = flatLayers.findIndex(l => l.id === id);
+    let nextActiveId = state.activeLayerId;
+    
+    if (index !== -1) {
+      const deletedNode = flatLayers[index];
+      const deletedIds = new Set(flattenTree([deletedNode]).map(l => l.id));
+      if (state.activeLayerId && deletedIds.has(state.activeLayerId)) {
+        // Find next non-deleted layer
+        let found = false;
+        for (let i = index + 1; i < flatLayers.length; i++) {
+          if (!deletedIds.has(flatLayers[i].id)) {
+            nextActiveId = flatLayers[i].id;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          for (let i = index - 1; i >= 0; i--) {
+            if (!deletedIds.has(flatLayers[i].id)) {
+              nextActiveId = flatLayers[i].id;
+              found = true;
+              break;
+            }
+          }
+        }
+        if (!found) {
+          nextActiveId = null;
+        }
+      }
+    }
+
+    return {
+      layers: removeNode(state.layers, id),
+      activeLayerId: nextActiveId
+    };
+  }),
 
   setActiveLayer: (id) => set({ activeLayerId: id }),
 
@@ -240,7 +276,8 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     return {
       layers: newLayers,
       activeLayerId: newLayer.id,
-      activeAdjustmentModal: type
+      activeAdjustmentModal: type,
+      adjustmentSourceLayerId: state.activeLayerId
     };
   }),
 });

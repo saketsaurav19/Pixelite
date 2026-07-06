@@ -7,7 +7,7 @@ export type Tool =
   | 'blur' | 'sharpen' | 'smudge' | 'dodge' | 'burn' | 'sponge' | 'text' | 'vertical_text' | 'pen' | 'free_pen'
   | 'curvature_pen' | 'add_anchor' | 'delete_anchor' | 'convert_point' | 'path_select' | 'direct_select'
   | 'shape' | 'ellipse_shape' | 'triangle_shape' | 'polygon_shape' | 'line_shape' | 'custom_shape'
-  | 'hand' | 'rotate_view' | 'zoom_tool' | 'lighting';
+  | 'hand' | 'rotate_view' | 'zoom_tool' | 'lighting' | 'transform';
 
 export type BlendMode = GlobalCompositeOperation | 'pass through';
 
@@ -298,6 +298,8 @@ export interface EditorState extends DocumentSpecificState {
   rulerUnit: 'px' | 'in' | 'cm';
   activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null;
   setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null) => void;
+  adjustmentSourceLayerId: string | null;
+  setAdjustmentSourceLayerId: (id: string | null) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
   setShowRulers: (show: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;

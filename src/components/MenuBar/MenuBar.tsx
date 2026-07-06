@@ -41,6 +41,8 @@ interface MenuBarProps {
   onCopy?: () => void;
   onPaste?: () => void;
   onTransformLayer?: (type: string) => void;
+  onTransformImage?: (type: string) => void;
+  onFreeTransform?: () => void;
   onCanvasSize?: () => void;
   onImageSize?: () => void;
   onAddEmptyLayer?: () => void;
@@ -83,6 +85,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
   onCopy,
   onPaste,
   onTransformLayer,
+  onTransformImage,
+  onFreeTransform,
   onCanvasSize,
   onImageSize,
   onAddEmptyLayer,
@@ -208,9 +212,6 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Undo', shortcut: 'Ctrl+Z', action: undo, disabled: !canUndo },
         { label: 'Redo', shortcut: 'Ctrl+Y', action: redo, disabled: !canRedo },
         { divider: true },
-        { label: 'Step Forward', shortcut: 'Shift+Ctrl+Z', action: redo, disabled: !canRedo },
-        { label: 'Step Backward', shortcut: 'Ctrl+Z', action: undo, disabled: !canUndo },
-
         { label: 'Fade...', shortcut: 'Shift+Ctrl+F' },
         { divider: true },
         { label: 'Cut', shortcut: 'Ctrl+X', action: onCut },
@@ -220,7 +221,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Fill...', action: onFillLayer },
         { label: 'Stroke...' },
         { divider: true },
-        { label: 'Free Transform', shortcut: 'Alt+Ctrl+T' },
+        { label: 'Free Transform', shortcut: 'Alt+Ctrl+T', action: onFreeTransform },
         {
           label: 'Transform',
           subItems: [
@@ -306,12 +307,12 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Transform',
           subItems: [
-            { label: 'Rotate 180°', action: () => onTransformLayer?.('rotate180') },
-            { label: 'Rotate 90° Clockwise', action: () => onTransformLayer?.('rotate90CW') },
-            { label: 'Rotate 90° Counter Clockwise', action: () => onTransformLayer?.('rotate90CCW') },
+            { label: 'Rotate 180°', action: () => onTransformImage?.('rotate180') },
+            { label: 'Rotate 90° Clockwise', action: () => onTransformImage?.('rotate90CW') },
+            { label: 'Rotate 90° Counter Clockwise', action: () => onTransformImage?.('rotate90CCW') },
             { divider: true },
-            { label: 'Flip Horizontally', action: () => onTransformLayer?.('flipH') },
-            { label: 'Flip Vertically', action: () => onTransformLayer?.('flipV') },
+            { label: 'Flip Horizontally', action: () => onTransformImage?.('flipH') },
+            { label: 'Flip Vertically', action: () => onTransformImage?.('flipV') },
           ]
         },
         { divider: true },

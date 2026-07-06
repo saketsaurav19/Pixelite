@@ -75,7 +75,7 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
             d={`M ${p[0].x},${p[0].y} L ${p[1].x},${p[1].y} L ${p[2].x},${p[2].y} L ${p[3].x},${p[3].y} Z`}
             fill="rgba(0, 170, 255, 0)"
             stroke="#00aaff"
-            strokeWidth={1.5}
+            strokeWidth={8}
             style={{ pointerEvents: 'auto', cursor: 'move' }}
             onMouseDown={handleMouseDown}
           />
@@ -110,8 +110,8 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
               }}
               style={{ cursor: i % 2 === 0 ? 'nwse-resize' : 'nesw-resize', pointerEvents: 'auto' }}
             >
-              <rect x={point.x - 15} y={point.y - 15} width={30} height={30} fill="transparent" />
-              <rect x={point.x - 5} y={point.y - 5} width={10} height={10} fill="#fff" stroke="#00aaff" strokeWidth={1} />
+              <rect x={point.x - 18} y={point.y - 18} width={36} height={36} fill="transparent" />
+              <rect x={point.x - 8} y={point.y - 8} width={16} height={16} fill="#fff" stroke="#00aaff" strokeWidth={2} />
             </g>
           ))}
           {/* Midpoint Handles */}
@@ -136,8 +136,8 @@ export const PerspectiveCropOverlay: React.FC<PerspectiveCropOverlayProps> = ({
               }}
               style={{ cursor: i % 2 === 0 ? 'ns-resize' : 'ew-resize', pointerEvents: 'auto' }}
             >
-              <rect x={point.x - 12} y={point.y - 12} width={24} height={24} fill="transparent" />
-              <rect x={point.x - 4} y={point.y - 4} width={8} height={8} fill="#fff" stroke="#00aaff" strokeWidth={1} />
+              <rect x={point.x - 15} y={point.y - 15} width={30} height={30} fill="transparent" />
+              <rect x={point.x - 8} y={point.y - 8} width={16} height={16} fill="#fff" stroke="#00aaff" strokeWidth={2} />
             </g>
           ))}
         </g>

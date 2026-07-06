@@ -23,6 +23,8 @@ export interface UISlice {
   rulerUnit: 'px' | 'in' | 'cm';
   activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null;
   setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null) => void;
+  adjustmentSourceLayerId: string | null;
+  setAdjustmentSourceLayerId: (id: string | null) => void;
   activeMobileSubmenu: string | null;
   screenMode: 'standard' | 'full-menu' | 'full';
   visiblePanels: {
@@ -85,6 +87,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   showRulers: false,
   rulerUnit: 'px',
   activeAdjustmentModal: null,
+  adjustmentSourceLayerId: null,
   activeMobileSubmenu: null,
   screenMode: 'standard',
   visiblePanels: {
@@ -122,7 +125,11 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsMobileMenuOpen: (isOpen) => set({ isMobileMenuOpen: isOpen }),
   setShowRulers: (show) => set({ showRulers: show }),
   setRulerUnit: (unit) => set({ rulerUnit: unit }),
-  setActiveAdjustmentModal: (modal) => set({ activeAdjustmentModal: modal }),
+  setActiveAdjustmentModal: (modal) => set((state) => ({
+    activeAdjustmentModal: modal,
+    adjustmentSourceLayerId: modal ? (state.adjustmentSourceLayerId || state.activeLayerId) : null
+  })),
+  setAdjustmentSourceLayerId: (id) => set({ adjustmentSourceLayerId: id }),
   setActiveMobileSubmenu: (menu) => set({ activeMobileSubmenu: menu }),
   setScreenMode: (screenMode) => set({ screenMode }),
   togglePanel: (panel) => set((state) => ({

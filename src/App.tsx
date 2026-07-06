@@ -22,6 +22,7 @@ import { nanoid } from 'nanoid';
 import { CloudStorageModal } from './components/Modals/CloudStorageModal';
 import { PublicShareModal } from './components/Modals/PublicShareModal';
 import { uploadToImgur, uploadToImageBB, saveToGoogleDrive } from './utils/cloudServices';
+import { cutSelection, pasteFromClipboard } from './utils/clipboardUtils';
 import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
 import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
 import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
@@ -526,7 +527,23 @@ const App: React.FC = () => {
 
   const handleFade = () => { alert("Fade action triggered (Placeholder)"); };
   const handleCopyMerged = () => { alert("Copy Merged action triggered (Placeholder)"); };
-  const handleFreeTransform = () => { alert("Free Transform action triggered (Placeholder)"); };
+  const handleFreeTransform = () => {
+    if (!activeLayerId) {
+      addAlert({ type: 'warning', message: 'Please select a layer to transform.' });
+      return;
+    }
+    const layer = layers.find(l => l.id === activeLayerId);
+    if (layer) {
+      toolState._transformOriginalLayerProperties = {
+        id: activeLayerId,
+        position: { ...layer.position },
+        width: layer.width || documentSize.w,
+        height: layer.height || documentSize.h,
+        rotation: layer.rotation || 0
+      };
+    }
+    setActiveTool('transform');
+  };
   const handlePreferences = () => { alert("Preferences action triggered (Placeholder)"); };
 
   React.useEffect(() => {
@@ -554,30 +571,46 @@ const App: React.FC = () => {
 
       // File operations
       // New Document
-      if (isCtrl && e.altKey && e.key.toLowerCase() === 'n') {
+      if (isCtrl && !e.altKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
-        useStore.getState().setIsNewDocumentDialogOpen(true);
+        handleNewDocument();
       }
-      if (isCtrl && e.key === 'o') {
+      if (isCtrl && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         document.getElementById('global-file-input')?.click();
       }
       if (isCtrl && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        console.log('Save handled via menu');
+        handleSave(false);
+      }
+      if (isCtrl && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        handlePrint();
       }
 
       // Undo/Redo
-      if (isCtrl && e.key === 'z' && !e.shiftKey) {
+      if (isCtrl && e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
       }
-      if ((isCtrl && e.key === 'y') || (isCtrl && e.shiftKey && e.key === 'z')) {
+      if ((isCtrl && e.key.toLowerCase() === 'y') || (isCtrl && e.shiftKey && e.key.toLowerCase() === 'z')) {
         e.preventDefault();
         redo();
       }
 
       // Edit operations
+      if (isCtrl && !e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopy();
+      }
+      if (isCtrl && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        handleCut();
+      }
+      if (isCtrl && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        handlePaste();
+      }
       if (isCtrl && e.shiftKey && e.key === 'f') {
         e.preventDefault();
         setIsFillPickerOpen(true);
@@ -612,11 +645,11 @@ const App: React.FC = () => {
       }
 
       // Selection operations
-      if (isCtrl && e.key === 'a') {
+      if (isCtrl && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         setSelectionRect({ x: 0, y: 0, w: useStore.getState().documentSize.w, h: useStore.getState().documentSize.h });
       }
-      if (isCtrl && e.key === 'd') {
+      if (isCtrl && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         setSelectionRect(null);
         setLassoPaths([]);
@@ -849,6 +882,8 @@ const App: React.FC = () => {
             name: fileToImport.name || 'Pasted Image',
             type: 'image' as const,
             dataUrl: result.dataUrl,
+            width: result.width,
+            height: result.height,
             visible: true,
             opacity: 1,
             position: { x: 0, y: 0 },
@@ -881,6 +916,8 @@ const App: React.FC = () => {
             name: fileToImport.name || 'Pasted Image',
             type: 'image',
             dataUrl: result.dataUrl,
+            width: result.width,
+            height: result.height,
             position: (layers.length === 0 || isDefaultBackground || skipResize) ? { x: 0, y: 0 } : { x: (documentSize.w - result.width) / 2, y: (documentSize.h - result.height) / 2 }
           });
           recordHistory(`Import ${fileToImport.name}`);
@@ -947,6 +984,25 @@ const App: React.FC = () => {
       window.removeEventListener('dragover', handleDragOver);
     };
   }, [layers, documentSize, addLayer, recordHistory, setDocumentSize]);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let queryUrl = params.get('url');
+    if (!queryUrl) {
+      const path = window.location.pathname;
+      // Match path like /url="example.com" or /url=example.com
+      const match = path.match(/^\/url=(.+)$/);
+      if (match) {
+        queryUrl = match[1];
+      }
+    }
+    if (queryUrl) {
+      queryUrl = decodeURIComponent(queryUrl).replace(/^['"]|['"]$/g, '').trim();
+      if (queryUrl) {
+        handleOpenURL(queryUrl);
+      }
+    }
+  }, []);
 
   const handleInvert = () => {
     if (!activeLayerId) return;
@@ -1293,8 +1349,8 @@ const App: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const handleOpenURL = async () => {
-    let url = prompt('Enter image/document URL or Local File Path:');
+  const handleOpenURL = async (forcedUrl?: string) => {
+    let url = forcedUrl || prompt('Enter image/document URL or Local File Path:');
     if (!url) return;
 
     url = url.replace(/^['"]|['"]$/g, '').trim();
@@ -1469,7 +1525,9 @@ const App: React.FC = () => {
           addLayer({
             name: 'Image from URL',
             type: 'image',
-            dataUrl: canvas.toDataURL()
+            dataUrl: canvas.toDataURL(),
+            width: img.width,
+            height: img.height
           });
           recordHistory('Open from URL');
         }
@@ -1497,10 +1555,12 @@ const App: React.FC = () => {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0);
-        addLayer({
+         addLayer({
           name: 'Camera Snapshot',
           type: 'image',
-          dataUrl: canvas.toDataURL()
+          dataUrl: canvas.toDataURL(),
+          width: canvas.width,
+          height: canvas.height
         });
         recordHistory('Camera Snapshot');
       }
@@ -1542,23 +1602,127 @@ const App: React.FC = () => {
 
   const [clipboard, setClipboard] = React.useState<any>(null);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!activeLayerId) return;
-    const layer = layers.find(l => l.id === activeLayerId);
-    if (layer) {
-      setClipboard({ ...layer, id: undefined, name: `${layer.name} Copy` });
+    const activeLayer = layers.find(l => l.id === activeLayerId);
+    if (!activeLayer) return;
+
+    setClipboard({ ...activeLayer, id: undefined, name: `${activeLayer.name} Copy` });
+
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    if (canvas) {
+      const selectionRect = useStore.getState().selectionRect;
+      let finalCanvas = canvas;
+
+      if (selectionRect) {
+        const croppedCanvas = document.createElement('canvas');
+        croppedCanvas.width = selectionRect.w;
+        croppedCanvas.height = selectionRect.h;
+        const croppedCtx = croppedCanvas.getContext('2d');
+        if (croppedCtx) {
+          croppedCtx.drawImage(
+            canvas,
+            selectionRect.x - (activeLayer.position?.x || 0),
+            selectionRect.y - (activeLayer.position?.y || 0),
+            selectionRect.w, selectionRect.h,
+            0, 0, selectionRect.w, selectionRect.h
+          );
+          finalCanvas = croppedCanvas;
+        }
+      }
+
+      const blobPromise = new Promise<Blob>((resolve) => {
+        finalCanvas.toBlob((b) => {
+          resolve(b || new Blob());
+        }, 'image/png');
+      });
+
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'image/png': blobPromise
+          })
+        ]);
+        useStore.getState().setClipboardDataUrl(finalCanvas.toDataURL('image/png'));
+        useStore.getState().setClipboardDataRect(selectionRect || { x: 0, y: 0, w: documentSize.w, h: documentSize.h });
+      } catch (err) {
+        console.error('Failed to copy image to system clipboard:', err);
+      }
+    } else if (activeLayer.type === 'text' && activeLayer.textContent) {
+      try {
+        await navigator.clipboard.writeText(activeLayer.textContent);
+      } catch (err) {
+        console.error('Failed to copy text to system clipboard:', err);
+      }
     }
   };
 
-  const handleCut = () => {
+  const handleCut = async () => {
     if (!activeLayerId) return;
-    handleCopy();
-    removeLayer(activeLayerId);
-    recordHistory('Cut Layer');
+    const activeLayer = layers.find(l => l.id === activeLayerId);
+    if (!activeLayer) return;
+
+    await handleCopy();
+
+    const { selectionRect } = useStore.getState();
+    if (selectionRect && activeLayer.dataUrl) {
+      const state = useStore.getState();
+      await cutSelection(state);
+    } else {
+      removeLayer(activeLayerId);
+      recordHistory('Cut Layer');
+    }
   };
 
-  const handlePaste = () => {
-    if (clipboard) {
+  const handlePaste = async () => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const dataUrl = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+            const img = new Image();
+            img.onload = () => {
+              addLayer({
+                name: 'Pasted Image',
+                type: 'image',
+                dataUrl: dataUrl,
+                width: img.width,
+                height: img.height,
+                position: { x: 20, y: 20 }
+              });
+              recordHistory('Paste System Clipboard');
+            };
+            img.src = dataUrl;
+            return;
+          } else if (type === 'text/plain') {
+            const text = await navigator.clipboard.readText();
+            if (text) {
+              addLayer({
+                name: 'Pasted Text',
+                type: 'text',
+                textContent: text,
+                position: { x: 20, y: 20 }
+              });
+              recordHistory('Paste System Clipboard Text');
+              return;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('System clipboard read failed, falling back to internal clipboard:', err);
+    }
+
+    const state = useStore.getState();
+    if (state.clipboardDataUrl) {
+      await pasteFromClipboard(state, 'center');
+    } else if (clipboard) {
       addLayer({ ...clipboard, position: { x: (clipboard.position?.x || 0) + 20, y: (clipboard.position?.y || 0) + 20 } });
       recordHistory('Paste Layer');
     }
@@ -1571,9 +1735,16 @@ const App: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    let newW = canvas.width;
+    let newH = canvas.height;
+    if (type === 'rotate90CW' || type === 'rotate90CCW') {
+      newW = canvas.height;
+      newH = canvas.width;
+    }
+
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
+    tempCanvas.width = newW;
+    tempCanvas.height = newH;
     const tempCtx = tempCanvas.getContext('2d');
     if (!tempCtx) return;
 
@@ -1588,20 +1759,362 @@ const App: React.FC = () => {
       tempCtx.translate(canvas.width, canvas.height);
       tempCtx.rotate(Math.PI);
     } else if (type === 'rotate90CW') {
-      // Note: This doesn't resize the canvas, just rotates content within current bounds
-      tempCtx.translate(canvas.width, 0);
+      tempCtx.translate(newW, 0);
       tempCtx.rotate(Math.PI / 2);
     } else if (type === 'rotate90CCW') {
-      tempCtx.translate(0, canvas.height);
+      tempCtx.translate(0, newH);
       tempCtx.rotate(-Math.PI / 2);
     }
     tempCtx.drawImage(canvas, 0, 0);
     tempCtx.restore();
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(tempCanvas, 0, 0);
-    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+    const oldX = useStore.getState().layers.find(l => l.id === activeLayerId)?.position?.x || 0;
+    const oldY = useStore.getState().layers.find(l => l.id === activeLayerId)?.position?.y || 0;
+
+    let nextX = oldX;
+    let nextY = oldY;
+
+    if (type === 'rotate90CW' || type === 'rotate90CCW') {
+      nextX = oldX + canvas.width / 2 - newW / 2;
+      nextY = oldY + canvas.height / 2 - newH / 2;
+    }
+
+    const updates: any = {
+      dataUrl: tempCanvas.toDataURL(),
+      position: { x: nextX, y: nextY }
+    };
+
+    const activeLayer = useStore.getState().layers.find(l => l.id === activeLayerId);
+    if (activeLayer) {
+      if (activeLayer.width !== undefined || activeLayer.height !== undefined || type === 'rotate90CW' || type === 'rotate90CCW') {
+        updates.width = newW;
+        updates.height = newH;
+      }
+    }
+
+    updateLayer(activeLayerId, updates);
     recordHistory(`Transform Layer: ${type}`);
+  };
+
+  const handleTransformImage = async (type: string) => {
+    try {
+      setIsProcessing(true);
+      setProcessingText('Transforming image...');
+
+      const state = useStore.getState();
+      const currentLayers = state.layers;
+      const currentDocSize = state.documentSize;
+      const currentSelectionRect = state.selectionRect;
+      const currentLassoPaths = state.lassoPaths;
+      const currentLights = state.lights;
+
+      // 1. Swap/transform document size
+      let newDocW = currentDocSize.w;
+      let newDocH = currentDocSize.h;
+      if (type === 'rotate90CW' || type === 'rotate90CCW') {
+        newDocW = currentDocSize.h;
+        newDocH = currentDocSize.w;
+      }
+
+      // 2. Rotate layers recursively
+      const transformNodes = async (
+        nodes: any[],
+        parentAbsX = 0,
+        parentAbsY = 0,
+        parentNewAbsX = 0,
+        parentNewAbsY = 0
+      ): Promise<any[]> => {
+        const transformed: any[] = [];
+        for (const node of nodes) {
+          const nodeAbsX = parentAbsX + (node.position?.x || 0);
+          const nodeAbsY = parentAbsY + (node.position?.y || 0);
+
+          const nodeW = node.width !== undefined ? node.width : currentDocSize.w;
+          const nodeH = node.height !== undefined ? node.height : currentDocSize.h;
+
+          // Calculate new absolute coordinates
+          let nodeNewAbsX = nodeAbsX;
+          let nodeNewAbsY = nodeAbsY;
+
+          if (type === 'rotate180') {
+            nodeNewAbsX = currentDocSize.w - nodeAbsX - nodeW;
+            nodeNewAbsY = currentDocSize.h - nodeAbsY - nodeH;
+          } else if (type === 'rotate90CW') {
+            nodeNewAbsX = currentDocSize.h - nodeAbsY - nodeH;
+            nodeNewAbsY = nodeAbsX;
+          } else if (type === 'rotate90CCW') {
+            nodeNewAbsX = nodeAbsY;
+            nodeNewAbsY = currentDocSize.w - nodeAbsX - nodeW;
+          } else if (type === 'flipH') {
+            nodeNewAbsX = currentDocSize.w - nodeAbsX - nodeW;
+            nodeNewAbsY = nodeAbsY;
+          } else if (type === 'flipV') {
+            nodeNewAbsX = nodeAbsX;
+            nodeNewAbsY = currentDocSize.h - nodeAbsY - nodeH;
+          }
+
+          // Calculate new relative coordinates
+          const newRelX = nodeNewAbsX - parentNewAbsX;
+          const newRelY = nodeNewAbsY - parentNewAbsY;
+
+          // Swapped width & height if 90CW or 90CCW
+          let newW = node.width;
+          let newH = node.height;
+          if (type === 'rotate90CW' || type === 'rotate90CCW') {
+            if (node.width !== undefined && node.height !== undefined) {
+              newW = node.height;
+              newH = node.width;
+            }
+          }
+
+          // Transform children if present
+          let newChildren = undefined;
+          if (node.children && node.children.length > 0) {
+            newChildren = await transformNodes(
+              node.children,
+              nodeAbsX,
+              nodeAbsY,
+              nodeNewAbsX,
+              nodeNewAbsY
+            );
+          }
+
+          // Rotate dataUrl image
+          let newDataUrl = node.dataUrl;
+          if (node.dataUrl) {
+            try {
+              newDataUrl = await new Promise<string>((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                  const tempCanvas = document.createElement('canvas');
+                  const tempCtx = tempCanvas.getContext('2d');
+                  if (!tempCtx) {
+                    reject(new Error('Canvas context not available'));
+                    return;
+                  }
+                  if (type === 'rotate180') {
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                    tempCtx.translate(tempCanvas.width, tempCanvas.height);
+                    tempCtx.rotate(Math.PI);
+                  } else if (type === 'rotate90CW') {
+                    tempCanvas.width = img.height;
+                    tempCanvas.height = img.width;
+                    tempCtx.translate(tempCanvas.width, 0);
+                    tempCtx.rotate(Math.PI / 2);
+                  } else if (type === 'rotate90CCW') {
+                    tempCanvas.width = img.height;
+                    tempCanvas.height = img.width;
+                    tempCtx.translate(0, tempCanvas.height);
+                    tempCtx.rotate(-Math.PI / 2);
+                  } else if (type === 'flipH') {
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                    tempCtx.translate(tempCanvas.width, 0);
+                    tempCtx.scale(-1, 1);
+                  } else if (type === 'flipV') {
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                    tempCtx.translate(0, tempCanvas.height);
+                    tempCtx.scale(1, -1);
+                  } else {
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                  }
+                  tempCtx.drawImage(img, 0, 0);
+                  resolve(tempCanvas.toDataURL());
+                };
+                img.onerror = (err) => reject(err);
+                img.src = node.dataUrl;
+              });
+            } catch (err) {
+              console.error('Failed to rotate dataUrl for layer:', node.name, err);
+            }
+          }
+
+          // Rotate shapeData
+          let newShapeData = node.shapeData;
+          if (node.type === 'shape' && node.shapeData) {
+            const sd = node.shapeData;
+            const shapeW = sd.w !== undefined ? sd.w : nodeW;
+            const shapeH = sd.h !== undefined ? sd.h : nodeH;
+
+            let newShapeW = sd.w;
+            let newShapeH = sd.h;
+            if (type === 'rotate90CW' || type === 'rotate90CCW') {
+              if (sd.w !== undefined && sd.h !== undefined) {
+                newShapeW = sd.h;
+                newShapeH = sd.w;
+              }
+            }
+
+            let newPoints = sd.points;
+            if (sd.points && sd.points.length > 0) {
+              newPoints = sd.points.map((p: any) => {
+                let px = p.x;
+                let py = p.y;
+                if (type === 'rotate180') {
+                  px = shapeW - p.x;
+                  py = shapeH - p.y;
+                } else if (type === 'rotate90CW') {
+                  px = shapeH - p.y;
+                  py = p.x;
+                } else if (type === 'rotate90CCW') {
+                  px = p.y;
+                  py = shapeW - p.x;
+                } else if (type === 'flipH') {
+                  px = shapeW - p.x;
+                  py = p.y;
+                } else if (type === 'flipV') {
+                  px = p.x;
+                  py = shapeH - p.y;
+                }
+                return { x: px, y: py };
+              });
+            }
+
+            newShapeData = {
+              ...sd,
+              w: newShapeW,
+              h: newShapeH,
+              points: newPoints,
+            };
+          }
+
+          // Rotate layer rotation property (for text layers or shapes)
+          let newRotation = node.rotation || 0;
+          if (node.type === 'text' || (node.type === 'shape' && node.shapeData?.svgPath)) {
+            let rotDelta = 0;
+            if (type === 'rotate180') rotDelta = 180;
+            else if (type === 'rotate90CW') rotDelta = 90;
+            else if (type === 'rotate90CCW') rotDelta = -90;
+            newRotation = ((newRotation + rotDelta) % 360 + 360) % 360;
+          }
+
+          transformed.push({
+            ...node,
+            position: { x: newRelX, y: newRelY },
+            width: newW,
+            height: newH,
+            dataUrl: newDataUrl,
+            shapeData: newShapeData,
+            rotation: newRotation,
+            children: newChildren,
+          });
+        }
+        return transformed;
+      };
+
+      const transformedLayers = await transformNodes(currentLayers);
+
+      // 3. Rotate selectionRect if present
+      let newSelectionRect = currentSelectionRect;
+      if (currentSelectionRect) {
+        let rx = currentSelectionRect.x;
+        let ry = currentSelectionRect.y;
+        let rw = currentSelectionRect.w;
+        let rh = currentSelectionRect.h;
+
+        if (type === 'rotate180') {
+          rx = currentDocSize.w - currentSelectionRect.x - currentSelectionRect.w;
+          ry = currentDocSize.h - currentSelectionRect.y - currentSelectionRect.h;
+        } else if (type === 'rotate90CW') {
+          rx = currentDocSize.h - currentSelectionRect.y - currentSelectionRect.h;
+          ry = currentSelectionRect.x;
+          rw = currentSelectionRect.h;
+          rh = currentSelectionRect.w;
+        } else if (type === 'rotate90CCW') {
+          rx = currentSelectionRect.y;
+          ry = currentDocSize.w - currentSelectionRect.x - currentSelectionRect.w;
+          rw = currentSelectionRect.h;
+          rh = currentSelectionRect.w;
+        } else if (type === 'flipH') {
+          rx = currentDocSize.w - currentSelectionRect.x - currentSelectionRect.w;
+        } else if (type === 'flipV') {
+          ry = currentDocSize.h - currentSelectionRect.y - currentSelectionRect.h;
+        }
+        newSelectionRect = { x: rx, y: ry, w: rw, h: rh };
+      }
+
+      // 4. Rotate lassoPaths if present
+      let newLassoPaths = currentLassoPaths;
+      if (currentLassoPaths && currentLassoPaths.length > 0) {
+        newLassoPaths = currentLassoPaths.map((path) =>
+          path.map((p) => {
+            let px = p.x;
+            let py = p.y;
+            if (type === 'rotate180') {
+              px = currentDocSize.w - p.x;
+              py = currentDocSize.h - p.y;
+            } else if (type === 'rotate90CW') {
+              px = currentDocSize.h - p.y;
+              py = p.x;
+            } else if (type === 'rotate90CCW') {
+              px = p.y;
+              py = currentDocSize.w - p.x;
+            } else if (type === 'flipH') {
+              px = currentDocSize.w - p.x;
+              py = p.y;
+            } else if (type === 'flipV') {
+              px = p.x;
+              py = currentDocSize.h - p.y;
+            }
+            return { x: px, y: py };
+          })
+        );
+      }
+
+      // 5. Rotate lights if present
+      let newLights = currentLights;
+      if (currentLights && currentLights.length > 0) {
+        newLights = currentLights.map((light) => {
+          let lx = light.position.x;
+          let ly = light.position.y;
+          let lz = light.position.z;
+
+          if (type === 'rotate180') {
+            lx = currentDocSize.w - lx;
+            ly = currentDocSize.h - ly;
+          } else if (type === 'rotate90CW') {
+            const nextX = currentDocSize.h - ly;
+            const nextY = lx;
+            lx = nextX;
+            ly = nextY;
+          } else if (type === 'rotate90CCW') {
+            const nextX = ly;
+            const nextY = currentDocSize.w - lx;
+            lx = nextX;
+            ly = nextY;
+          } else if (type === 'flipH') {
+            lx = currentDocSize.w - lx;
+          } else if (type === 'flipV') {
+            ly = currentDocSize.h - ly;
+          }
+
+          return {
+            ...light,
+            position: { x: lx, y: ly, z: lz }
+          };
+        });
+      }
+
+      // 6. Update the store
+      setDocumentSize({ w: newDocW, h: newDocH });
+      setLayers(transformedLayers);
+      setSelectionRect(newSelectionRect);
+      setLassoPaths(newLassoPaths);
+      if (newLights && newLights.length > 0) {
+        useStore.getState().updateLighting({ lights: newLights });
+      }
+
+      // 7. Record to history
+      recordHistory(`Transform Image: ${type}`);
+    } catch (err) {
+      console.error('Failed to transform image:', err);
+    } finally {
+      setIsProcessing(false);
+      setProcessingText('');
+    }
   };
 
   const handleSelectAll = () => {
@@ -1678,6 +2191,8 @@ const App: React.FC = () => {
           onCopy={handleCopy}
           onPaste={handlePaste}
           onTransformLayer={handleTransformLayer}
+          onTransformImage={handleTransformImage}
+          onFreeTransform={handleFreeTransform}
           onCanvasSize={() => {
             const w = prompt('New Canvas Width:', documentSize.w.toString());
             const h = prompt('New Canvas Height:', documentSize.h.toString());

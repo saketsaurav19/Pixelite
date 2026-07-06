@@ -147,6 +147,8 @@ export const useFileImporter = () => {
             name: result.name,
             type: 'image' as any,
             dataUrl: result.dataUrl,
+            width: result.width,
+            height: result.height,
             position: { x: 0, y: 0 },
             visible: true,
             locked: false,
@@ -161,6 +163,8 @@ export const useFileImporter = () => {
             name: result.name,
             type: 'image' as any,
             dataUrl: result.dataUrl,
+            width: result.width,
+            height: result.height,
             position: {
               x: (documentSize.w - result.width) / 2,
               y: (documentSize.h - result.height) / 2

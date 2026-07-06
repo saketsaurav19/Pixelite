@@ -447,5 +447,141 @@ export const transformTools: ToolModule[] = [
       delete toolState._sliceStartCoords;
       setIsInteracting(false);
     }
+  },
+  {
+    id: 'transform',
+    start: ({ setIsInteracting }) => {
+      setIsInteracting(true);
+    },
+    move: ({ coords, activeLayerId, updateLayer, isShift }) => {
+      if (!activeLayerId) return;
+      const handle = toolState._transformActiveHandle;
+      if (!handle) return;
+
+      const startCoords = toolState._transformStartCoords;
+      const startPos = toolState._transformStartLayerPos;
+      const startSize = toolState._transformStartLayerSize;
+      const startRot = toolState._transformStartLayerRotation;
+
+      if (!startCoords || !startPos || !startSize) return;
+
+      const dx = coords.x - startCoords.x;
+      const dy = coords.y - startCoords.y;
+
+      const theta = (startRot * Math.PI) / 180;
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+
+      const ux = { x: cosT, y: sinT };
+      const uy = { x: -sinT, y: cosT };
+
+      const dpx = dx * ux.x + dy * ux.y;
+      const dpy = dx * uy.x + dy * uy.y;
+
+      if (handle === 'move') {
+        const nextX = startPos.x + dx;
+        const nextY = startPos.y + dy;
+        updateLayer(activeLayerId, { position: { x: nextX, y: nextY } });
+        return;
+      }
+
+      if (handle === 'rot') {
+        const cx = startPos.x + (startSize.w / 2) * cosT - (startSize.h / 2) * sinT;
+        const cy = startPos.y + (startSize.w / 2) * sinT + (startSize.h / 2) * cosT;
+
+        const phi = Math.atan2(coords.y - cy, coords.x - cx);
+
+        let newRot = ((phi + Math.PI / 2) * 180) / Math.PI;
+        newRot = ((newRot + 180) % 360) - 180;
+        if (newRot < -180) newRot += 360;
+
+        const newRotRad = (newRot * Math.PI) / 180;
+        const nextX = cx - (startSize.w / 2) * Math.cos(newRotRad) + (startSize.h / 2) * Math.sin(newRotRad);
+        const nextY = cy - (startSize.w / 2) * Math.sin(newRotRad) - (startSize.h / 2) * Math.cos(newRotRad);
+
+        updateLayer(activeLayerId, {
+          rotation: newRot,
+          position: { x: nextX, y: nextY }
+        });
+        return;
+      }
+
+      let w = startSize.w;
+      let h = startSize.h;
+
+      const getAnchorCanvasPos = (localAnchor: { x: number; y: number }) => {
+        return {
+          x: startPos.x + localAnchor.x * cosT - localAnchor.y * sinT,
+          y: startPos.y + localAnchor.x * sinT + localAnchor.y * cosT
+        };
+      };
+
+      let anchor = { x: 0, y: 0 };
+      if (handle === 'br') anchor = getAnchorCanvasPos({ x: 0, y: 0 });
+      else if (handle === 'bl') anchor = getAnchorCanvasPos({ x: startSize.w, y: 0 });
+      else if (handle === 'tr') anchor = getAnchorCanvasPos({ x: 0, y: startSize.h });
+      else if (handle === 'tl') anchor = getAnchorCanvasPos({ x: startSize.w, y: startSize.h });
+      else if (handle === 'mr') anchor = getAnchorCanvasPos({ x: 0, y: 0 });
+      else if (handle === 'ml') anchor = getAnchorCanvasPos({ x: startSize.w, y: 0 });
+      else if (handle === 'bm') anchor = getAnchorCanvasPos({ x: 0, y: 0 });
+      else if (handle === 'tm') anchor = getAnchorCanvasPos({ x: 0, y: startSize.h });
+
+      if (handle === 'br') {
+        w = startSize.w + dpx;
+        h = startSize.h + dpy;
+      } else if (handle === 'bl') {
+        w = startSize.w - dpx;
+        h = startSize.h + dpy;
+      } else if (handle === 'tr') {
+        w = startSize.w + dpx;
+        h = startSize.h - dpy;
+      } else if (handle === 'tl') {
+        w = startSize.w - dpx;
+        h = startSize.h - dpy;
+      } else if (handle === 'mr') {
+        w = startSize.w + dpx;
+      } else if (handle === 'ml') {
+        w = startSize.w - dpx;
+      } else if (handle === 'bm') {
+        h = startSize.h + dpy;
+      } else if (handle === 'tm') {
+        h = startSize.h - dpy;
+      }
+
+      if (isShift && ['tl', 'tr', 'bl', 'br'].includes(handle)) {
+        const scale = Math.max(w / startSize.w, h / startSize.h);
+        w = startSize.w * scale;
+        h = startSize.h * scale;
+      }
+
+      if (w < 5) w = 5;
+      if (h < 5) h = 5;
+
+      let nextX = startPos.x;
+      let nextY = startPos.y;
+
+      if (handle === 'br' || handle === 'mr' || handle === 'bm') {
+        nextX = anchor.x;
+        nextY = anchor.y;
+      } else if (handle === 'tl') {
+        nextX = anchor.x - w * cosT + h * sinT;
+        nextY = anchor.y - w * sinT - h * cosT;
+      } else if (handle === 'tr' || handle === 'tm') {
+        nextX = anchor.x + h * sinT;
+        nextY = anchor.y - h * cosT;
+      } else if (handle === 'bl' || handle === 'ml') {
+        nextX = anchor.x - w * cosT;
+        nextY = anchor.y - w * sinT;
+      }
+
+      updateLayer(activeLayerId, {
+        position: { x: nextX, y: nextY },
+        width: Math.round(w),
+        height: Math.round(h)
+      });
+    },
+    end: ({ setIsInteracting }) => {
+      setIsInteracting(false);
+    }
   }
 ];

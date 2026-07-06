@@ -50,7 +50,7 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
         width: Math.abs(cropRect.w),
         height: Math.abs(cropRect.h),
         position: 'absolute',
-        border: '4px solid #008cffff',
+        border: '0.5rem solid #008cffff',
         outline: '2000px solid rgba(0,0,0,0.5)',
         zIndex: 10000,
         cursor: 'move'
