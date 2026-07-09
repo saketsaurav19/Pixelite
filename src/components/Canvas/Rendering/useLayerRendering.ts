@@ -251,21 +251,24 @@ const renderLayer = (
       }
       ctx.rotate(rad);
     }
-    const { type, w, h, points, fill, stroke, strokeWidth: sw } = layer.shapeData as any;
+    const { type, w, h, points, fill, stroke, strokeWidth } = layer.shapeData as any;
+    const sw = strokeWidth || 0;
 
     if (type === 'rect' || !type) {
+      ctx.beginPath();
+      ctx.rect(sw/2, sw/2, (w || 100) - sw, (h || 100) - sw);
       if (fill) {
         ctx.fillStyle = fill;
-        ctx.fillRect(0, 0, w || 100, h || 100);
+        ctx.fill();
       }
       if (stroke && sw > 0) {
         ctx.strokeStyle = stroke;
         ctx.lineWidth = sw;
-        ctx.strokeRect(0, 0, w || 100, h || 100);
+        ctx.stroke();
       }
     } else if (type === 'ellipse') {
       ctx.beginPath();
-      ctx.ellipse(w / 2, h / 2, Math.abs(w / 2), Math.abs(h / 2), 0, 0, Math.PI * 2);
+      ctx.ellipse(w / 2, h / 2, Math.max(0, Math.abs(w / 2) - sw / 2), Math.max(0, Math.abs(h / 2) - sw / 2), 0, 0, Math.PI * 2);
       if (fill) {
         ctx.fillStyle = fill;
         ctx.fill();

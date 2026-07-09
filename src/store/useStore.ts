@@ -33,12 +33,14 @@ const initialDocId = nanoid();
 const initialState = {
   layers: [],
   activeLayerId: null,
+  selectedLayerIds: [],
   history: [
     {
       name: 'Initial State',
       state: {
         layers: [],
         activeLayerId: null,
+        selectedLayerIds: [],
         lassoPaths: [],
         selectionRect: null,
         isInverseSelection: false,

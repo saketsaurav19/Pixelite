@@ -285,6 +285,22 @@ const OptionsBar: React.FC = () => {
     }
   }, [activeLayerId, activeLayer?.fontFamily, activeLayer?.fontWeight, activeLayer?.fontStyle, activeLayer?.textAlign, activeLayer?.fontSize, activeLayer?.color]);
 
+  // Sync options bar controls with active shape layer properties
+  React.useEffect(() => {
+    if (activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData) {
+      const { fill, stroke, strokeWidth: sw } = activeLayer.shapeData;
+      if (fill && fill !== 'transparent' && fill !== 'none' && fill !== brushColor) {
+        setBrushColor(fill);
+      }
+      if (stroke && stroke !== 'transparent' && stroke !== 'none' && stroke !== secondaryColor) {
+        setSecondaryColor(stroke);
+      }
+      if (sw !== undefined && sw !== strokeWidth) {
+        setStrokeWidth(sw);
+      }
+    }
+  }, [activeLayerId, activeLayer?.shapeData?.fill, activeLayer?.shapeData?.stroke, activeLayer?.shapeData?.strokeWidth]);
+
   // Load selected Google Font dynamically
   React.useEffect(() => {
     if (textFontFamily) {
@@ -1564,9 +1580,36 @@ const OptionsBar: React.FC = () => {
             min="0"
             max="50"
             value={strokeWidth}
-            onChange={(e) => setStrokeWidth(parseInt(e.target.value))}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              setStrokeWidth(val);
+              if (activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData) {
+                updateLayer(activeLayer.id, {
+                  shapeData: {
+                    ...activeLayer.shapeData,
+                    strokeWidth: val
+                  }
+                });
+                recordHistory('Change Stroke Width');
+              }
+            }}
           />
-          <EditableValue value={strokeWidth} unit="px" onCommit={setStrokeWidth} />
+          <EditableValue
+            value={strokeWidth}
+            unit="px"
+            onCommit={(val) => {
+              setStrokeWidth(val);
+              if (activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData) {
+                updateLayer(activeLayer.id, {
+                  shapeData: {
+                    ...activeLayer.shapeData,
+                    strokeWidth: val
+                  }
+                });
+                recordHistory('Change Stroke Width');
+              }
+            }}
+          />
         </div>
       )}
       {(brushLikeTools.includes(activeTool) || textTools.includes(activeTool) || shapeTools.includes(activeTool) || activeTool === 'eyedropper' || penTools.includes(activeTool)) && (
@@ -1579,6 +1622,17 @@ const OptionsBar: React.FC = () => {
             if (activeLayer && activeLayer.type === 'text') {
               updateLayer(activeLayer.id, { color: hexToRgba(color, primaryOpacity) });
               recordHistory('Change Text Color');
+            } else if (activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData) {
+              const fill = activeTool === 'line_shape' ? '' : color;
+              const stroke = activeTool === 'line_shape' ? color : activeLayer.shapeData.stroke;
+              updateLayer(activeLayer.id, {
+                shapeData: {
+                  ...activeLayer.shapeData,
+                  fill,
+                  stroke
+                }
+              });
+              recordHistory('Change Shape Fill');
             }
           }}
           onOpacityChange={(opacity) => {
@@ -1595,7 +1649,19 @@ const OptionsBar: React.FC = () => {
           label={['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool) || ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool) ? 'Stroke' : 'Secondary'}
           color={secondaryColor}
           opacity={secondaryOpacity}
-          onColorChange={setSecondaryColor}
+          onColorChange={(color) => {
+            setSecondaryColor(color);
+            if (activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData) {
+              const stroke = activeTool === 'line_shape' ? activeLayer.shapeData.stroke : color;
+              updateLayer(activeLayer.id, {
+                shapeData: {
+                  ...activeLayer.shapeData,
+                  stroke
+                }
+              });
+              recordHistory('Change Shape Stroke');
+            }
+          }}
           onOpacityChange={setSecondaryOpacity}
         />
       )}

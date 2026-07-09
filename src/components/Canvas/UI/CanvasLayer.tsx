@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
+import { mapBlendModeToCss } from '../../../utils/blendModes';
 import { FontRegistry } from '../../../pdf/worker/engines/FontRegistry';
 import { getHomography, drawTrianglesWarp, loadGoogleFont } from '../../../utils/canvasUtils';
 import { toolState } from '../../../tools/toolState';
@@ -349,6 +350,36 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   const hasCustomFont = !!layer.fontChecksum;
   const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
 
+  const ditherMaskUrl = React.useMemo(() => {
+    if (layer.blendMode !== 'dissolve') return null;
+    
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const imgData = ctx.createImageData(size, size);
+    const pixels = imgData.data;
+    const opacity = layer.opacity !== undefined ? layer.opacity : 1;
+    
+    for (let i = 0; i < pixels.length; i += 4) {
+      const rand = Math.random();
+      if (rand < opacity) {
+        pixels[i] = 0;
+        pixels[i + 1] = 0;
+        pixels[i + 2] = 0;
+        pixels[i + 3] = 255;
+      } else {
+        pixels[i] = 0;
+        pixels[i + 1] = 0;
+        pixels[i + 2] = 0;
+        pixels[i + 3] = 0;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas.toDataURL();
+  }, [layer.blendMode, layer.opacity]);
+
   // If it's a group or artboard, we wrap the children in an isolated div for compositing
   if (layer.type === 'group' || layer.type === 'artboard') {
     return (
@@ -367,8 +398,12 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
           zIndex: layersCount - layerIndex,
           pointerEvents: layer.type === 'artboard' ? 'auto' : 'none',
           isolation: 'isolate',
-          mixBlendMode: (layer.blendMode === 'source-over' || layer.blendMode === 'pass through' ? 'normal' : (layer.blendMode || 'normal')) as any,
-          opacity: layer.opacity,
+          mixBlendMode: (layer.blendMode === 'dissolve' ? 'normal' : mapBlendModeToCss(layer.blendMode)) as any,
+          opacity: layer.blendMode === 'dissolve' ? 1 : layer.opacity,
+          WebkitMaskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
+          maskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
+          WebkitMaskRepeat: ditherMaskUrl ? 'repeat' : undefined,
+          maskRepeat: ditherMaskUrl ? 'repeat' : undefined,
           touchAction: 'none',
         }}
       >
@@ -678,8 +713,12 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         height: layerHeight,
         zIndex: layersCount - layerIndex,
         pointerEvents: 'none',
-        mixBlendMode: (layer.blendMode === 'source-over' ? 'normal' : (layer.blendMode || 'normal')) as any,
-        opacity: layer.opacity,
+        mixBlendMode: (layer.blendMode === 'dissolve' ? 'normal' : mapBlendModeToCss(layer.blendMode)) as any,
+        opacity: layer.blendMode === 'dissolve' ? 1 : layer.opacity,
+        WebkitMaskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
+        maskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
+        WebkitMaskRepeat: ditherMaskUrl ? 'repeat' : undefined,
+        maskRepeat: ditherMaskUrl ? 'repeat' : undefined,
         transform: layerTransform,
         transformOrigin,
       }}

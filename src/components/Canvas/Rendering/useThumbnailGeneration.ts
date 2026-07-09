@@ -77,6 +77,102 @@ const generateThumbnail = (
         updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
         lastContentRef.current[layer.id] = contentStr;
       }
+    } else if (layer.type === 'shape') {
+      thumbCanvas.width = maxSize;
+      thumbCanvas.height = maxSize;
+      const thumbCtx = thumbCanvas.getContext('2d');
+      if (thumbCtx) {
+        const fillStr = (layer.shapeData?.fill || '#000000').toLowerCase();
+        let isLight = false;
+
+        const getBrightness = (r: number, g: number, b: number) => {
+          return 0.299 * r + 0.587 * g + 0.114 * b;
+        };
+
+        if (fillStr.includes('rgb')) {
+          const match = fillStr.match(/\d+/g);
+          if (match && match.length >= 3) {
+            const r = parseInt(match[0]);
+            const g = parseInt(match[1]);
+            const b = parseInt(match[2]);
+            const brightness = getBrightness(r, g, b);
+            if (brightness > 128) isLight = true;
+          }
+        } else if (fillStr.startsWith('#')) {
+          const hex = fillStr.slice(1);
+          if (hex.length === 3) {
+            const r = parseInt(hex[0], 16) * 17;
+            const g = parseInt(hex[1], 16) * 17;
+            const b = parseInt(hex[2], 16) * 17;
+            const brightness = getBrightness(r, g, b);
+            if (brightness > 128) isLight = true;
+          } else if (hex.length >= 6) {
+            const r = parseInt(hex.slice(0, 2), 16);
+            const g = parseInt(hex.slice(2, 4), 16);
+            const b = parseInt(hex.slice(4, 6), 16);
+            const brightness = getBrightness(r, g, b);
+            if (brightness > 128) isLight = true;
+          }
+        } else if (fillStr === 'white' || fillStr === '#fff' || fillStr === '#ffffff' || fillStr === 'yellow' || fillStr === 'cyan' || fillStr === 'magenta') {
+          isLight = true;
+        } else if (fillStr === 'transparent' || fillStr === 'none' || fillStr === '') {
+          const strokeStr = (layer.shapeData?.stroke || '#000000').toLowerCase();
+          if (strokeStr.includes('rgb')) {
+            const match = strokeStr.match(/\d+/g);
+            if (match && match.length >= 3) {
+              const r = parseInt(match[0]);
+              const g = parseInt(match[1]);
+              const b = parseInt(match[2]);
+              const brightness = getBrightness(r, g, b);
+              if (brightness > 128) isLight = true;
+            }
+          } else if (strokeStr.startsWith('#')) {
+            const hex = strokeStr.slice(1);
+            if (hex.length === 3) {
+              const r = parseInt(hex[0], 16) * 17;
+              const g = parseInt(hex[1], 16) * 17;
+              const b = parseInt(hex[2], 16) * 17;
+              const brightness = getBrightness(r, g, b);
+              if (brightness > 128) isLight = true;
+            } else if (hex.length >= 6) {
+              const r = parseInt(hex.slice(0, 2), 16);
+              const g = parseInt(hex.slice(2, 4), 16);
+              const b = parseInt(hex.slice(4, 6), 16);
+              const brightness = getBrightness(r, g, b);
+              if (brightness > 128) isLight = true;
+            }
+          } else if (strokeStr === 'white' || strokeStr === '#fff' || strokeStr === '#ffffff') {
+            isLight = true;
+          }
+        }
+
+        thumbCtx.fillStyle = isLight ? '#000000' : '#ffffff';
+        thumbCtx.fillRect(0, 0, maxSize, maxSize);
+
+        const canvas = canvasRefs.current[layer.id];
+        if (canvas) {
+          const aspect = canvas.width / canvas.height;
+          let drawW, drawH;
+          if (aspect > 1) {
+            drawW = maxSize;
+            drawH = maxSize / aspect;
+          } else {
+            drawH = maxSize;
+            drawW = maxSize * aspect;
+          }
+          const drawX = (maxSize - drawW) / 2;
+          const drawY = (maxSize - drawH) / 2;
+
+          thumbCtx.drawImage(
+            canvas,
+            0, 0, canvas.width, canvas.height,
+            drawX, drawY, drawW, drawH
+          );
+        }
+
+        updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
+        lastContentRef.current[layer.id] = contentStr;
+      }
     } else {
       const canvas = canvasRefs.current[layer.id];
       if (canvas) {

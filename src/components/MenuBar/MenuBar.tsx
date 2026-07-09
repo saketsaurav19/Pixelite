@@ -116,6 +116,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const layers = useStore((s) => s.layers);
   const activeLayerId = useStore((s) => s.activeLayerId);
   const autoAlignLayers = useStore((s) => s.autoAlignLayers);
+  const autoBlendLayers = useStore((s) => s.autoBlendLayers);
   
   const activeLayer = layers.find(l => l.id === activeLayerId);
   const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
@@ -247,7 +248,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
         },
         { divider: true },
         { label: 'Auto-Align', action: autoAlignLayers },
-        { label: 'Auto-Blend' },
+        { label: 'Auto-Blend', action: autoBlendLayers },
         { divider: true },
         {
           label: 'Define New',

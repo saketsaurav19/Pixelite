@@ -20,20 +20,25 @@ export const VectorOverlay: React.FC<VectorOverlayProps> = ({
   getSvgPathData,
   selectedPoint
 }) => {
+  const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool);
   if (vectorPaths.length === 0 && !(activeTool === 'pen' && activePathIndex !== null)) return null;
 
   return (
     <svg className="vector-paths-svg" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1100 }}>
-      {vectorPaths.map((path, idx) => (
-        <path
-          key={idx}
-          d={getSvgPathData(path.points, path.closed, path.smooth)}
-          fill="none"
-          stroke={activePathIndex === idx ? "#00aaff" : "#fff"}
-          strokeWidth="2"
-          strokeDasharray="4 4"
-        />
-      ))}
+      {vectorPaths.map((path, idx) => {
+        const isActive = activePathIndex === idx;
+        if (!isActive && !isVectorTool) return null;
+        return (
+          <path
+            key={idx}
+            d={getSvgPathData(path.points, path.closed, path.smooth)}
+            fill="none"
+            stroke={isActive ? "#00aaff" : "rgba(255, 255, 255, 0.4)"}
+            strokeWidth="2"
+            strokeDasharray="4 4"
+          />
+        );
+      })}
       
       {/* Rubber Band Preview */}
       {['pen', 'curvature_pen', 'free_pen'].includes(activeTool) && activePathIndex !== null && vectorPaths[activePathIndex] && !vectorPaths[activePathIndex].closed && currentMousePos && (
@@ -47,15 +52,15 @@ export const VectorOverlay: React.FC<VectorOverlayProps> = ({
             style={{ opacity: 0.8 }}
           />
           <circle
-            cx={currentMousePos.x / 2}
-            cy={currentMousePos.y / 2}
+            cx={currentMousePos.x}
+            cy={currentMousePos.y}
             r="4"
             fill="#00aaff"
             opacity="0.3"
           />
           <circle
-            cx={currentMousePos.x / 2}
-            cy={currentMousePos.y / 2}
+            cx={currentMousePos.x}
+            cy={currentMousePos.y}
             r="2"
             fill="#fff"
             stroke="#00aaff"
@@ -67,8 +72,8 @@ export const VectorOverlay: React.FC<VectorOverlayProps> = ({
       {/* Hover Preview for start of new path */}
       {activeTool === 'pen' && activePathIndex === null && currentMousePos && (
         <circle
-          cx={currentMousePos.x / 2}
-          cy={currentMousePos.y / 2}
+          cx={currentMousePos.x}
+          cy={currentMousePos.y}
           r="4"
           fill="none"
           stroke="#00aaff"
@@ -85,8 +90,8 @@ export const VectorOverlay: React.FC<VectorOverlayProps> = ({
           if (isNearStart) {
             return (
               <rect
-                x={firstPoint.x / 2 - 4}
-                y={firstPoint.y / 2 - 4}
+                x={firstPoint.x - 4}
+                y={firstPoint.y - 4}
                 width="8"
                 height="8"
                 fill="none"
@@ -110,8 +115,8 @@ export const VectorOverlay: React.FC<VectorOverlayProps> = ({
             return (
               <circle
                 key={`${pIdx}-${ptIdx}`}
-                cx={p.x / 2}
-                cy={p.y / 2}
+                cx={p.x}
+                cy={p.y}
                 r={radius}
                 fill={isSelected ? "#00aaff" : "#fff"}
                 stroke="#00aaff"

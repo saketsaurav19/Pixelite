@@ -9,7 +9,7 @@ export type Tool =
   | 'shape' | 'ellipse_shape' | 'triangle_shape' | 'polygon_shape' | 'line_shape' | 'custom_shape'
   | 'hand' | 'rotate_view' | 'zoom_tool' | 'lighting' | 'transform';
 
-export type BlendMode = GlobalCompositeOperation | 'pass through';
+export type BlendMode = GlobalCompositeOperation | 'pass through' | 'dissolve' | 'linear-burn' | 'darker-color' | 'linear-dodge' | 'lighter-color' | 'vivid-light' | 'linear-light' | 'pin-light' | 'hard-mix' | 'subtract' | 'divide';
 
 export interface TextRun {
   str: string;
@@ -323,6 +323,10 @@ export interface EditorState extends DocumentSpecificState {
   activeMobileSubmenu: string | null;
   setActiveMobileSubmenu: (menu: string | null) => void;
   screenMode: 'standard' | 'full-menu' | 'full';
+  visibleChannels: { r: boolean; g: boolean; b: boolean };
+  selectedChannel: 'RGB' | 'r' | 'g' | 'b';
+  toggleChannelVisibility: (channel: 'r' | 'g' | 'b') => void;
+  setSelectedChannel: (channel: 'RGB' | 'r' | 'g' | 'b') => void;
   visiblePanels: {
     layers: boolean;
     history: boolean;

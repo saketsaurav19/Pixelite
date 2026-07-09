@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import './Canvas.css';
-import { findLayerById, isLayerOrAncestorsLocked } from '../../utils/layerUtils';
+import { findLayerById, isLayerOrAncestorsLocked, flattenTree } from '../../utils/layerUtils';
 import { getCoordinates as getCoordsUtil, getSnappedCoords as getSnappedCoordsUtil } from './Core/coordUtils';
 import { applySelectionClip as applySelectionClipUtil, getSelectionPathData as getSelectionPathDataUtil, clearSelection as clearSelectionUtil } from './Core/selectionUtils';
 import { getSvgPathData as getSvgPathDataUtil } from './Core/pathUtils';
@@ -80,7 +80,7 @@ const Canvas: React.FC = () => {
     activeTool, brushSize, strokeWidth, brushColor, secondaryColor,
     primaryOpacity, secondaryOpacity,
     zoom, setZoom, layers, activeLayerId,
-    updateLayer, addLayer, recordHistory, setActiveLayer, setLayers, setActiveTool,
+    updateLayer, addLayer, recordHistory, setActiveLayer, setLayers, setActiveTool, removeLayer,
     canvasOffset, setCanvasOffset, canvasRotation, setCanvasRotation, setBrushColor,
     history, historyIndex,
     lassoPaths, setLassoPaths, selectionRect, setSelectionRect,
@@ -470,6 +470,18 @@ const Canvas: React.FC = () => {
               return next;
             });
           }
+        } else {
+          const isTyping = document.activeElement?.tagName === 'INPUT' || 
+                            document.activeElement?.tagName === 'TEXTAREA' || 
+                            (document.activeElement as HTMLElement)?.contentEditable === 'true';
+          if (!textEditor && !isTyping && activeLayerId) {
+            const currentLayers = useStore.getState().layers;
+            if (flattenTree(currentLayers).length > 1) {
+              e.preventDefault();
+              removeLayer(activeLayerId);
+              recordHistory('Delete Layer');
+            }
+          }
         }
       } else if (e.key === 'Escape') {
         if (activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') {
@@ -486,7 +498,7 @@ const Canvas: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTool, lassoPaths, recordHistory, setLassoPaths, isInteracting]);
+  }, [activeTool, lassoPaths, recordHistory, setLassoPaths, isInteracting, activeLayerId, removeLayer, textEditor]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     handleTouchStartUtil(e, zoom, canvasOffset, {
@@ -1026,6 +1038,7 @@ const Canvas: React.FC = () => {
           backgroundImage: hasArtboards ? 'none' : undefined,
           boxShadow: hasArtboards ? 'none' : undefined,
           touchAction: 'none',
+          filter: 'url(#channelFilter)',
         }}
         ref={stackRef}
       >

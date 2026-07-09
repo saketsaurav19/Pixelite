@@ -1992,6 +1992,11 @@ body {
   background: var(--bg-tertiary);
 }
 
+.channel-row.active {
+  background: var(--accent-primary-hover, rgba(26, 115, 232, 0.25));
+  color: #fff;
+}
+
 .channel-eye {
   color: var(--text-muted);
   flex-shrink: 0;
@@ -2014,6 +2019,44 @@ body {
   font-size: 0.625rem;
   color: var(--text-muted);
   font-family: monospace;
+}
+
+.paths-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.path-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.6875rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.path-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.path-row.active {
+  background: var(--accent-primary-hover, rgba(26, 115, 232, 0.25));
+  color: #fff;
+}
+
+.path-name {
+  flex-grow: 1;
+}
+
+.paths-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .mobile-panel-tabs {

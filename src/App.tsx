@@ -1,4 +1,5 @@
-import { findLayerById, isLayerOrDescendantsLocked } from './utils/layerUtils';
+import { findLayerById, isLayerOrDescendantsLocked, flattenTree } from './utils/layerUtils';
+import { mapBlendModeToCanvas } from './utils/blendModes';
 import { Application } from "./scripting/Application";
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
@@ -168,10 +169,42 @@ const App: React.FC = () => {
           }}
         >
           <div
-            className={`layer-row ${activeLayerId === layer.id ? 'active' : ''} ${longPressActiveLayerId === layer.id ? 'long-press-active' : ''}`}
+            className={`layer-row ${selectedLayerIds.includes(layer.id) || activeLayerId === layer.id ? 'active' : ''} ${longPressActiveLayerId === layer.id ? 'long-press-active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
-              setActiveLayer(layer.id);
+              
+              const getFlatLayerIds = (nodes: any[]): string[] => {
+                let ids: string[] = [];
+                nodes.forEach(node => {
+                  ids.push(node.id);
+                  if (node.children) {
+                    ids = ids.concat(getFlatLayerIds(node.children));
+                  }
+                });
+                return ids;
+              };
+
+              if (e.ctrlKey || e.metaKey) {
+                if (selectedLayerIds.includes(layer.id)) {
+                  setSelectedLayerIds(selectedLayerIds.filter(id => id !== layer.id));
+                } else {
+                  setSelectedLayerIds([...selectedLayerIds, layer.id]);
+                }
+              } else if (e.shiftKey && activeLayerId) {
+                const flatIds = getFlatLayerIds(layers);
+                const startIndex = flatIds.indexOf(activeLayerId);
+                const endIndex = flatIds.indexOf(layer.id);
+                if (startIndex !== -1 && endIndex !== -1) {
+                  const minIdx = Math.min(startIndex, endIndex);
+                  const maxIdx = Math.max(startIndex, endIndex);
+                  setSelectedLayerIds(flatIds.slice(minIdx, maxIdx + 1));
+                } else {
+                  setActiveLayer(layer.id);
+                }
+              } else {
+                setActiveLayer(layer.id);
+              }
+
               if (layer.type === 'adjustment' && layer.adjustmentData) {
                 useStore.getState().setActiveAdjustmentModal(layer.adjustmentData.type);
               }
@@ -287,6 +320,8 @@ const App: React.FC = () => {
   const {
     layers,
     activeLayerId,
+    selectedLayerIds = [],
+    setSelectedLayerIds,
     setActiveLayer,
     toggleLayerVisibility,
     addLayer,
@@ -326,6 +361,16 @@ const App: React.FC = () => {
     setActiveTool,
     setToolVariant,
     visiblePanels,
+    visibleChannels,
+    selectedChannel,
+    toggleChannelVisibility,
+    setSelectedChannel,
+    vectorPaths = [],
+    setVectorPaths,
+    activePathIndex = null,
+    setActivePathIndex,
+    brushColor,
+    primaryOpacity,
     // togglePanel
   } = useStore();
 
@@ -353,9 +398,38 @@ const App: React.FC = () => {
         const el = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
         if (el) {
           ctx.save();
-          ctx.globalAlpha = currentOpacity;
-          ctx.globalCompositeOperation = layer.blendMode === 'pass through' ? 'source-over' : (layer.blendMode || 'source-over');
-          ctx.drawImage(el, lx, ly);
+          if (layer.blendMode === 'dissolve') {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = el.width;
+            tempCanvas.height = el.height;
+            const tempCtx = tempCanvas.getContext('2d')!;
+            tempCtx.drawImage(el, 0, 0);
+            
+            const imgData = tempCtx.getImageData(0, 0, el.width, el.height);
+            const pixels = imgData.data;
+            const opacity = currentOpacity;
+            
+            for (let idx = 0; idx < pixels.length; idx += 4) {
+              const a = pixels[idx + 3];
+              if (a > 0) {
+                const normAlpha = (a / 255) * opacity;
+                if (Math.random() >= normAlpha) {
+                  pixels[idx + 3] = 0;
+                } else {
+                  pixels[idx + 3] = 255;
+                }
+              }
+            }
+            tempCtx.putImageData(imgData, 0, 0);
+            
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(tempCanvas, lx, ly);
+          } else {
+            ctx.globalAlpha = currentOpacity;
+            ctx.globalCompositeOperation = mapBlendModeToCanvas(layer.blendMode);
+            ctx.drawImage(el, lx, ly);
+          }
           ctx.restore();
         }
       }
@@ -1353,18 +1427,52 @@ const App: React.FC = () => {
       const isLit = useStore.getState().isLightingEnabled && layer.id === useStore.getState().activeLayerId;
       const lastResultUrl = useStore.getState().lastResultUrl;
 
-      ctx.globalAlpha = layer.opacity || 1;
-      ctx.globalCompositeOperation = (layer.blendMode || 'source-over') as any;
-
-      if (isLit && lastResultUrl) {
-        const litImg = await loadImage(lastResultUrl);
-        ctx.drawImage(litImg, layer.position.x, layer.position.y);
-      } else {
+      ctx.save();
+      if (layer.blendMode === 'dissolve') {
         const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
         if (layerCanvas) {
-          ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = layerCanvas.width;
+          tempCanvas.height = layerCanvas.height;
+          const tempCtx = tempCanvas.getContext('2d')!;
+          tempCtx.drawImage(layerCanvas, 0, 0);
+          
+          const imgData = tempCtx.getImageData(0, 0, layerCanvas.width, layerCanvas.height);
+          const pixels = imgData.data;
+          const opacity = layer.opacity || 1;
+          
+          for (let idx = 0; idx < pixels.length; idx += 4) {
+            const a = pixels[idx + 3];
+            if (a > 0) {
+              const normAlpha = (a / 255) * opacity;
+              if (Math.random() >= normAlpha) {
+                pixels[idx + 3] = 0;
+              } else {
+                pixels[idx + 3] = 255;
+              }
+            }
+          }
+          tempCtx.putImageData(imgData, 0, 0);
+          
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.drawImage(tempCanvas, layer.position.x, layer.position.y);
+        }
+      } else {
+        ctx.globalAlpha = layer.opacity || 1;
+        ctx.globalCompositeOperation = mapBlendModeToCanvas(layer.blendMode);
+
+        if (isLit && lastResultUrl) {
+          const litImg = await loadImage(lastResultUrl);
+          ctx.drawImage(litImg, layer.position.x, layer.position.y);
+        } else {
+          const layerCanvas = document.querySelector(`canvas[data-layer-id="${layer.id}"]`) as HTMLCanvasElement;
+          if (layerCanvas) {
+            ctx.drawImage(layerCanvas, layer.position.x, layer.position.y);
+          }
         }
       }
+      ctx.restore();
     }
 
     let mimeType = 'image/png';
@@ -2623,30 +2731,45 @@ const App: React.FC = () => {
                   {activeLayerId && (() => {
                     const activeLayer = findLayerById(layers, activeLayerId);
                     if (!activeLayer) return null;
+                    const targetIds = selectedLayerIds.length > 0 ? selectedLayerIds : [activeLayerId];
                     return (
                       <div className="layer-global-properties">
                         <div className="layer-properties-row">
                           <select
                             className="blend-select"
                             value={activeLayer.blendMode || 'source-over'}
-                            onChange={(e) => updateLayer(activeLayerId, { blendMode: e.target.value as any })}
+                            onChange={(e) => {
+                              const mode = e.target.value as any;
+                              targetIds.forEach(id => updateLayer(id, { blendMode: mode }));
+                            }}
                           >
-                            <option value="source-over">Normal</option>
-                            <option value="multiply">Multiply</option>
-                            <option value="screen">Screen</option>
-                            <option value="overlay">Overlay</option>
-                            <option value="darken">Darken</option>
-                            <option value="lighten">Lighten</option>
-                            <option value="color-dodge">Color Dodge</option>
-                            <option value="color-burn">Color Burn</option>
-                            <option value="hard-light">Hard Light</option>
-                            <option value="soft-light">Soft Light</option>
-                            <option value="difference">Difference</option>
-                            <option value="exclusion">Exclusion</option>
-                            <option value="hue">Hue</option>
-                            <option value="saturation">Saturation</option>
-                            <option value="color">Color</option>
-                            <option value="luminosity">Luminosity</option>
+                             <option value="source-over">Normal</option>
+                             <option value="dissolve">Dissolve</option>
+                             <option value="darken">Darken</option>
+                             <option value="multiply">Multiply</option>
+                             <option value="color-burn">Color Burn</option>
+                             <option value="linear-burn">Linear Burn</option>
+                             <option value="darker-color">Darker Color</option>
+                             <option value="lighten">Lighten</option>
+                             <option value="screen">Screen</option>
+                             <option value="color-dodge">Color Dodge</option>
+                             <option value="linear-dodge">Linear Dodge</option>
+                             <option value="lighter-color">Lighter Color</option>
+                             <option value="overlay">Overlay</option>
+                             <option value="soft-light">Soft Light</option>
+                             <option value="hard-light">Hard Light</option>
+                             <option value="vivid-light">Vivid Light</option>
+                             <option value="linear-light">Linear Light</option>
+                             <option value="pin-light">Pin Light</option>
+                             <option value="hard-mix">Hard Mix</option>
+                             <option value="difference">Difference</option>
+                             <option value="exclusion">Exclusion</option>
+                             <option value="subtract">Subtract</option>
+                             <option value="divide">Divide</option>
+                             <option value="hue">Hue</option>
+                             <option value="saturation">Saturation</option>
+                             <option value="color">Color</option>
+                             <option value="luminosity">Luminosity</option>
                           </select>
                           <div className="opacity-control">
                             <span>Op:</span>
@@ -2654,7 +2777,10 @@ const App: React.FC = () => {
                               type="range"
                               min="0" max="1" step="0.01"
                               value={activeLayer.opacity || 0}
-                              onChange={(e) => updateLayer(activeLayerId, { opacity: parseFloat(e.target.value) })}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                targetIds.forEach(id => updateLayer(id, { opacity: val }));
+                              }}
                             />
                             {isEditingOpacity ? (
                               <input
@@ -2669,7 +2795,8 @@ const App: React.FC = () => {
                                   setIsTyping(false);
                                   const val = parseInt(tempOpacityValue);
                                   if (!isNaN(val)) {
-                                    updateLayer(activeLayerId, { opacity: Math.max(0, Math.min(1, val / 100)) });
+                                    const opacityVal = Math.max(0, Math.min(1, val / 100));
+                                    targetIds.forEach(id => updateLayer(id, { opacity: opacityVal }));
                                   }
                                 }}
                                 onKeyDown={(e) => {
@@ -2700,7 +2827,7 @@ const App: React.FC = () => {
                               disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockTransparent;
-                                updateLayer(activeLayerId, { lockTransparent: newVal });
+                                targetIds.forEach(id => updateLayer(id, { lockTransparent: newVal }));
                                 recordHistory(`Toggle Lock Transparency`);
                               }}
                               title="Lock transparent pixels"
@@ -2712,7 +2839,7 @@ const App: React.FC = () => {
                               disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockPixels;
-                                updateLayer(activeLayerId, { lockPixels: newVal });
+                                targetIds.forEach(id => updateLayer(id, { lockPixels: newVal }));
                                 recordHistory(`Toggle Lock Pixels`);
                               }}
                               title="Lock image pixels"
@@ -2724,7 +2851,7 @@ const App: React.FC = () => {
                               disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockPosition;
-                                updateLayer(activeLayerId, { lockPosition: newVal });
+                                targetIds.forEach(id => updateLayer(id, { lockPosition: newVal }));
                                 recordHistory(`Toggle Lock Position`);
                               }}
                               title="Lock position"
@@ -2735,7 +2862,7 @@ const App: React.FC = () => {
                               className={`lock-btn ${isLayerOrDescendantsLocked(activeLayer) ? 'active' : ''}`}
                               onClick={() => {
                                 const newVal = !isLayerOrDescendantsLocked(activeLayer);
-                                updateLayer(activeLayerId, { locked: newVal });
+                                targetIds.forEach(id => updateLayer(id, { locked: newVal }));
                                 recordHistory(newVal ? `Toggle Lock All` : `Toggle Unlock All`);
                               }}
                               title="Lock all"
@@ -2750,7 +2877,10 @@ const App: React.FC = () => {
                               type="range"
                               min="0" max="1" step="0.01"
                               value={activeLayer.fill !== undefined ? activeLayer.fill : 1}
-                              onChange={(e) => updateLayer(activeLayerId, { fill: parseFloat(e.target.value) })}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                targetIds.forEach(id => updateLayer(id, { fill: val }));
+                              }}
                             />
                             {isEditingFill ? (
                               <input
@@ -2765,7 +2895,8 @@ const App: React.FC = () => {
                                   setIsTyping(false);
                                   const val = parseInt(tempFillValue);
                                   if (!isNaN(val)) {
-                                    updateLayer(activeLayerId, { fill: Math.max(0, Math.min(1, val / 100)) });
+                                    const fillVal = Math.max(0, Math.min(1, val / 100));
+                                    targetIds.forEach(id => updateLayer(id, { fill: fillVal }));
                                   }
                                 }}
                                 onKeyDown={(e) => {
@@ -2834,7 +2965,7 @@ const App: React.FC = () => {
                       title="Delete Layer"
                       className="layers-footer-btn layers-footer-delete"
                       onClick={() => activeLayerId && removeLayer(activeLayerId)}
-                      disabled={layers.length <= 1}
+                      disabled={flattenTree(layers).length <= 1}
                     >
                       <LucideIcons.Trash2 size={13} />
                     </button>
@@ -2844,30 +2975,289 @@ const App: React.FC = () => {
 
               {!bottomDockCollapsed && bottomDockTab === 'channels' && visiblePanels.channels && (
                 <div className="panel-content channels-panel-content">
-                  {(['RGB', 'Red', 'Green', 'Blue'] as const).map((ch, i) => (
-                    <div key={ch} className="channel-row">
-                      <div className="channel-eye"><LucideIcons.Eye size={11} /></div>
-                      <div className="channel-swatch" style={{
-                        background: i === 0 ? 'linear-gradient(90deg, #000, #fff)' :
-                          i === 1 ? 'linear-gradient(90deg, #000, #f00)' :
-                            i === 2 ? 'linear-gradient(90deg, #000, #0f0)' :
-                              'linear-gradient(90deg, #000, #00f)'
-                      }} />
-                      <span className="channel-name">{ch}</span>
-                      <span className="channel-shortcut">{i === 0 ? 'Ctrl+~' : `Ctrl+${i}`}</span>
-                    </div>
-                  ))}
+                  {(['RGB', 'Red', 'Green', 'Blue'] as const).map((ch, i) => {
+                    const isActive = (i === 0 && selectedChannel === 'RGB') ||
+                                     (i === 1 && selectedChannel === 'r') ||
+                                     (i === 2 && selectedChannel === 'g') ||
+                                     (i === 3 && selectedChannel === 'b');
+                    const isVisible = (i === 0 && visibleChannels.r && visibleChannels.g && visibleChannels.b) ||
+                                      (i === 1 && visibleChannels.r) ||
+                                      (i === 2 && visibleChannels.g) ||
+                                      (i === 3 && visibleChannels.b);
+                    return (
+                      <div
+                        key={ch}
+                        className={`channel-row ${isActive ? 'active' : ''}`}
+                        onClick={() => {
+                          const targetChannel = i === 0 ? 'RGB' : (i === 1 ? 'r' : (i === 2 ? 'g' : 'b'));
+                          setSelectedChannel(targetChannel);
+                        }}
+                      >
+                        <div
+                          className="channel-eye"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (i === 0) {
+                              const allVisible = visibleChannels.r && visibleChannels.g && visibleChannels.b;
+                              if (allVisible) {
+                                toggleChannelVisibility('r');
+                                toggleChannelVisibility('g');
+                                toggleChannelVisibility('b');
+                              } else {
+                                if (!visibleChannels.r) toggleChannelVisibility('r');
+                                if (!visibleChannels.g) toggleChannelVisibility('g');
+                                if (!visibleChannels.b) toggleChannelVisibility('b');
+                              }
+                            } else {
+                              const channelKey = i === 1 ? 'r' : (i === 2 ? 'g' : 'b');
+                              toggleChannelVisibility(channelKey);
+                            }
+                          }}
+                        >
+                          {isVisible ? <LucideIcons.Eye size={11} /> : <div style={{ width: 11, height: 11 }} />}
+                        </div>
+                        <div className="channel-swatch" style={{
+                          background: i === 0 ? 'linear-gradient(90deg, #000, #fff)' :
+                            i === 1 ? 'linear-gradient(90deg, #000, #f00)' :
+                              i === 2 ? 'linear-gradient(90deg, #000, #0f0)' :
+                                'linear-gradient(90deg, #000, #00f)'
+                        }} />
+                        <span className="channel-name">{ch}</span>
+                        <span className="channel-shortcut">{i === 0 ? 'Ctrl+~' : `Ctrl+${i}`}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
               {!bottomDockCollapsed && bottomDockTab === 'paths' && visiblePanels.paths && (
-                <div className="panel-content paths-panel-content">
-                  <div className="no-items" style={{ paddingTop: 24 }}>
-                    <LucideIcons.PenTool size={24} style={{ marginBottom: 8, opacity: 0.3 }} />
-                    <div>No paths</div>
-                    <div style={{ fontSize: 10, marginTop: 4, opacity: 0.6 }}>Use the Pen tool to create paths</div>
+                <>
+                  <div className="panel-content paths-panel-content" onClick={() => setActivePathIndex(null)}>
+                    {(() => {
+                      const activeLayer = layers.find((l: any) => l.id === activeLayerId);
+                      const shapePathEntry = activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData ? {
+                        name: `${activeLayer.name} Vector Mask`,
+                        points: activeLayer.shapeData.points || (
+                          activeLayer.shapeData.type === 'rect' ? [
+                            { x: 0, y: 0 },
+                            { x: activeLayer.shapeData.w, y: 0 },
+                            { x: activeLayer.shapeData.w, y: activeLayer.shapeData.h },
+                            { x: 0, y: activeLayer.shapeData.h }
+                          ] : []
+                        ),
+                        closed: activeLayer.shapeData.closed !== false,
+                        smooth: activeLayer.shapeData.type === 'ellipse' || activeLayer.shapeData.smooth
+                      } : null;
+
+                      if (vectorPaths.length === 0 && !shapePathEntry) {
+                        return (
+                          <div className="no-items" style={{ paddingTop: 24 }}>
+                            <LucideIcons.PenTool size={24} style={{ marginBottom: 8, opacity: 0.3 }} />
+                            <div>No paths</div>
+                            <div style={{ fontSize: 10, marginTop: 4, opacity: 0.6 }}>Use the Pen tool to create paths</div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="paths-list">
+                          {shapePathEntry && (
+                            <div
+                              className="path-row active"
+                              style={{ borderLeft: '3px solid var(--accent-primary, #0078d7)' }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <LucideIcons.PenTool size={13} style={{ opacity: 0.7 }} />
+                              <span className="path-name">{shapePathEntry.name}</span>
+                              <span className="path-points-count" style={{ fontSize: 9, opacity: 0.5, marginLeft: 'auto' }}>
+                                {shapePathEntry.points.length > 0 ? `${shapePathEntry.points.length} points` : 'Vector Shape'}
+                              </span>
+                            </div>
+                          )}
+                          {vectorPaths.map((path: any, index: number) => {
+                            const isActive = index === activePathIndex && !shapePathEntry;
+                            return (
+                              <div
+                                key={index}
+                                className={`path-row ${isActive ? 'active' : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActivePathIndex(index);
+                                }}
+                              >
+                                <LucideIcons.PenTool size={13} style={{ opacity: 0.7 }} />
+                                <span className="path-name">
+                                  {index === activePathIndex ? 'Work Path' : `Path ${index + 1}`}
+                                </span>
+                                <span className="path-points-count" style={{ fontSize: 9, opacity: 0.5, marginLeft: 'auto' }}>
+                                  {path.points ? path.points.length : 0} points
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
-                </div>
+                  <div className="panel-footer paths-footer">
+                    {(() => {
+                      const activeLayer = layers.find((l: any) => l.id === activeLayerId);
+                      const shapePathEntry = activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData ? {
+                        name: `${activeLayer.name} Vector Mask`,
+                        points: activeLayer.shapeData.points || (
+                          activeLayer.shapeData.type === 'rect' ? [
+                            { x: 0, y: 0 },
+                            { x: activeLayer.shapeData.w, y: 0 },
+                            { x: activeLayer.shapeData.w, y: activeLayer.shapeData.h },
+                            { x: 0, y: activeLayer.shapeData.h }
+                          ] : []
+                        ),
+                        closed: activeLayer.shapeData.closed !== false,
+                        smooth: activeLayer.shapeData.type === 'ellipse' || activeLayer.shapeData.smooth
+                      } : null;
+
+                      const hasActivePath = shapePathEntry || (activePathIndex !== null && vectorPaths[activePathIndex]);
+
+                      return (
+                        <>
+                          <button
+                            title="Load Path as Selection"
+                            className="layers-footer-btn"
+                            disabled={!hasActivePath}
+                            onClick={() => {
+                              let targetPath = null;
+                              if (activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData) {
+                                const shapeData = activeLayer.shapeData;
+                                let pts = shapeData.points;
+                                if (!pts || pts.length === 0) {
+                                  if (shapeData.type === 'rect') {
+                                    pts = [
+                                      { x: 0, y: 0 },
+                                      { x: shapeData.w, y: 0 },
+                                      { x: shapeData.w, y: shapeData.h },
+                                      { x: 0, y: shapeData.h }
+                                    ];
+                                  } else if (shapeData.type === 'ellipse') {
+                                    pts = [];
+                                    const steps = 36;
+                                    for (let i = 0; i < steps; i++) {
+                                      const angle = (i / steps) * Math.PI * 2;
+                                      pts.push({
+                                        x: shapeData.w / 2 + Math.cos(angle) * (shapeData.w / 2),
+                                        y: shapeData.h / 2 + Math.sin(angle) * (shapeData.h / 2)
+                                      });
+                                    }
+                                  }
+                                }
+                                const px = activeLayer.position?.x || 0;
+                                const py = activeLayer.position?.y || 0;
+                                const mappedPoints = (pts || []).map(p => ({ x: p.x + px, y: p.y + py }));
+                                targetPath = {
+                                  points: mappedPoints,
+                                  closed: true,
+                                  smooth: shapeData.type === 'ellipse' || shapeData.smooth
+                                };
+                              } else if (activePathIndex !== null && vectorPaths[activePathIndex]) {
+                                targetPath = vectorPaths[activePathIndex];
+                              }
+
+                              if (targetPath) {
+                                if (!targetPath.smooth || targetPath.points.length < 3) {
+                                  setLassoPaths([targetPath.points]);
+                                } else {
+                                  const result: { x: number, y: number }[] = [];
+                                  const steps = 12;
+                                  const points = targetPath.points;
+                                  const len = points.length;
+                                  for (let i = 0; i < (targetPath.closed ? len : len - 1); i++) {
+                                    const p0 = points[(i - 1 + len) % len];
+                                    const p1 = points[i % len];
+                                    const p2 = points[(i + 1) % len];
+                                    const p3 = points[(i + 2) % len];
+                                    for (let t = 0; t < steps; t++) {
+                                      const u = t / steps;
+                                      const x = 0.5 * (
+                                        (2 * p1.x) +
+                                        (-p0.x + p2.x) * u +
+                                        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * u * u +
+                                        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * u * u * u
+                                      );
+                                      const y = 0.5 * (
+                                        (2 * p1.y) +
+                                        (-p0.y + p2.y) * u +
+                                        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u * u +
+                                        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * u * u * u
+                                      );
+                                      result.push({ x, y });
+                                    }
+                                  }
+                                  if (!targetPath.closed) result.push(points[len - 1]);
+                                  setLassoPaths([result]);
+                                }
+                                if (!activeLayer || activeLayer.type !== 'shape') {
+                                  setVectorPaths([]);
+                                  setActivePathIndex(null);
+                                }
+                                recordHistory('Make Selection from Path');
+                              }
+                            }}
+                          >
+                            <LucideIcons.CircleDashed size={13} />
+                          </button>
+                          <button
+                            title="Fill Path"
+                            className="layers-footer-btn"
+                            disabled={!hasActivePath || shapePathEntry !== null || !activeLayerId || !layers.find((l: any) => l.id === activeLayerId && l.type === 'paint')}
+                            onClick={() => {
+                              if (activePathIndex !== null && vectorPaths[activePathIndex] && activeLayerId) {
+                                const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+                                const ctx = canvas?.getContext('2d');
+                                if (ctx && canvas) {
+                                  ctx.save();
+                                  ctx.fillStyle = hexToRgba(brushColor, primaryOpacity);
+                                  ctx.beginPath();
+                                  const path = vectorPaths[activePathIndex];
+                                  if (path.points.length > 0) {
+                                    ctx.moveTo(path.points[0].x, path.points[0].y);
+                                    for (let j = 1; j < path.points.length; j++) {
+                                      ctx.lineTo(path.points[j].x, path.points[j].y);
+                                    }
+                                    if (path.closed) ctx.closePath();
+                                    ctx.fill();
+                                  }
+                                  ctx.restore();
+                                  updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+                                  recordHistory('Fill Path');
+                                }
+                              }
+                            }}
+                          >
+                            <LucideIcons.PaintBucket size={13} />
+                          </button>
+                          <button
+                            title="Delete Path"
+                            className="layers-footer-btn layers-footer-delete"
+                            disabled={!hasActivePath}
+                            onClick={() => {
+                              if (activeLayer && activeLayer.type === 'shape') {
+                                removeLayer(activeLayer.id);
+                                recordHistory('Delete Shape Layer');
+                              } else if (activePathIndex !== null) {
+                                const nextPaths = [...vectorPaths];
+                                nextPaths.splice(activePathIndex, 1);
+                                setVectorPaths(nextPaths);
+                                setActivePathIndex(nextPaths.length > 0 ? 0 : null);
+                                recordHistory('Delete Path');
+                              }
+                            }}
+                          >
+                            <LucideIcons.Trash2 size={13} />
+                          </button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </>
               )}
             </div>
           )}

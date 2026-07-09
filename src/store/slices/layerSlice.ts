@@ -7,10 +7,12 @@ import { findLayerById, findParentNode, removeNode, insertNode, updateNode, flat
 export interface LayerSlice {
   layers: Layer[];
   activeLayerId: string | null;
+  selectedLayerIds: string[];
   
   addLayer: (layer: Partial<Layer>) => void;
   removeLayer: (id: string) => void;
   setActiveLayer: (id: string) => void;
+  setSelectedLayerIds: (ids: string[]) => void;
   updateLayer: (id: string, updates: Partial<Layer>) => void;
   duplicateLayer: (id: string) => void;
   toggleLayerVisibility: (id: string) => void;
@@ -23,11 +25,13 @@ export interface LayerSlice {
   rasterizeLayer: (id: string) => void;
   addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance') => void;
   autoAlignLayers: () => Promise<void>;
+  autoBlendLayers: () => Promise<void>;
 }
 
 export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set, get) => ({
   layers: [],
   activeLayerId: null,
+  selectedLayerIds: [],
 
   addLayer: (layer) => set((state) => {
     const newLayer: Layer = {
@@ -50,49 +54,39 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     return {
       layers: [newLayer, ...state.layers], // Adds to top level for now
       activeLayerId: newLayer.id,
+      selectedLayerIds: [newLayer.id]
     };
   }),
 
   removeLayer: (id) => set((state) => {
-    const flatLayers = flattenTree(state.layers);
-    const index = flatLayers.findIndex(l => l.id === id);
+    const idsToDelete = state.selectedLayerIds.includes(id) ? state.selectedLayerIds : [id];
+    let newLayers = state.layers;
+    idsToDelete.forEach(deleteId => {
+      newLayers = removeNode(newLayers, deleteId);
+    });
+
+    const flatLayers = flattenTree(newLayers);
     let nextActiveId = state.activeLayerId;
-    
-    if (index !== -1) {
-      const deletedNode = flatLayers[index];
-      const deletedIds = new Set(flattenTree([deletedNode]).map(l => l.id));
-      if (state.activeLayerId && deletedIds.has(state.activeLayerId)) {
-        // Find next non-deleted layer
-        let found = false;
-        for (let i = index + 1; i < flatLayers.length; i++) {
-          if (!deletedIds.has(flatLayers[i].id)) {
-            nextActiveId = flatLayers[i].id;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          for (let i = index - 1; i >= 0; i--) {
-            if (!deletedIds.has(flatLayers[i].id)) {
-              nextActiveId = flatLayers[i].id;
-              found = true;
-              break;
-            }
-          }
-        }
-        if (!found) {
-          nextActiveId = null;
-        }
-      }
+    if (nextActiveId && idsToDelete.includes(nextActiveId)) {
+      nextActiveId = flatLayers.length > 0 ? flatLayers[0].id : null;
     }
 
     return {
-      layers: removeNode(state.layers, id),
-      activeLayerId: nextActiveId
+      layers: newLayers,
+      activeLayerId: nextActiveId,
+      selectedLayerIds: nextActiveId ? [nextActiveId] : []
     };
   }),
 
-  setActiveLayer: (id) => set({ activeLayerId: id }),
+  setActiveLayer: (id) => set({
+    activeLayerId: id,
+    selectedLayerIds: id ? [id] : []
+  }),
+
+  setSelectedLayerIds: (ids) => set({
+    selectedLayerIds: ids,
+    activeLayerId: ids.length > 0 ? ids[ids.length - 1] : null
+  }),
 
   updateLayer: (id, updates) => set((state) => {
     const targetLayer = findLayerById(state.layers, id);
@@ -283,16 +277,20 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
   }),
 
   autoAlignLayers: async () => {
-    const { layers, documentSize, updateLayer, recordHistory, addAlert } = get();
+    const { layers, documentSize, updateLayer, recordHistory, addAlert, selectedLayerIds, activeLayerId } = get();
+    const selectedIds = selectedLayerIds || [];
+    const activeId = activeLayerId;
     
-    const visiblePaintLayers = flattenTree(layers).filter(l => l.visible && l.type === 'paint');
-    if (visiblePaintLayers.length < 2) {
-      addAlert({ type: 'warning', message: 'Select at least two visible layers.' });
+    const selectedPaintLayers = flattenTree(layers).filter(l => 
+      (selectedIds.includes(l.id) || l.id === activeId) && l.visible && (l.type === 'paint' || l.type === 'image')
+    );
+    if (selectedPaintLayers.length < 2) {
+      addAlert({ type: 'warning', message: 'Select at least two visible paint or image layers to align.' });
       return;
     }
     
-    const refLayer = visiblePaintLayers[visiblePaintLayers.length - 1];
-    const targetLayers = visiblePaintLayers.slice(0, visiblePaintLayers.length - 1);
+    const refLayer = selectedPaintLayers[selectedPaintLayers.length - 1];
+    const targetLayers = selectedPaintLayers.slice(0, selectedPaintLayers.length - 1);
     
     const loadImage = (src: string): Promise<HTMLImageElement> => {
       return new Promise((resolve, reject) => {
@@ -450,6 +448,212 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     } catch (err: any) {
       console.error(err);
       addAlert({ type: 'error', message: 'Failed to auto-align layers: ' + err.message });
+    }
+  },
+
+  autoBlendLayers: async () => {
+    const { layers, documentSize, updateLayer, recordHistory, addAlert, selectedLayerIds, activeLayerId } = get();
+    const selectedIds = selectedLayerIds || [];
+    const activeId = activeLayerId;
+    
+    const selectedPaintLayers = flattenTree(layers).filter(l => 
+      (selectedIds.includes(l.id) || l.id === activeId) && l.visible && (l.type === 'paint' || l.type === 'image')
+    );
+    
+    if (selectedPaintLayers.length < 2) {
+      addAlert({ type: 'warning', message: 'Select at least two visible paint or image layers to blend.' });
+      return;
+    }
+    
+    const sortedLayers = [...selectedPaintLayers].reverse();
+    
+    const loadImage = (src: string): Promise<HTMLImageElement> => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load layer image'));
+        img.src = src;
+      });
+    };
+    
+    try {
+      const docW = documentSize.w;
+      const docH = documentSize.h;
+
+      const refLayer = sortedLayers[0];
+      if (!refLayer.dataUrl) {
+        addAlert({ type: 'error', message: 'Reference layer has no image data.' });
+        return;
+      }
+      
+      const refImg = await loadImage(refLayer.dataUrl);
+      const refX = refLayer.position?.x || 0;
+      const refY = refLayer.position?.y || 0;
+      const refW = refLayer.width || docW;
+      const refH = refLayer.height || docH;
+      
+      const refCanvas = document.createElement('canvas');
+      refCanvas.width = refW;
+      refCanvas.height = refH;
+      const refCtx = refCanvas.getContext('2d')!;
+      refCtx.drawImage(refImg, 0, 0, refW, refH);
+
+      for (let i = 1; i < sortedLayers.length; i++) {
+        const tarLayer = sortedLayers[i];
+        if (!tarLayer.dataUrl) continue;
+        
+        const tarImg = await loadImage(tarLayer.dataUrl);
+        const tarX = tarLayer.position?.x || 0;
+        const tarY = tarLayer.position?.y || 0;
+        const tarW = tarLayer.width || docW;
+        const tarH = tarLayer.height || docH;
+        
+        const refLeft = refX;
+        const refRight = refX + refW;
+        const refTop = refY;
+        const refBottom = refY + refH;
+        
+        const tarLeft = tarX;
+        const tarRight = tarX + tarW;
+        const tarTop = tarY;
+        const tarBottom = tarY + tarH;
+        
+        const overlapLeft = Math.max(refLeft, tarLeft);
+        const overlapRight = Math.min(refRight, tarRight);
+        const overlapTop = Math.max(refTop, tarTop);
+        const overlapBottom = Math.min(refBottom, tarBottom);
+        
+        const overlapW = overlapRight - overlapLeft;
+        const overlapH = overlapBottom - overlapTop;
+        
+        if (overlapW > 0 && overlapH > 0) {
+          const tarCanvas = document.createElement('canvas');
+          tarCanvas.width = tarW;
+          tarCanvas.height = tarH;
+          const tarCtx = tarCanvas.getContext('2d')!;
+          tarCtx.drawImage(tarImg, 0, 0, tarW, tarH);
+          
+          const tarImageData = tarCtx.getImageData(0, 0, tarW, tarH);
+          const tarPixels = tarImageData.data;
+          
+          const refOverlapX = overlapLeft - refLeft;
+          const refOverlapY = overlapTop - refY;
+          const refImageData = refCtx.getImageData(refOverlapX, refOverlapY, overlapW, overlapH);
+          const refPixels = refImageData.data;
+          
+          const tarOverlapX = overlapLeft - tarLeft;
+          const tarOverlapY = overlapTop - tarTop;
+          const tarOverlapImageData = tarCtx.getImageData(tarOverlapX, tarOverlapY, overlapW, overlapH);
+          const tarOverlapPixels = tarOverlapImageData.data;
+          
+          let sumR_ref = 0, sumG_ref = 0, sumB_ref = 0, count_ref = 0;
+          let sumR_tar = 0, sumG_tar = 0, sumB_tar = 0, count_tar = 0;
+          
+          for (let py = 0; py < overlapH; py++) {
+            for (let px = 0; px < overlapW; px++) {
+              const idx = (py * overlapW + px) * 4;
+              const a_ref = refPixels[idx + 3];
+              const a_tar = tarOverlapPixels[idx + 3];
+              
+              if (a_ref > 50) {
+                sumR_ref += refPixels[idx];
+                sumG_ref += refPixels[idx + 1];
+                sumB_ref += refPixels[idx + 2];
+                count_ref++;
+              }
+              if (a_tar > 50) {
+                sumR_tar += tarOverlapPixels[idx];
+                sumG_tar += tarOverlapPixels[idx + 1];
+                sumB_tar += tarOverlapPixels[idx + 2];
+                count_tar++;
+              }
+            }
+          }
+          
+          if (count_ref > 0 && count_tar > 0) {
+            const avgR_ref = sumR_ref / count_ref;
+            const avgG_ref = sumG_ref / count_ref;
+            const avgB_ref = sumB_ref / count_ref;
+            
+            const avgR_tar = sumR_tar / count_tar;
+            const avgG_tar = sumG_tar / count_tar;
+            const avgB_tar = sumB_tar / count_tar;
+            
+            const scaleR = Math.max(0.5, Math.min(1.5, avgR_ref / (avgR_tar || 1)));
+            const scaleG = Math.max(0.5, Math.min(1.5, avgG_ref / (avgG_tar || 1)));
+            const scaleB = Math.max(0.5, Math.min(1.5, avgB_ref / (avgB_tar || 1)));
+            
+            for (let idx = 0; idx < tarPixels.length; idx += 4) {
+              if (tarPixels[idx + 3] > 0) {
+                tarPixels[idx] = Math.max(0, Math.min(255, tarPixels[idx] * scaleR));
+                tarPixels[idx + 1] = Math.max(0, Math.min(255, tarPixels[idx + 1] * scaleG));
+                tarPixels[idx + 2] = Math.max(0, Math.min(255, tarPixels[idx + 2] * scaleB));
+              }
+            }
+          }
+          
+          const cx_ref = refLeft + refW / 2;
+          const cy_ref = refTop + refH / 2;
+          const cx_tar = tarLeft + tarW / 2;
+          const cy_tar = tarTop + tarH / 2;
+          
+          const dx = cx_tar - cx_ref;
+          const dy = cy_tar - cy_ref;
+          const distSq = dx * dx + dy * dy || 1;
+          
+          let minProj = Infinity;
+          let maxProj = -Infinity;
+          
+          const overlapCorners = [
+            { x: overlapLeft, y: overlapTop },
+            { x: overlapRight, y: overlapTop },
+            { x: overlapLeft, y: overlapBottom },
+            { x: overlapRight, y: overlapBottom }
+          ];
+          
+          overlapCorners.forEach(pt => {
+            const vx = pt.x - cx_ref;
+            const vy = pt.y - cy_ref;
+            const proj = (vx * dx + vy * dy) / Math.sqrt(distSq);
+            if (proj < minProj) minProj = proj;
+            if (proj > maxProj) maxProj = proj;
+          });
+          
+          const projRange = maxProj - minProj || 1;
+          
+          for (let py = 0; py < overlapH; py++) {
+            for (let px = 0; px < overlapW; px++) {
+              const xDoc = overlapLeft + px;
+              const yDoc = overlapTop + py;
+              
+              const vx = xDoc - cx_ref;
+              const vy = yDoc - cy_ref;
+              const proj = (vx * dx + vy * dy) / Math.sqrt(distSq);
+              
+              let t = (proj - minProj) / projRange;
+              t = Math.max(0, Math.min(1, t));
+              
+              const smoothT = t * t * (3 - 2 * t);
+              
+              const tarX_px = xDoc - tarLeft;
+              const tarY_px = yDoc - tarTop;
+              const tarIdx = (tarY_px * tarW + tarX_px) * 4;
+              
+              tarPixels[tarIdx + 3] = Math.round(tarPixels[tarIdx + 3] * smoothT);
+            }
+          }
+          
+          tarCtx.putImageData(tarImageData, 0, 0);
+          updateLayer(tarLayer.id, { dataUrl: tarCanvas.toDataURL() });
+        }
+      }
+      
+      recordHistory('Auto-Blend Layers');
+      addAlert({ type: 'success', message: 'Layers blended successfully.' });
+    } catch (err: any) {
+      console.error('[autoBlendLayers] Error:', err);
+      addAlert({ type: 'error', message: 'Failed to auto-blend layers: ' + err.message });
     }
   },
 });

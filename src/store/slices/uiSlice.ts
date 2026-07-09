@@ -93,6 +93,8 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   adjustmentSourceLayerId: null,
   activeMobileSubmenu: null,
   screenMode: 'standard',
+  visibleChannels: { r: true, g: true, b: true },
+  selectedChannel: 'RGB',
   visiblePanels: {
     layers: true,
     history: true,
@@ -148,6 +150,15 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   },
 
   removeAlert: (id) => set((state) => ({ alerts: state.alerts.filter((a: any) => a.id !== id) })),
+
+  toggleChannelVisibility: (channel) => set((state) => ({
+    visibleChannels: {
+      ...state.visibleChannels,
+      [channel]: !state.visibleChannels[channel]
+    }
+  })),
+
+  setSelectedChannel: (channel) => set({ selectedChannel: channel }),
 
   setSnapSetting: (setting, value) => set((state) => ({
     snapSettings: { ...state.snapSettings, [setting]: value }

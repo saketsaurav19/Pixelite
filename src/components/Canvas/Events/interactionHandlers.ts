@@ -109,6 +109,10 @@ export const startAction = (
   refs.startMouseRef.current = { x: clientX, y: clientY };
   refs.startOffsetRef.current = { ...canvasOffset };
 
+  if (['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool as string)) {
+    toolState._shapeStart = { ...coords };
+  }
+
   if (activeTool === 'text' || activeTool === 'vertical_text') {
     const clickedTextLayer = getClickedTextLayer(layers, coords);
     if (clickedTextLayer) {
@@ -188,6 +192,19 @@ export const moveAction = (
   handlers.setCurrentMousePos(coords);
 
   if (!state.isInteracting) return;
+
+  if (['shape', 'ellipse_shape', 'line_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool as string)) {
+    const start = toolState._shapeStart;
+    if (start) {
+      handlers.setDraftShape({
+        x: start.x,
+        y: start.y,
+        w: coords.x - start.x,
+        h: coords.y - start.y
+      });
+    }
+    return;
+  }
 
   let currentTool = activeTool;
   if (['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor'].includes(activeTool as string)) {
@@ -383,6 +400,8 @@ export const endAction = (
       handlers.addLayer({
         name: name,
         type: 'shape',
+        width: w,
+        height: h,
         position: {
           x: state.draftShape.w >= 0 ? state.draftShape.x : state.draftShape.x + state.draftShape.w,
           y: state.draftShape.h >= 0 ? state.draftShape.y : state.draftShape.y + state.draftShape.h
@@ -401,6 +420,7 @@ export const endAction = (
       handlers.recordHistory(`Add ${name}`);
     }
     handlers.setDraftShape(null);
+    delete toolState._shapeStart;
   }
 
   if (activeTool === 'rotate_view') {
