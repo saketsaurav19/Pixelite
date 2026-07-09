@@ -1,9 +1,18 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from '../../store/useStore';
-import { hexToRgba } from '../../utils/canvasUtils';
+import { hexToRgba, loadGoogleFont } from '../../utils/canvasUtils';
+import { Z_INDEX } from '../../constants/zIndex';
+
+const fallbackFont = {
+  family: 'Noto Sans',
+  category: 'sans-serif',
+  variants: [{ id: '400', name: 'Regular 400', weight: '400', style: 'normal' }]
+};
 import { toolState } from '../../tools/toolState';
 import ColorPicker from '../shared/ColorPicker';
 import * as LucideIcons from 'lucide-react';
+import { recalculateTextLayerBounds } from '../Canvas/Core/textUtils';
 interface EditableValueProps {
   value: number;
   unit: string;
@@ -55,6 +64,87 @@ const EditableValue: React.FC<EditableValueProps> = ({ value, unit, onCommit }) 
     </span>
   );
 };
+
+const parseColorString = (colorStr: string): { hex: string; opacity: number } => {
+  if (!colorStr) return { hex: '#000000', opacity: 1 };
+  
+  const clean = colorStr.trim().toLowerCase();
+  
+  const rgbaMatch = clean.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (rgbaMatch) {
+    const r = parseInt(rgbaMatch[1], 10);
+    const g = parseInt(rgbaMatch[2], 10);
+    const b = parseInt(rgbaMatch[3], 10);
+    const opacity = rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1;
+    
+    const toHex = (c: number) => {
+      const hex = Math.max(0, Math.min(255, c)).toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    };
+    return {
+      hex: `#${toHex(r)}${toHex(g)}${toHex(b)}`,
+      opacity
+    };
+  }
+  
+  if (clean.startsWith('#')) {
+    let hex = clean;
+    if (hex.length === 4) {
+      hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+    }
+    return { hex, opacity: 1 };
+  }
+  
+  return { hex: '#000000', opacity: 1 };
+};
+
+// Loaded dynamically from src/utils/googleFonts
+
+const FontOption: React.FC<{
+  family: string;
+  isSelected: boolean;
+  onSelect: () => void;
+}> = ({ family, isSelected, onSelect }) => {
+  const [isHovered, setIsHovered] = React.useState(false);
+
+  React.useEffect(() => {
+    // Load a tiny subset containing ONLY the letters of the font name!
+    const linkId = `google-font-subset-${family.replace(/\s+/g, '-').toLowerCase()}`;
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}&text=${encodeURIComponent(family)}&display=swap`;
+      document.head.appendChild(link);
+    }
+  }, [family]);
+
+  return (
+    <div
+      onClick={onSelect}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        fontFamily: `"${family}", sans-serif`,
+        padding: '8px 12px',
+        cursor: 'pointer',
+        fontSize: '13px',
+        color: '#fff',
+        background: isSelected ? '#333' : isHovered ? '#222' : 'transparent',
+        transition: 'background 0.15s, padding-left 0.15s',
+        paddingLeft: isHovered ? '16px' : '12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderRadius: '3px'
+      }}
+    >
+      <span>{family}</span>
+      <span style={{ fontSize: '11px', color: isHovered || isSelected ? '#aaa' : '#444', fontFamily: 'sans-serif' }}>Aa</span>
+    </div>
+  );
+};
+
 const OptionsBar: React.FC = () => {
   const {
     activeTool, brushSize, setBrushSize,
@@ -89,14 +179,119 @@ const OptionsBar: React.FC = () => {
     moveAutoSelect, setMoveAutoSelect,
     moveShowTransform, setMoveShowTransform,
     textFontFamily, setTextFontFamily,
+    textFontWeight, setTextFontWeight,
+    textFontStyle, setTextFontStyle,
     textAlign, setTextAlign,
     lights, updateLight, removeLight, addLight,
     activeLightId, setActiveLightId,
     ambientIntensity, setAmbientIntensity,
     ambientColor, setAmbientColor,
     lightingDepthScale, showLightSource, updateLighting,
-    documentSize
+    documentSize,
+    transformMode, setTransformMode, layers,
+    setIsWarpDialogOpen
   } = useStore();
+
+  const [googleFonts, setGoogleFonts] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    // Dynamically load Google Fonts catalog to keep initial bundle size minimal
+    import('../../utils/googleFonts').then((module) => {
+      setGoogleFonts(module.GOOGLE_FONTS_CATALOG);
+    });
+  }, []);
+
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+  const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
+
+  React.useEffect(() => {
+    if (isVector && ['distort', 'perspective', 'warp'].includes(transformMode)) {
+      setTransformMode('free');
+    }
+  }, [activeLayerId, isVector, transformMode, setTransformMode]);
+
+  const fonts = googleFonts.length > 0 ? googleFonts : [fallbackFont];
+
+  const [isFontDropdownOpen, setIsFontDropdownOpen] = React.useState(false);
+  const [fontSearchQuery, setFontSearchQuery] = React.useState('');
+  const fontButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const [fontButtonCoords, setFontButtonCoords] = React.useState<{ top: number; left: number } | null>(null);
+
+  React.useEffect(() => {
+    if (isFontDropdownOpen && fontButtonRef.current) {
+      const rect = fontButtonRef.current.getBoundingClientRect();
+      setFontButtonCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX
+      });
+    }
+  }, [isFontDropdownOpen, textFontFamily]);
+
+  React.useEffect(() => {
+    if (!isFontDropdownOpen) return;
+    const handleOutsideClick = () => {
+      setIsFontDropdownOpen(false);
+    };
+    const handleScroll = () => {
+      setIsFontDropdownOpen(false);
+    };
+    
+    window.addEventListener('click', handleOutsideClick);
+    const optionsBarEl = document.querySelector('.options-bar');
+    if (optionsBarEl) {
+      optionsBarEl.addEventListener('scroll', handleScroll);
+    }
+
+    return () => {
+      window.removeEventListener('click', handleOutsideClick);
+      if (optionsBarEl) {
+        optionsBarEl.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [isFontDropdownOpen]);
+
+
+
+  // Sync options bar controls with active text layer properties
+  React.useEffect(() => {
+    if (activeLayer && activeLayer.type === 'text') {
+      if (activeLayer.fontFamily && activeLayer.fontFamily !== textFontFamily) {
+        setTextFontFamily(activeLayer.fontFamily);
+      }
+      const targetWeight = activeLayer.fontWeight || 'normal';
+      if (targetWeight !== textFontWeight) {
+        setTextFontWeight(targetWeight);
+      }
+      const targetStyle = activeLayer.fontStyle || 'normal';
+      if (targetStyle !== textFontStyle) {
+        setTextFontStyle(targetStyle);
+      }
+      const targetAlign = activeLayer.textAlign || 'left';
+      if (targetAlign !== textAlign) {
+        setTextAlign(targetAlign as any);
+      }
+      if (activeLayer.fontSize && Math.round(activeLayer.fontSize / 2) !== brushSize) {
+        setBrushSize(Math.round(activeLayer.fontSize / 2));
+      }
+      if (activeLayer.color) {
+        const { hex, opacity } = parseColorString(activeLayer.color);
+        if (hex !== brushColor) {
+          setBrushColor(hex);
+        }
+        if (opacity !== primaryOpacity) {
+          setPrimaryOpacity(opacity);
+        }
+      }
+    }
+  }, [activeLayerId, activeLayer?.fontFamily, activeLayer?.fontWeight, activeLayer?.fontStyle, activeLayer?.textAlign, activeLayer?.fontSize, activeLayer?.color]);
+
+  // Load selected Google Font dynamically
+  React.useEffect(() => {
+    if (textFontFamily) {
+      loadGoogleFont(textFontFamily);
+    }
+  }, [textFontFamily]);
+
   const handleDeselect = () => {
     setSelectionRect(null);
     setLassoPaths([]);
@@ -345,6 +540,130 @@ const OptionsBar: React.FC = () => {
               Show Transform Controls
             </label>
           </div>
+          <div className="options-divider" />
+        </>
+      )}
+      {activeTool === 'transform' && (
+        <>
+          <div className="option-control">
+            <label style={{ marginRight: '6px' }}>Mode:</label>
+            <select
+              value={transformMode}
+              onChange={(e) => setTransformMode(e.target.value as any)}
+              style={{
+                background: '#2b2b2b',
+                color: '#fff',
+                border: '1px solid #444',
+                borderRadius: '4px',
+                padding: '3px 8px',
+                fontSize: '12px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="free">Free Transform</option>
+              <option value="scale">Scale</option>
+              <option value="rotate">Rotate</option>
+              <option value="skew">Skew</option>
+              <option value="distort" disabled={!!isVector}>Distort</option>
+              <option value="perspective" disabled={!!isVector}>Perspective</option>
+              <option value="warp" disabled={!!isVector}>Warp</option>
+            </select>
+          </div>
+
+          {(() => {
+            const activeLayer = layers.find(l => l.id === activeLayerId);
+            if (!activeLayer) return null;
+            
+            const px = Math.round(activeLayer.position?.x || 0);
+            const py = Math.round(activeLayer.position?.y || 0);
+            const wVal = Math.round(activeLayer.width || 0);
+            const hVal = Math.round(activeLayer.height || 0);
+            const rotVal = Math.round(activeLayer.rotation || 0);
+
+            const handlePropChange = (field: string, val: number) => {
+              if (field === 'x') {
+                updateLayer(activeLayerId, { position: { x: val, y: activeLayer.position?.y || 0 } });
+              } else if (field === 'y') {
+                updateLayer(activeLayerId, { position: { x: activeLayer.position?.x || 0, y: val } });
+              } else if (field === 'w') {
+                updateLayer(activeLayerId, { width: val });
+              } else if (field === 'h') {
+                updateLayer(activeLayerId, { height: val });
+              } else if (field === 'rot') {
+                updateLayer(activeLayerId, { rotation: val });
+              }
+            };
+
+            const inputStyle = {
+              background: '#2b2b2b',
+              color: '#fff',
+              border: '1px solid #444',
+              borderRadius: '4px',
+              padding: '2px 6px',
+              width: '60px',
+              fontSize: '12px',
+              textAlign: 'center' as const
+            };
+
+            return (
+              <>
+                <div className="options-divider" />
+                <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>X:</span>
+                  <input
+                    type="number"
+                    value={px}
+                    onChange={(e) => handlePropChange('x', parseInt(e.target.value) || 0)}
+                    style={inputStyle}
+                  />
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>px</span>
+                </div>
+                <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>Y:</span>
+                  <input
+                    type="number"
+                    value={py}
+                    onChange={(e) => handlePropChange('y', parseInt(e.target.value) || 0)}
+                    style={inputStyle}
+                  />
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>px</span>
+                </div>
+                <div className="options-divider" />
+                <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>W:</span>
+                  <input
+                    type="number"
+                    value={wVal}
+                    onChange={(e) => handlePropChange('w', parseInt(e.target.value) || 0)}
+                    style={inputStyle}
+                  />
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>px</span>
+                </div>
+                <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>H:</span>
+                  <input
+                    type="number"
+                    value={hVal}
+                    onChange={(e) => handlePropChange('h', parseInt(e.target.value) || 0)}
+                    style={inputStyle}
+                  />
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>px</span>
+                </div>
+                <div className="options-divider" />
+                <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>Angle:</span>
+                  <input
+                    type="number"
+                    value={rotVal}
+                    onChange={(e) => handlePropChange('rot', parseInt(e.target.value) || 0)}
+                    style={inputStyle}
+                  />
+                  <span style={{ fontSize: '11px', color: '#aaa' }}>°</span>
+                </div>
+              </>
+            );
+          })()}
           <div className="options-divider" />
         </>
       )}
@@ -853,39 +1172,262 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
-      {(activeTool === 'text' || activeTool === 'vertical_text') && (
-        <>
-          <div className="option-control">
-            <select value={textFontFamily} onChange={(e) => setTextFontFamily(e.target.value)} className="premium-select" style={{ width: '120px' }}>
-              <option value="Inter, system-ui, sans-serif">Inter</option>
-              <option value="'Roboto', sans-serif">Roboto</option>
-              <option value="'Playfair Display', serif">Playfair</option>
-              <option value="'Courier New', monospace">Courier</option>
-            </select>
-          </div>
-          <div className="option-control">
-            <div className="segmented-control" style={{ display: 'flex', background: '#1a1a1a', borderRadius: '4px', padding: '2px' }}>
-              {[
-                { id: 'left', icon: LucideIcons.AlignLeft },
-                { id: 'center', icon: LucideIcons.AlignCenter },
-                { id: 'right', icon: LucideIcons.AlignRight }
-              ].map(m => (
+      {(activeTool === 'text' || activeTool === 'vertical_text') && (() => {
+        const selectedFamilyData = fonts.find(f => f.family.toLowerCase() === textFontFamily.toLowerCase()) || fonts[0];
+        const nonItalicVariants = selectedFamilyData.variants.filter(v => v.style !== 'italic');
+        const activeVariantId = nonItalicVariants.find(v => v.weight === textFontWeight)?.id || nonItalicVariants[0]?.id || '400';
+
+        return (
+          <>
+            <div className="option-control">
+              <label>Family</label>
+              <button
+                ref={fontButtonRef}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsFontDropdownOpen(!isFontDropdownOpen);
+                }}
+                className="premium-select"
+                style={{
+                  width: '145px',
+                  textAlign: 'left',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: '#1a1a1a',
+                  border: '1px solid #333',
+                  borderRadius: '4px',
+                  color: '#fff',
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{textFontFamily}</span>
+                <LucideIcons.ChevronDown size={14} style={{ color: '#888', marginLeft: '4px', flexShrink: 0 }} />
+              </button>
+
+              {isFontDropdownOpen && fontButtonCoords && createPortal((() => {
+                const query = fontSearchQuery.toLowerCase().trim();
+                const filtered = !query ? fonts : fonts.filter(f => f.family.toLowerCase().includes(query));
+                const visibleFonts = filtered.slice(0, 80);
+
+                return (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: 'absolute',
+                      top: `${fontButtonCoords.top}px`,
+                      left: `${fontButtonCoords.left}px`,
+                      width: '260px',
+                      maxHeight: '350px',
+                      background: '#141414',
+                      border: '1px solid #333',
+                      borderRadius: '6px',
+                      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6)',
+                      zIndex: Z_INDEX.fontDropdown,
+                      marginTop: '4px',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <div style={{ padding: '8px', borderBottom: '1px solid #222', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <LucideIcons.Search size={14} style={{ color: '#666', flexShrink: 0 }} />
+                      <input
+                        type="text"
+                        placeholder="Search 1500+ fonts..."
+                        value={fontSearchQuery}
+                        onChange={(e) => setFontSearchQuery(e.target.value)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#fff',
+                          fontSize: '12px',
+                          outline: 'none',
+                          width: '100%'
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                    <div
+                      style={{
+                        overflowY: 'auto',
+                        flex: 1,
+                        maxHeight: '280px',
+                        padding: '4px'
+                      }}
+                    >
+                      {visibleFonts.length === 0 ? (
+                        <div style={{ padding: '12px', color: '#666', fontSize: '12px', textAlign: 'center' }}>No fonts found</div>
+                      ) : (
+                        visibleFonts.map(f => (
+                          <FontOption
+                            key={f.family}
+                            family={f.family}
+                            isSelected={f.family === textFontFamily}
+                            onSelect={() => {
+                              const val = f.family;
+                              setTextFontFamily(val);
+                              loadGoogleFont(val);
+                              
+                              const defaultVariant = f.variants.find(v => v.style !== 'italic') || f.variants[0];
+                              if (defaultVariant) {
+                                setTextFontWeight(defaultVariant.weight);
+                                setTextFontStyle(defaultVariant.style);
+                              }
+
+                              if (activeLayer && activeLayer.type === 'text') {
+                                const targetFamily = val;
+                                const targetWeight = defaultVariant ? defaultVariant.weight : (activeLayer.fontWeight || 'normal');
+                                const targetStyle = defaultVariant ? defaultVariant.style : (activeLayer.fontStyle || 'normal');
+                                const targetSize = activeLayer.fontSize || 40;
+                                const bounds = recalculateTextLayerBounds(
+                                  activeLayer,
+                                  targetFamily,
+                                  targetSize,
+                                  targetWeight,
+                                  targetStyle
+                                );
+                                const updates: any = {
+                                  fontFamily: targetFamily,
+                                  fontWeight: targetWeight,
+                                  fontStyle: targetStyle,
+                                  ...bounds
+                                };
+                                updateLayer(activeLayer.id, updates);
+                                recordHistory('Change Font Family');
+                              }
+                              setIsFontDropdownOpen(false);
+                            }}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })(), document.body)}
+            </div>
+            <div className="option-control">
+              <label>Style</label>
+              <select
+                value={activeVariantId}
+                onChange={(e) => {
+                  const variant = selectedFamilyData.variants.find(v => v.id === e.target.value);
+                  if (variant) {
+                    setTextFontWeight(variant.weight);
+                    setTextFontStyle(variant.style);
+                    if (activeLayer && activeLayer.type === 'text') {
+                      const bounds = recalculateTextLayerBounds(
+                        activeLayer,
+                        activeLayer.fontFamily || textFontFamily,
+                        activeLayer.fontSize || 40,
+                        variant.weight,
+                        variant.style
+                      );
+                      updateLayer(activeLayer.id, {
+                        fontWeight: variant.weight,
+                        fontStyle: variant.style as any,
+                        ...bounds
+                      });
+                      recordHistory('Change Font Style');
+                    }
+                  }
+                }}
+                className="premium-select"
+                style={{ width: '110px' }}
+              >
+                {nonItalicVariants.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="option-control">
+              <div className="segmented-control" style={{ display: 'flex', background: '#1a1a1a', borderRadius: '4px', padding: '2px', gap: '2px' }}>
                 <button
-                  key={m.id}
-                  onClick={() => setTextAlign(m.id as any)}
+                  onClick={() => {
+                    const nextWeight = textFontWeight === 'bold' ? 'normal' : 'bold';
+                    setTextFontWeight(nextWeight);
+                    if (activeLayer && activeLayer.type === 'text') {
+                      const bounds = recalculateTextLayerBounds(
+                        activeLayer,
+                        activeLayer.fontFamily || textFontFamily,
+                        activeLayer.fontSize || 40,
+                        nextWeight,
+                        activeLayer.fontStyle || 'normal'
+                      );
+                      updateLayer(activeLayer.id, {
+                        fontWeight: nextWeight,
+                        ...bounds
+                      });
+                      recordHistory('Toggle Bold');
+                    }
+                  }}
+                  title="Bold"
                   style={{
-                    padding: '4px', border: 'none', borderRadius: '3px', cursor: 'pointer',
-                    background: textAlign === m.id ? '#444' : 'transparent', color: textAlign === m.id ? '#fff' : '#888'
+                    padding: '4px 8px', border: 'none', borderRadius: '3px', cursor: 'pointer',
+                    background: textFontWeight === 'bold' ? '#444' : 'transparent', color: textFontWeight === 'bold' ? '#fff' : '#888',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}
                 >
-                  <m.icon size={14} />
+                  <LucideIcons.Bold size={13} />
                 </button>
-              ))}
+              </div>
             </div>
-          </div>
-          <div className="options-divider" />
-        </>
-      )}
+            <div className="option-control">
+              <div className="segmented-control" style={{ display: 'flex', background: '#1a1a1a', borderRadius: '4px', padding: '2px' }}>
+                {[
+                  { id: 'left', icon: LucideIcons.AlignLeft },
+                  { id: 'center', icon: LucideIcons.AlignCenter },
+                  { id: 'right', icon: LucideIcons.AlignRight }
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      const val = m.id as any;
+                      setTextAlign(val);
+                      if (activeLayer && activeLayer.type === 'text') {
+                        updateLayer(activeLayer.id, { textAlign: val });
+                        recordHistory('Change Text Alignment');
+                      }
+                    }}
+                    style={{
+                      padding: '4px', border: 'none', borderRadius: '3px', cursor: 'pointer',
+                      background: textAlign === m.id ? '#444' : 'transparent', color: textAlign === m.id ? '#fff' : '#888'
+                    }}
+                  >
+                    <m.icon size={14} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="option-control">
+              <button
+                className="premium-btn-sm"
+                disabled={!activeLayer || activeLayer.type !== 'text'}
+                onClick={() => setIsWarpDialogOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 10px',
+                  background: '#1a1a1a',
+                  border: '1px solid #444',
+                  color: '#fff',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  opacity: (!activeLayer || activeLayer.type !== 'text') ? 0.5 : 1
+                }}
+                title="Warp Text"
+              >
+                <span style={{ fontSize: '12px', transform: 'skewX(-10deg)', display: 'inline-block', fontWeight: 'bold' }}>T</span>
+                <span>Warp</span>
+              </button>
+            </div>
+            <div className="options-divider" />
+          </>
+        );
+      })()}
       {activeTool === 'red_eye' && (
         <>
           <div className="option-control">
@@ -920,9 +1462,48 @@ const OptionsBar: React.FC = () => {
               min="1"
               max={(activeTool === 'text' || activeTool === 'vertical_text') ? "500" : "500"}
               value={brushSize}
-              onChange={(e) => setBrushSize(parseInt(e.target.value))}
+              onChange={(e) => {
+                const val = parseInt(e.target.value);
+                setBrushSize(val);
+                if (activeLayer && activeLayer.type === 'text') {
+                  const targetSize = val * 2;
+                  const bounds = recalculateTextLayerBounds(
+                    activeLayer,
+                    activeLayer.fontFamily || textFontFamily,
+                    targetSize,
+                    activeLayer.fontWeight || 'normal',
+                    activeLayer.fontStyle || 'normal'
+                  );
+                  updateLayer(activeLayer.id, {
+                    fontSize: targetSize,
+                    ...bounds
+                  });
+                  recordHistory('Change Font Size');
+                }
+              }}
             />
-            <EditableValue value={brushSize} unit="px" onCommit={setBrushSize} />
+            <EditableValue
+              value={brushSize}
+              unit="px"
+              onCommit={(val) => {
+                setBrushSize(val);
+                if (activeLayer && activeLayer.type === 'text') {
+                  const targetSize = val * 2;
+                  const bounds = recalculateTextLayerBounds(
+                    activeLayer,
+                    activeLayer.fontFamily || textFontFamily,
+                    targetSize,
+                    activeLayer.fontWeight || 'normal',
+                    activeLayer.fontStyle || 'normal'
+                  );
+                  updateLayer(activeLayer.id, {
+                    fontSize: targetSize,
+                    ...bounds
+                  });
+                  recordHistory('Change Font Size');
+                }
+              }}
+            />
           </div>
           {(activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'blur' || activeTool === 'sharpen' || activeTool === 'smudge' || activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sponge' || activeTool === 'clone' || activeTool === 'history_brush') && (
             <div className="option-control">
@@ -993,8 +1574,20 @@ const OptionsBar: React.FC = () => {
           label={['shape', 'ellipse_shape', 'triangle_shape', 'polygon_shape', 'custom_shape'].includes(activeTool as string) ? 'Fill' : (activeTool === 'eyedropper' ? 'Sampled' : 'Color')}
           color={brushColor}
           opacity={primaryOpacity}
-          onColorChange={setBrushColor}
-          onOpacityChange={setPrimaryOpacity}
+          onColorChange={(color) => {
+            setBrushColor(color);
+            if (activeLayer && activeLayer.type === 'text') {
+              updateLayer(activeLayer.id, { color: hexToRgba(color, primaryOpacity) });
+              recordHistory('Change Text Color');
+            }
+          }}
+          onOpacityChange={(opacity) => {
+            setPrimaryOpacity(opacity);
+            if (activeLayer && activeLayer.type === 'text') {
+              updateLayer(activeLayer.id, { color: hexToRgba(brushColor, opacity) });
+              recordHistory('Change Text Color');
+            }
+          }}
         />
       )}
       {(shapeTools.includes(activeTool) || penTools.includes(activeTool)) && (

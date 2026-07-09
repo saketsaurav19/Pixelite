@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
 import { FontRegistry } from '../../../pdf/worker/engines/FontRegistry';
-import { getHomography, drawTrianglesWarp } from '../../../utils/canvasUtils';
+import { getHomography, drawTrianglesWarp, loadGoogleFont } from '../../../utils/canvasUtils';
 import { toolState } from '../../../tools/toolState';
 
 interface CanvasLayerProps {
@@ -74,6 +74,13 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
     }
   }, [layer.fontChecksum, layer.fontName]);
 
+  // Load Google Font dynamically if not a custom embedded PDF font
+  useEffect(() => {
+    if (layer.fontFamily && !layer.fontChecksum) {
+      loadGoogleFont(layer.fontFamily);
+    }
+  }, [layer.fontFamily, layer.fontChecksum]);
+
   const hasCustomFont = !!layer.fontChecksum;
   const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
   const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
@@ -101,6 +108,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
           whiteSpace: 'nowrap',
           fontFamily,
           fontWeight,
+          fontStyle: layer.fontStyle || 'normal',
           fontSize: `${fontSize}px`,
           color: textColor,
           lineHeight: 1,
@@ -140,6 +148,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
           height: '100%',
           userSelect: 'none',
           pointerEvents: 'none',
+          fontStyle: layer.fontStyle || 'normal',
         }}
       >
         {layer.runs.map((run, i) => {
@@ -196,7 +205,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
     return (
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
         {lines.map((line, i) => (
-          <div key={i} style={{ writingMode: 'vertical-rl', fontFamily, fontWeight, fontSize: `${fontSize}px`, color: textColor, whiteSpace: 'pre', lineHeight: 1 }}>
+          <div key={i} style={{ writingMode: 'vertical-rl', fontFamily, fontWeight, fontStyle: layer.fontStyle || 'normal', fontSize: `${fontSize}px`, color: textColor, whiteSpace: 'pre', lineHeight: 1 }}>
             {line}
           </div>
         ))}
@@ -210,12 +219,15 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
         position: 'absolute',
         top: 0,
         left: 0,
+        width: '100%',
+        textAlign: layer.textAlign || 'left',
         fontFamily,
         fontWeight,
+        fontStyle: layer.fontStyle || 'normal',
         fontSize: `${fontSize}px`,
         color: textColor,
         lineHeight: 1,
-        whiteSpace: 'nowrap',
+        whiteSpace: 'pre',
         // OpenType features for correct ligature, kern, conjunct shaping
         fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
         // Ensure left-to-right base direction for mixed scripts
@@ -591,6 +603,14 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   let canvasW = layer.width || documentSize.w;
   let canvasH = layer.height || documentSize.h;
 
+  const isWarped = layer.type === 'text' && layer.textWarp && layer.textWarp.style !== 'None';
+  let padX = 0;
+  let padY = 0;
+  if (isWarped) {
+    padX = Math.round(canvasW * 0.3) + 20;
+    padY = Math.round(canvasH * 0.8) + 20;
+  }
+
   if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid) {
     const xs = layer.warpGrid.map(p => p.x);
     const ys = layer.warpGrid.map(p => p.y);
@@ -598,14 +618,21 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
     canvasH = Math.max(1, Math.round(Math.max(...ys) - Math.min(...ys)));
   }
 
-  const isVector = layer.type === 'text' || layer.type === 'shape' || layer.type === 'table';
+  const finalCanvasW = isWarped ? canvasW + 2 * padX : canvasW;
+  const finalCanvasH = isWarped ? canvasH + 2 * padY : canvasH;
+
+  const isVector = (layer.type === 'text' && (!layer.textWarp || layer.textWarp.style === 'None')) || layer.type === 'shape' || layer.type === 'table';
 
   const rotationDeg = layer.rotation ?? 0;
   let layerTransform = `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px)`;
   let layerWidth = layer.width ? `${layer.width}px` : '100%';
   let layerHeight = layer.height ? `${layer.height}px` : '100%';
 
-  if (layer.corners && layer.corners.length === 4) {
+  if (isWarped) {
+    layerTransform = `translate(${(layer.position?.x || 0) - padX}px, ${(layer.position?.y || 0) - padY}px) rotate(${rotationDeg}deg)`;
+    layerWidth = `${canvasW + 2 * padX}px`;
+    layerHeight = `${canvasH + 2 * padY}px`;
+  } else if (layer.corners && layer.corners.length === 4) {
     if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid) {
       const xs = layer.warpGrid.map(p => p.x);
       const ys = layer.warpGrid.map(p => p.y);
@@ -661,8 +688,8 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         <canvas
           ref={(el) => { if (canvasRefs && canvasRefs.current) canvasRefs.current[layer.id] = el; }}
           data-layer-id={layer.id}
-          width={canvasW}
-          height={canvasH}
+          width={finalCanvasW}
+          height={finalCanvasH}
           className="layer-canvas"
           style={{
             width: '100%',
@@ -670,7 +697,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
             opacity: isVector ? 0 : 1,
           }}
         />
-        {layer.type === 'text' && <VectorTextLayer layer={layer} />}
+        {layer.type === 'text' && (!layer.textWarp || layer.textWarp.style === 'None') && <VectorTextLayer layer={layer} />}
         {layer.type === 'table' && layer.tableData && (
           // PDF table rendered as a proper HTML table
           <div

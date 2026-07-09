@@ -110,7 +110,7 @@ const getLayerAtCoords = (
   canvasRefs: any,
   parentOffset: { x: number; y: number } = { x: 0, y: 0 }
 ): string | null => {
-  for (let i = layersList.length - 1; i >= 0; i--) {
+  for (let i = 0; i < layersList.length; i++) {
     const layer = layersList[i];
     if (!layer.visible) continue;
 
@@ -143,6 +143,9 @@ const getLayerAtCoords = (
       const localY = Math.round(coords.y - absY);
 
       if (localX >= 0 && localX < canvas.width && localY >= 0 && localY < canvas.height) {
+        if (layer.type === 'text') {
+          return layer.id;
+        }
         try {
           const imgData = ctx.getImageData(localX, localY, 1, 1);
           if (imgData.data[3] > 10) {
@@ -166,21 +169,51 @@ export const transformTools: ToolModule[] = [
   },
   {
     id: 'move',
-    start: ({ coords, layers, canvasRefs, setActiveLayer, moveAutoSelect, setIsInteracting }) => {
+    start: ({ coords, layers, canvasRefs, setActiveLayer, moveAutoSelect, setIsInteracting, activeLayerId }) => {
       if (setIsInteracting) setIsInteracting(true);
+      
+      let targetId = activeLayerId;
       if (moveAutoSelect && canvasRefs && setActiveLayer) {
         const targetLayerId = getLayerAtCoords(layers, coords, canvasRefs);
         if (targetLayerId) {
           setActiveLayer(targetLayerId);
+          targetId = targetLayerId;
+        }
+      }
+
+      if (targetId) {
+        const activeLayer = findLayerById(layers, targetId);
+        if (activeLayer) {
+          toolState._moveStartLayerPos = {
+            x: activeLayer.position?.x || 0,
+            y: activeLayer.position?.y || 0
+          };
         }
       }
     },
-    move: ({ coords, lastPoint, activeLayerId, layers, updateLayer }) => {
+    move: ({ coords, lastPoint, activeLayerId, layers, updateLayer, isShift, startCoords }) => {
       if (!lastPoint || !activeLayerId) return;
       const activeLayer = findLayerById(layers, activeLayerId);
       if (activeLayer && !activeLayer.locked && !activeLayer.lockPosition) {
-        const dx = coords.x - lastPoint.x;
-        const dy = coords.y - lastPoint.y;
+        let dx = coords.x - lastPoint.x;
+        let dy = coords.y - lastPoint.y;
+
+        if (isShift && startCoords && toolState._moveStartLayerPos) {
+          const totalDx = coords.x - startCoords.x;
+          const totalDy = coords.y - startCoords.y;
+
+          if (Math.abs(totalDx) >= Math.abs(totalDy)) {
+            // Dragging along X axis (horizontal): lock Y coordinate to starting layer Y position
+            const startY = toolState._moveStartLayerPos.y;
+            const currentY = activeLayer.position?.y || 0;
+            dy = startY - currentY;
+          } else {
+            // Dragging along Y axis (vertical): lock X coordinate to starting layer X position
+            const startX = toolState._moveStartLayerPos.x;
+            const currentX = activeLayer.position?.x || 0;
+            dx = startX - currentX;
+          }
+        }
         
         // If layer has corners or warpGrid, move them as well
         const updates: any = {
@@ -198,6 +231,9 @@ export const transformTools: ToolModule[] = [
 
         updateLayer(activeLayerId, updates);
       }
+    },
+    end: () => {
+      delete toolState._moveStartLayerPos;
     }
   },
 
@@ -538,6 +574,24 @@ export const transformTools: ToolModule[] = [
       let layer = findLayerById(layers, activeLayerId);
       if (!layer) return;
 
+      if (layer.dataUrl) {
+        const img = new Image();
+        img.src = layer.dataUrl;
+        toolState.transformOriginalImage = img;
+      }
+
+      const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+      if (canvas) {
+        const copy = document.createElement('canvas');
+        copy.width = canvas.width;
+        copy.height = canvas.height;
+        const copyCtx = copy.getContext('2d');
+        if (copyCtx) {
+          copyCtx.drawImage(canvas, 0, 0);
+          toolState.transformOriginalCanvas = copy;
+        }
+      }
+
       const mode = useStore.getState().transformMode;
       const startCorners = getLayerCorners(layer);
       toolState._transformStartCornersList = startCorners;
@@ -578,14 +632,7 @@ export const transformTools: ToolModule[] = [
           toolState._warpStartGrid = layer.warpGrid.map((p: any) => ({ ...p }));
         }
 
-        const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-        if (canvas) {
-          const copy = document.createElement('canvas');
-          copy.width = canvas.width;
-          copy.height = canvas.height;
-          copy.getContext('2d')!.drawImage(canvas, 0, 0);
-          toolState.transformOriginalCanvas = copy;
-        }
+        // transformOriginalCanvas is now cached globally in the start phase
 
         const grid = layer.warpGrid || initWarpGrid(currentCorners);
         const zoom = useStore.getState().zoom || 1;
@@ -877,15 +924,34 @@ export const transformTools: ToolModule[] = [
         nextY = anchor.y - w * sinT;
       }
 
+      let targetW = w;
+      let targetH = h;
+      let targetX = nextX;
+      let targetY = nextY;
+      
+      const isWarped = activeLayer && activeLayer.type === 'text' && activeLayer.textWarp && activeLayer.textWarp.style !== 'None';
+      if (isWarped) {
+        const unpaddedW = Math.max(10, (w - 40) / 1.6);
+        const unpaddedH = Math.max(10, (h - 40) / 2.6);
+        const padX = Math.round(unpaddedW * 0.3) + 20;
+        const padY = Math.round(unpaddedH * 0.8) + 20;
+        
+        targetW = unpaddedW;
+        targetH = unpaddedH;
+        targetX = nextX + padX;
+        targetY = nextY + padY;
+      }
+
       updateLayer(activeLayerId, {
-        position: { x: nextX, y: nextY },
-        width: Math.round(w),
-        height: Math.round(h)
+        position: { x: targetX, y: targetY },
+        width: Math.round(targetW),
+        height: Math.round(targetH)
       });
     },
     end: ({ setIsInteracting }) => {
       setIsInteracting(false);
       delete toolState._warpActivePointIdx;
+      delete toolState.transformOriginalImage;
     }
   }
 ];

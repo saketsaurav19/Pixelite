@@ -28,6 +28,8 @@ export interface ToolSlice {
   moveAutoSelect: boolean;
   moveShowTransform: boolean;
   textFontFamily: string;
+  textFontWeight: string;
+  textFontStyle: string;
   textAlign: 'left' | 'center' | 'right';
   textEditor: { x: number; y: number; value: string; layerId?: string } | null;
   transformMode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp';
@@ -59,6 +61,8 @@ export interface ToolSlice {
   setMoveAutoSelect: (val: boolean) => void;
   setMoveShowTransform: (val: boolean) => void;
   setTextFontFamily: (val: string) => void;
+  setTextFontWeight: (val: string) => void;
+  setTextFontStyle: (val: string) => void;
   setTextAlign: (val: 'left' | 'center' | 'right') => void;
   setTextEditor: (editor: any) => void;
 }
@@ -111,6 +115,8 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
   moveAutoSelect: true,
   moveShowTransform: true,
   textFontFamily: 'Inter, system-ui, sans-serif',
+  textFontWeight: 'normal',
+  textFontStyle: 'normal',
   textAlign: 'left',
   textEditor: null,
   transformMode: 'free',
@@ -145,6 +151,8 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
   setMoveAutoSelect: (val) => set({ moveAutoSelect: val }),
   setMoveShowTransform: (val) => set({ moveShowTransform: val }),
   setTextFontFamily: (val) => set({ textFontFamily: val }),
+  setTextFontWeight: (val) => set({ textFontWeight: val }),
+  setTextFontStyle: (val) => set({ textFontStyle: val }),
   setTextAlign: (val) => set({ textAlign: val }),
   setTextEditor: (updater) => set((state: any) => ({
     textEditor: typeof updater === 'function' ? updater(state.textEditor) : updater

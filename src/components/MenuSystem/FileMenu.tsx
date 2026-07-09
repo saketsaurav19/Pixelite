@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useFileImporter } from '../../hooks/useFileImporter';
-import { workerExportBridge } from '../../services/export/WorkerExportBridge';
 import './MenuSystem.css';
 interface MenuProps {
   onClose: () => void;
@@ -76,6 +75,7 @@ export const FileMenu: React.FC<MenuProps> = ({ onClose }) => {
     e.stopPropagation();
     closeMenus();
     try {
+      const { workerExportBridge } = await import('../../services/export/WorkerExportBridge');
       const buffer = await workerExportBridge.generatePSD(layers, documentSize.w, documentSize.h);
       // Using application/octet-stream to prevent Android from coercing the file extension to .bin
       const blob = new Blob([buffer as unknown as BlobPart], { type: 'application/octet-stream' });

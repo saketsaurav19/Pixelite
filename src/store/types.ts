@@ -24,6 +24,14 @@ export interface TextRun {
   rotation?: number;
 }
 
+export interface TextWarp {
+  style: 'None' | 'Arc' | 'Arc Lower' | 'Arc Upper' | 'Arch' | 'Bulge' | 'Shell Lower' | 'Shell Upper' | 'Flag' | 'Wave' | 'Fish' | 'Rise' | 'Fish Eye' | 'Inflate' | 'Squeeze' | 'Twist';
+  orientation: 'Horizontal' | 'Vertical';
+  bend: number;
+  horizontalDistortion: number;
+  verticalDistortion: number;
+}
+
 export interface BaseLayer {
   id: string;
   name: string;
@@ -116,6 +124,7 @@ export type Layer = BaseLayer & {
   strokeColor?: string;
   strokeWidth?: number;
   isVertical?: boolean;
+  textAlign?: 'left' | 'center' | 'right';
   shapeData?: {
     type: 'rect' | 'path' | 'ellipse';
     w?: number; h?: number;
@@ -134,6 +143,7 @@ export type Layer = BaseLayer & {
   // PDF extraction fields
   rotation?: number;           // CSS rotation in degrees (from text/image transform)
   fontWeight?: string;         // 'normal' | 'bold' | '100'–'900'
+  fontStyle?: 'normal' | 'italic';
   fontFamily?: string;         // resolved font family
   isWatermark?: boolean;       // detected watermark element
   runs?: TextRun[];            // per-character-run style data for exact font rendering
@@ -172,6 +182,7 @@ export type Layer = BaseLayer & {
   corners?: { x: number; y: number }[];
   warpGrid?: { x: number; y: number }[];
   warpGridSize?: { rows: number; cols: number };
+  textWarp?: TextWarp;
 };
 
 export interface Light {
@@ -274,6 +285,8 @@ export interface EditorState extends DocumentSpecificState {
   moveAutoSelect: boolean;
   moveShowTransform: boolean;
   textFontFamily: string;
+  textFontWeight: string;
+  textFontStyle: string;
   textAlign: 'left' | 'center' | 'right';
   textEditor: { x: number; y: number; value: string; layerId?: string } | null;
   selectionShape: 'rect' | 'ellipse' | 'lasso';
@@ -288,6 +301,7 @@ export interface EditorState extends DocumentSpecificState {
   isExportDialogOpen: boolean;
   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
+  isWarpDialogOpen: boolean;
   isOpenRecentDialogOpen: boolean;
   isOpenFromCloudDialogOpen: boolean;
   isHelpDialogOpen: boolean;

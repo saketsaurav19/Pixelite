@@ -9,6 +9,7 @@ export interface UISlice {
   isExportDialogOpen: boolean;
   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
+  isWarpDialogOpen: boolean;
   isOpenRecentDialogOpen: boolean;
   isOpenFromCloudDialogOpen: boolean;
   isHelpDialogOpen: boolean;
@@ -50,6 +51,7 @@ export interface UISlice {
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setExportFormat: (format: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf') => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
+  setIsWarpDialogOpen: (isOpen: boolean) => void;
   setIsOpenRecentDialogOpen: (isOpen: boolean) => void;
   setIsOpenFromCloudDialogOpen: (isOpen: boolean) => void;
   setIsHelpDialogOpen: (isOpen: boolean) => void;
@@ -74,6 +76,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isNewDocumentDialogOpen: false,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
+  isWarpDialogOpen: false,
   isOpenRecentDialogOpen: false,
   isOpenFromCloudDialogOpen: false,
   isHelpDialogOpen: false,
@@ -113,6 +116,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
   setExportFormat: (format) => set({ exportFormat: format }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
+  setIsWarpDialogOpen: (isOpen) => set({ isWarpDialogOpen: isOpen }),
   setIsOpenRecentDialogOpen: (isOpen) => set({ isOpenRecentDialogOpen: isOpen }),
   setIsOpenFromCloudDialogOpen: (isOpen) => set({ isOpenFromCloudDialogOpen: isOpen }),
   setIsHelpDialogOpen: (isOpen) => set({ isHelpDialogOpen: isOpen }),

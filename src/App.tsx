@@ -11,29 +11,27 @@ import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 import ColorPicker from './components/shared/ColorPicker';
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
-import { ImportEngine } from './services/import/ImportEngine';
 
 import MenuBar from './components/MenuBar/MenuBar';
-import { removeBackground } from '@imgly/background-removal';
 import TabBar from './components/TabBar/TabBar';
-import { writePsd } from 'ag-psd';
-import { workerExportBridge } from './services/export/WorkerExportBridge';
 import { nanoid } from 'nanoid';
-import { CloudStorageModal } from './components/Modals/CloudStorageModal';
-import { PublicShareModal } from './components/Modals/PublicShareModal';
 import { uploadToImgur, uploadToImageBB, saveToGoogleDrive } from './utils/cloudServices';
 import { cutSelection, pasteFromClipboard } from './utils/clipboardUtils';
-import { OpenFromCloudDialog } from './components/Dialogs/OpenFromCloudDialog';
-import { NewDocumentDialog } from './components/Dialogs/NewDocumentDialog';
-import { ExportAsDialog } from './components/Dialogs/ExportAsDialog';
-import { FileInfoDialog } from './components/Dialogs/FileInfoDialog';
-import { SignatureDialog } from './components/Dialogs/SignatureDialog';
-import { CameraDialog } from "./components/Dialogs/CameraDialog";
-import { MobileCameraDialog } from "./components/Dialogs/MobileCameraDialog";
-import { AdjustmentDialog } from './components/Dialogs/AdjustmentDialog';
 import { AlertContainer } from './components/UI/AlertContainer';
 import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
+
+const CloudStorageModal = React.lazy(() => import('./components/Modals/CloudStorageModal').then(m => ({ default: m.CloudStorageModal })));
+const PublicShareModal = React.lazy(() => import('./components/Modals/PublicShareModal').then(m => ({ default: m.PublicShareModal })));
+const OpenFromCloudDialog = React.lazy(() => import('./components/Dialogs/OpenFromCloudDialog').then(m => ({ default: m.OpenFromCloudDialog })));
+const NewDocumentDialog = React.lazy(() => import('./components/Dialogs/NewDocumentDialog').then(m => ({ default: m.NewDocumentDialog })));
+const ExportAsDialog = React.lazy(() => import('./components/Dialogs/ExportAsDialog').then(m => ({ default: m.ExportAsDialog })));
+const FileInfoDialog = React.lazy(() => import('./components/Dialogs/FileInfoDialog').then(m => ({ default: m.FileInfoDialog })));
+const SignatureDialog = React.lazy(() => import('./components/Dialogs/SignatureDialog').then(m => ({ default: m.SignatureDialog })));
+const CameraDialog = React.lazy(() => import('./components/Dialogs/CameraDialog').then(m => ({ default: m.CameraDialog })));
+const MobileCameraDialog = React.lazy(() => import('./components/Dialogs/MobileCameraDialog').then(m => ({ default: m.MobileCameraDialog })));
+const AdjustmentDialog = React.lazy(() => import('./components/Dialogs/AdjustmentDialog').then(m => ({ default: m.AdjustmentDialog })));
+const WarpDialog = React.lazy(() => import('./components/Dialogs/WarpDialog').then(m => ({ default: m.WarpDialog })));
 
 const BACKGROUND_REMOVAL_REMOTE_PUBLIC_PATH =
   'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
@@ -437,6 +435,7 @@ const App: React.FC = () => {
           }
         }
 
+        const { writePsd } = await import('ag-psd');
         const buffer = writePsd({
           width: documentSize.w,
           height: documentSize.h,
@@ -483,6 +482,7 @@ const App: React.FC = () => {
       }
     }
 
+    const { writePsd } = await import('ag-psd');
     const buffer = writePsd({
       width: documentSize.w,
       height: documentSize.h,
@@ -661,35 +661,82 @@ const App: React.FC = () => {
         setIsInverseSelection(!useStore.getState().isInverseSelection);
       }
 
-      // Tools (single key press)
-      const keyMap: Record<string, [string, string]> = {
-        'v': ['move', 'move'],
-        'm': ['marquee', 'rectangle_marquee'],
-        'l': ['lasso', 'lasso'],
-        'w': ['selection', 'quick_selection'],
-        'c': ['crop', 'crop'],
-        'i': ['eyedropper', 'eyedropper'],
-        'j': ['healing', 'healing'],
-        'b': ['brush', 'brush'],
-        's': ['clone', 'clone'],
-        'y': ['history', 'history_brush'],
-        'e': ['eraser', 'eraser'],
-        'g': ['gradient', 'gradient'],
-        'o': ['dodge', 'dodge'],
-        'p': ['pen', 'pen'],
-        't': ['text', 'text'],
-        'a': ['path', 'path_select'],
-        'u': ['shape', 'shape'],
-        'h': ['hand', 'hand'],
-        'z': ['zoom', 'zoom_tool'],
+      // Tools shortcut groups cycling
+      const shortcutGroups: Record<string, string[]> = {
+        'v': ['move', 'artboard'],
+        'm': ['marquee', 'ellipse_marquee'],
+        'l': ['lasso', 'polygonal_lasso', 'magnetic_lasso'],
+        'w': ['quick_selection', 'magic_wand', 'object_selection'],
+        'c': ['crop', 'perspective_crop', 'slice', 'slice_select'],
+        'i': ['eyedropper', 'color_sampler', 'ruler'],
+        'j': ['healing', 'healing_brush', 'patch', 'content_aware_move', 'red_eye'],
+        'b': ['brush', 'pencil', 'color_replacement', 'mixer_brush'],
+        's': ['clone', 'pattern_stamp'],
+        'y': ['history_brush', 'art_history_brush'],
+        'e': ['eraser', 'background_eraser', 'magic_eraser', 'rectangle_eraser', 'lasso_eraser'],
+        'g': ['gradient', 'paint_bucket'],
+        'o': ['dodge', 'burn', 'sponge'],
+        'p': ['pen', 'free_pen', 'curvature_pen', 'add_anchor', 'delete_anchor', 'convert_point'],
+        't': ['text', 'vertical_text'],
+        'a': ['path_select', 'direct_select'],
+        'u': ['shape', 'ellipse_shape', 'triangle_shape', 'polygon_shape', 'line_shape', 'custom_shape'],
+        'h': ['hand', 'rotate_view'],
+        'z': ['zoom_tool']
       };
 
-      if (!isCtrl && !e.altKey && !e.shiftKey && keyMap[e.key.toLowerCase()]) {
-        e.preventDefault();
-        const [groupId, defaultVariantId] = keyMap[e.key.toLowerCase()];
-        setActiveTool(defaultVariantId);
-        setToolVariant(groupId, defaultVariantId);
-        toolState.currentTool = defaultVariantId;
+      const toolToGroupMap: Record<string, string> = {
+        move: 'move', artboard: 'move',
+        marquee: 'marquee', ellipse_marquee: 'marquee',
+        lasso: 'lasso', polygonal_lasso: 'lasso', magnetic_lasso: 'lasso',
+        quick_selection: 'selection', magic_wand: 'selection', object_selection: 'selection',
+        crop: 'crop', perspective_crop: 'crop', slice: 'crop', slice_select: 'crop',
+        eyedropper: 'eyedropper', color_sampler: 'eyedropper', ruler: 'eyedropper',
+        healing: 'healing', healing_brush: 'healing', patch: 'healing', content_aware_move: 'healing', red_eye: 'healing',
+        brush: 'brush', pencil: 'brush', color_replacement: 'brush', mixer_brush: 'brush',
+        clone: 'clone', pattern_stamp: 'clone',
+        history_brush: 'history', art_history_brush: 'history',
+        eraser: 'eraser', background_eraser: 'eraser', magic_eraser: 'eraser', rectangle_eraser: 'eraser', lasso_eraser: 'eraser',
+        gradient: 'gradient', paint_bucket: 'gradient',
+        dodge: 'dodge', burn: 'dodge', sponge: 'dodge',
+        text: 'text', vertical_text: 'text',
+        pen: 'pen', free_pen: 'pen', curvature_pen: 'pen', add_anchor: 'pen', delete_anchor: 'pen', convert_point: 'pen',
+        path_select: 'path', direct_select: 'path',
+        shape: 'shape', ellipse_shape: 'shape', triangle_shape: 'shape', polygon_shape: 'shape', line_shape: 'shape', custom_shape: 'shape',
+        hand: 'hand', rotate_view: 'hand',
+        zoom_tool: 'zoom'
+      };
+
+      if (!isCtrl && !e.altKey && !e.shiftKey) {
+        const key = e.key.toLowerCase();
+        const tools = shortcutGroups[key];
+        if (tools) {
+          e.preventDefault();
+          const currentActiveTool = useStore.getState().activeTool;
+          let nextTool = '';
+          const activeIndex = tools.indexOf(currentActiveTool);
+
+          if (activeIndex !== -1) {
+            // Already active in this group, cycle to the next tool!
+            const nextIndex = (activeIndex + 1) % tools.length;
+            nextTool = tools[nextIndex];
+          } else {
+            // Not active in this group, check if we have a saved active variant for the group
+            const firstToolGroupId = toolToGroupMap[tools[0]];
+            const savedVariant = useStore.getState().activeToolVariants[firstToolGroupId];
+            if (savedVariant && tools.includes(savedVariant)) {
+              nextTool = savedVariant;
+            } else {
+              nextTool = tools[0];
+            }
+          }
+
+          if (nextTool) {
+            const groupId = toolToGroupMap[nextTool];
+            setActiveTool(nextTool as any);
+            setToolVariant(groupId, nextTool as any);
+            toolState.currentTool = nextTool;
+          }
+        }
       }
     };
 
@@ -720,10 +767,12 @@ const App: React.FC = () => {
       const fileToImport = file instanceof File ? file : new File([file], name || 'Pasted Image', { type: file.type });
 
       // Run it through the universal ImportEngine
+      const { ImportEngine } = await import('./services/import/ImportEngine');
       const result = await ImportEngine.importFile(fileToImport);
 
       // Now handle the result by type:
       if (result.type === 'psd') {
+        const { workerExportBridge } = await import('./services/export/WorkerExportBridge');
         const psdData = await workerExportBridge.parsePSD(result.psdData);
         // Extract lighting metadata if it exists
         const metadataLayer = psdData.children?.find((c: any) => c.name === '__pixelite_metadata__');
@@ -790,13 +839,19 @@ const App: React.FC = () => {
             historyIndex: 0
           });
         } else {
-          setDocumentSize({ w: psdData.width, h: psdData.height });
-          setLayers(layersToUse);
-          if (layersToUse.length > 0) setActiveLayer(layersToUse[0].id);
+          const offsetLayers = layersToUse.map((pg) => ({
+            ...pg,
+            position: {
+              x: (pg.position?.x || 0) + (documentSize.w - psdData.width) / 2,
+              y: (pg.position?.y || 0) + (documentSize.h - psdData.height) / 2,
+            },
+          }));
+          setLayers([...offsetLayers, ...layers]);
+          if (offsetLayers.length > 0) setActiveLayer(offsetLayers[offsetLayers.length - 1].id);
           if (lightingMetadata.lights) {
             useStore.getState().updateLighting(lightingMetadata);
           }
-          recordHistory(`Import PSD: ${fileToImport.name}`);
+          recordHistory(`Place PSD: ${fileToImport.name}`);
         }
       } else if (result.type === 'gif' && result.frames) {
         const newLayers: any[] = result.frames.map((frame, index) => ({
@@ -910,16 +965,27 @@ const App: React.FC = () => {
             historyIndex: 0
           });
         } else {
-          if (layers.length === 0 || isDefaultBackground) {
+          if (!skipResize && (layers.length === 0 || isDefaultBackground)) {
             setDocumentSize({ w: result.width, h: result.height });
           }
+
+          let targetW = result.width;
+          let targetH = result.height;
+          if (skipResize) {
+            const scale = Math.min(documentSize.w / result.width, documentSize.h / result.height);
+            targetW = result.width * scale;
+            targetH = result.height * scale;
+          }
+
           addLayer({
             name: fileToImport.name || 'Pasted Image',
             type: 'image',
             dataUrl: result.dataUrl,
-            width: result.width,
-            height: result.height,
-            position: (layers.length === 0 || isDefaultBackground || skipResize) ? { x: 0, y: 0 } : { x: (documentSize.w - result.width) / 2, y: (documentSize.h - result.height) / 2 }
+            width: Math.round(targetW),
+            height: Math.round(targetH),
+            position: (!skipResize && (layers.length === 0 || isDefaultBackground)) 
+              ? { x: 0, y: 0 } 
+              : { x: (documentSize.w - targetW) / 2, y: (documentSize.h - targetH) / 2 }
           });
           recordHistory(`Import ${fileToImport.name}`);
         }
@@ -1157,6 +1223,7 @@ const App: React.FC = () => {
       const inputResponse = await fetch(layer.dataUrl);
       const inputBlob = await inputResponse.blob();
 
+      const { removeBackground } = await import('@imgly/background-removal');
       let outputBlob: Blob;
       try {
         outputBlob = await removeBackground(
@@ -1221,6 +1288,7 @@ const App: React.FC = () => {
           // Photoshop layers are bottom-to-top in children array index (0 is bottom).
         };
 
+        const { writePsd } = await import('ag-psd');
         const buffer = writePsd(psdData);
         const blob = new Blob([buffer], { type: 'application/octet-stream' });
         const url = URL.createObjectURL(blob);
@@ -1704,10 +1772,26 @@ const App: React.FC = () => {
           } else if (type === 'text/plain') {
             const text = await navigator.clipboard.readText();
             if (text) {
+              const fontSize = 32;
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d')!;
+              ctx.font = `${fontSize}px sans-serif`;
+              const lines = text.split('\n');
+              let maxW = 10;
+              lines.forEach((line) => {
+                const w = ctx.measureText(line).width;
+                if (w > maxW) maxW = w;
+              });
+              const height = Math.max(10, lines.length * fontSize * 1.2);
+
               addLayer({
                 name: 'Pasted Text',
                 type: 'text',
                 textContent: text,
+                width: maxW + 16,
+                height: height,
+                fontSize: fontSize,
+                color: '#000000',
                 position: { x: 20, y: 20 }
               });
               recordHistory('Paste System Clipboard Text');
@@ -2128,6 +2212,28 @@ const App: React.FC = () => {
     setLassoPaths([]);
     recordHistory('Deselect');
   };
+
+  if (layers.length === 0) {
+    return (
+      <div className="app-layout welcome-only">
+        <input type="file" id="global-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handleImageUpload} />
+        <input type="file" id="place-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handlePlaceUpload} />
+        <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
+        <React.Suspense fallback={null}>
+          <OpenFromCloudDialog />
+          <NewDocumentDialog />
+          <ExportAsDialog />
+          <FileInfoDialog />
+          <SignatureDialog />
+          <CameraDialog />
+          <MobileCameraDialog />
+          <AdjustmentDialog />
+          <WarpDialog />
+        </React.Suspense>
+        <AlertContainer />
+      </div>
+    );
+  }
 
   return (
     <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''} ${isMobileMenuOpen ? 'menu-active' : ''} ${isToolsOpen ? 'tools-active' : ''} ${isPanelsOpen ? 'panels-active' : ''}`}>
@@ -2824,64 +2930,62 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-      {layers.length === 0 && (
-        <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
-      )}
+      <React.Suspense fallback={null}>
+        {saveModal.type === 'cloud' && (
+          <CloudStorageModal
+            isOpen={true}
+            onClose={() => setSaveModal({ type: null })}
+            provider={saveModal.provider}
+            onSave={async (provider, filename) => {
+              const dataUrl = getMergedImageData();
+              if (!dataUrl) return;
 
-      {saveModal.type === 'cloud' && (
-        <CloudStorageModal
-          isOpen={true}
-          onClose={() => setSaveModal({ type: null })}
-          provider={saveModal.provider}
-          onSave={async (provider, filename) => {
-            const dataUrl = getMergedImageData();
-            if (!dataUrl) return;
-
-            try {
-              if (provider === 'google_drive') {
-                // In a real app, you'd handle OAuth here. 
-                // For now, we'll prompt for a token if not found, or use a mock flow if preferred.
-                const token = localStorage.getItem('google_drive_token') || prompt('Please enter your Google Drive Access Token (for testing):');
-                if (token) {
-                  localStorage.setItem('google_drive_token', token);
-                  await saveToGoogleDrive(dataUrl, filename, token);
-                  alert('Saved to Google Drive!');
+              try {
+                if (provider === 'google_drive') {
+                  // In a real app, you'd handle OAuth here. 
+                  // For now, we'll prompt for a token if not found, or use a mock flow if preferred.
+                  const token = localStorage.getItem('google_drive_token') || prompt('Please enter your Google Drive Access Token (for testing):');
+                  if (token) {
+                    localStorage.setItem('google_drive_token', token);
+                    await saveToGoogleDrive(dataUrl, filename, token);
+                    alert('Saved to Google Drive!');
+                  }
+                } else {
+                  // Mock other providers for now as they require different OAuth flows
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  console.log(`Mock saved ${filename} to ${provider}`);
                 }
-              } else {
-                // Mock other providers for now as they require different OAuth flows
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                console.log(`Mock saved ${filename} to ${provider}`);
+              } catch (err: any) {
+                alert(`Failed to save: ${err.message}`);
+                throw err;
               }
-            } catch (err: any) {
-              alert(`Failed to save: ${err.message}`);
-              throw err;
-            }
-          }}
-          defaultFilename={`${activeDocumentName || 'pixelite_project'}.png`}
-        />
-      )}
+            }}
+            defaultFilename={`${activeDocumentName || 'pixelite_project'}.png`}
+          />
+        )}
 
-      {saveModal.type === 'public' && (
-        <PublicShareModal
-          isOpen={true}
-          onClose={() => setSaveModal({ type: null })}
-          service={saveModal.provider}
-          onUpload={async (service) => {
-            const dataUrl = getMergedImageData();
-            if (!dataUrl) throw new Error('No image data');
+        {saveModal.type === 'public' && (
+          <PublicShareModal
+            isOpen={true}
+            onClose={() => setSaveModal({ type: null })}
+            service={saveModal.provider}
+            onUpload={async (service) => {
+              const dataUrl = getMergedImageData();
+              if (!dataUrl) throw new Error('No image data');
 
-            if (service === 'imgur') {
-              return await uploadToImgur(dataUrl);
-            } else if (service === 'imagebb') {
-              return await uploadToImageBB(dataUrl);
-            } else {
-              // Fallback for others
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              return `https://${service}.com/share/a7b2c9d${Math.floor(Math.random() * 10000)}`;
-            }
-          }}
-        />
-      )}
+              if (service === 'imgur') {
+                return await uploadToImgur(dataUrl);
+              } else if (service === 'imagebb') {
+                return await uploadToImageBB(dataUrl);
+              } else {
+                // Fallback for others
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return `https://${service}.com/share/a7b2c9d${Math.floor(Math.random() * 10000)}`;
+              }
+            }}
+          />
+        )}
+      </React.Suspense>
 
       {layerContextMenu && (
         <LayerContextMenu
@@ -2904,14 +3008,17 @@ const App: React.FC = () => {
         />
       )}
 
-      <OpenFromCloudDialog />
-      <NewDocumentDialog />
-      <ExportAsDialog />
-      <FileInfoDialog />
-      <SignatureDialog />
-      <CameraDialog />
-      <MobileCameraDialog />
-      <AdjustmentDialog />
+      <React.Suspense fallback={null}>
+        <OpenFromCloudDialog />
+        <NewDocumentDialog />
+        <ExportAsDialog />
+        <FileInfoDialog />
+        <SignatureDialog />
+        <CameraDialog />
+        <MobileCameraDialog />
+        <AdjustmentDialog />
+        <WarpDialog />
+      </React.Suspense>
 
       <AlertContainer />
     </div>

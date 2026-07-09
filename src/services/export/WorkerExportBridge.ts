@@ -21,16 +21,18 @@ export class WorkerExportBridge {
   private messageCallbacks = new Map<string, { resolve: (val: any) => void, reject: (err: any) => void }>();
 
   constructor() {
-    this.initWorker();
+    // Lazy worker initialization
   }
 
-  private initWorker() {
-    // Vite handles worker instantiation
-    this.worker = new Worker(new URL('../../workers/fileWorker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = this.handleWorkerMessage.bind(this);
-    this.worker.onerror = (err) => {
-      console.error("Worker error:", err);
-    };
+  private ensureWorker() {
+    if (!this.worker) {
+      // Vite handles worker instantiation
+      this.worker = new Worker(new URL('../../workers/fileWorker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = this.handleWorkerMessage.bind(this);
+      this.worker.onerror = (err) => {
+        console.error("Worker error:", err);
+      };
+    }
   }
 
   private handleWorkerMessage(e: MessageEvent) {
@@ -135,6 +137,7 @@ export class WorkerExportBridge {
     return psd;
   }
   terminate() {
+      this.ensureWorker();
       if(this.worker) {
           this.worker.terminate();
           this.worker = null;

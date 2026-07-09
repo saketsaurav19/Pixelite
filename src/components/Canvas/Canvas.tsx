@@ -93,7 +93,8 @@ const Canvas: React.FC = () => {
     redEyePupilSize, redEyeDarkenAmount,
     textEditor, setTextEditor,
     lights, isLightingEnabled, lightingQuality, ambientIntensity,
-    moveAutoSelect, moveShowTransform
+    moveAutoSelect, moveShowTransform,
+    textFontFamily, textAlign, textFontWeight, textFontStyle
   } = store;
   // --- UI & Interaction State ---
   const [isInteracting, setIsInteracting] = useState(false); // True during active mouse/touch drag
@@ -106,6 +107,7 @@ const Canvas: React.FC = () => {
   const [selectedPoint, setSelectedPoint] = useState<{ pathIdx: number, pointIdx: number } | null>(null); // Vector path anchor selection
   const [isAltPressed, setIsAltPressed] = useState(false);
   const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
 
   // --- Touch Gestures State (for mobile/tablet support) ---
   const [initialTouchDistance, setInitialTouchDistance] = useState<number | null>(null);
@@ -163,41 +165,9 @@ const Canvas: React.FC = () => {
   }, [activeTool, activeLayerId, layers, documentSize, setCropRect]);
 
   useEffect(() => {
-    if (activeLayerId) {
-      const activeLayer = findLayerById(useStore.getState().layers, activeLayerId);
-      if (activeLayer && activeLayer.type === 'text') {
-        const currentEditor = useStore.getState().textEditor;
-        if (!currentEditor || currentEditor.layerId !== activeLayerId) {
-          if (currentEditor) {
-            commitText();
-          }
-          setTextEditor({
-            x: activeLayer.position?.x || 0,
-            y: activeLayer.position?.y || 0,
-            value: activeLayer.textContent || '',
-            layerId: activeLayerId
-          });
-          setActiveTool('text');
-          setTimeout(() => {
-            const input = hiddenTextInputRef.current;
-            if (input) {
-              input.focus();
-              const len = input.value.length;
-              input.setSelectionRange(len, len);
-            }
-          }, 50);
-        }
-      } else {
-        const currentEditor = useStore.getState().textEditor;
-        if (currentEditor && currentEditor.layerId) {
-          commitText();
-        }
-      }
-    } else {
-      const currentEditor = useStore.getState().textEditor;
-      if (currentEditor && currentEditor.layerId) {
-        commitText();
-      }
+    const currentEditor = useStore.getState().textEditor;
+    if (currentEditor && currentEditor.layerId && currentEditor.layerId !== activeLayerId) {
+      commitText();
     }
   }, [activeLayerId]);
 
@@ -215,6 +185,7 @@ const Canvas: React.FC = () => {
       activeTool === 'perspective_crop' ||
       activeTool === 'slice' ||
       activeTool === 'slice_select' ||
+      activeTool === 'transform' ||
       ['pen', 'free_pen', 'curvature_pen', 'add_anchor'].includes(activeTool as string) ||
       hasArtboards ||
       isClamp;
@@ -252,8 +223,8 @@ const Canvas: React.FC = () => {
     getSelectionPathDataUtil(selectionRect, lassoPaths, store.selectionShape), [selectionRect, lassoPaths, store.selectionShape]);
 
   const commitText = useCallback(() =>
-    commitTextUtil(textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor, hiddenTextInputRef, updateLayer),
-    [textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor, updateLayer]);
+    commitTextUtil(textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor, hiddenTextInputRef, textFontFamily, textAlign, textFontWeight, textFontStyle, updateLayer),
+    [textEditor, brushSize, brushColor, primaryOpacity, strokeWidth, secondaryColor, secondaryOpacity, hexToRgba, addLayer, recordHistory, setTextEditor, textFontFamily, textAlign, textFontWeight, textFontStyle, updateLayer]);
 
   const cancelText = useCallback(() =>
     cancelTextUtil(setTextEditor, hiddenTextInputRef), [setTextEditor]);
@@ -473,13 +444,13 @@ const Canvas: React.FC = () => {
       customPattern: store.customPattern,
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
-      isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
+      isShift: isShiftPressed, isAlt: isAltPressed, isCtrl: isCtrlPressed,
       cropRect, activeCropHandle, setActiveCropHandle,
       canvasRefs, setActiveLayer, moveAutoSelect, moveShowTransform
     };
 
     handleDoubleClickUtil(context);
-  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer, setDocumentSize, isAltPressed, isCtrlPressed, vectorPaths, activePathIndex, lassoPaths, isInverseSelection, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, secondaryColor, primaryOpacity, secondaryOpacity, applySelectionClip, activeCropHandle, moveAutoSelect, moveShowTransform]);
+  }, [activeTool, recordHistory, currentMousePos, brushSize, brushColor, zoom, activeLayerId, layers, selectionRect, setLassoPaths, setSelectionRect, setCropRect, updateLayer, setIsInteracting, setBrushColor, addLayer, setDocumentSize, isAltPressed, isCtrlPressed, isShiftPressed, vectorPaths, activePathIndex, lassoPaths, isInverseSelection, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, secondaryColor, primaryOpacity, secondaryOpacity, applySelectionClip, activeCropHandle, moveAutoSelect, moveShowTransform]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -566,7 +537,7 @@ const Canvas: React.FC = () => {
       customPattern: store.customPattern,
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
-      isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
+      isShift: isShiftPressed, isAlt: isAltPressed, isCtrl: isCtrlPressed,
       cropRect, activeCropHandle, setActiveCropHandle,
       canvasRefs, setActiveLayer, moveAutoSelect, moveShowTransform
     };
@@ -578,7 +549,7 @@ const Canvas: React.FC = () => {
     }, {
       isInteracting, activeCropHandle, selectedPoint, activePathIndex
     });
-  }, [getCoordinates, isInteracting, activeTool, activeLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect, applySelectionClip, findBestEdgePoint, vectorPaths, activePathIndex, selectedPoint, isAltPressed, isCtrlPressed, moveAutoSelect, moveShowTransform]);
+  }, [getCoordinates, isInteracting, activeTool, activeLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect, applySelectionClip, findBestEdgePoint, vectorPaths, activePathIndex, selectedPoint, isAltPressed, isCtrlPressed, isShiftPressed, moveAutoSelect, moveShowTransform]);
 
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
@@ -618,7 +589,7 @@ const Canvas: React.FC = () => {
       customPattern: store.customPattern,
       secondaryColor: store.secondaryColor,
       primaryOpacity, secondaryOpacity, hexToRgba, applySelectionClip,
-      isShift: false, isAlt: isAltPressed, isCtrl: isCtrlPressed,
+      isShift: isShiftPressed, isAlt: isAltPressed, isCtrl: isCtrlPressed,
       setIsTyping,
       redEyePupilSize, redEyeDarkenAmount,
       cropRect, activeCropHandle, setActiveCropHandle,
@@ -636,7 +607,7 @@ const Canvas: React.FC = () => {
     if (activeCtx) {
       activeCtx.globalCompositeOperation = 'source-over';
     }
-  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle, moveAutoSelect, moveShowTransform]);
+  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle, isShiftPressed, moveAutoSelect, moveShowTransform]);
 
 
   // Handles mouse wheel zooming
@@ -696,32 +667,25 @@ const Canvas: React.FC = () => {
       const layer = layers.find(l => l.id === activeLayerId);
       const mode = useStore.getState().transformMode;
       
-      if (layer && (layer.corners || layer.warpGrid)) {
+      if (layer) {
         const origCanvas = toolState.transformOriginalCanvas;
         if (origCanvas) {
           let xs: number[] = [];
           let ys: number[] = [];
+          let bakedCanvas: HTMLCanvasElement | null = null;
           
           if (mode === 'warp' && layer.warpGrid) {
             xs = layer.warpGrid.map(p => p.x);
             ys = layer.warpGrid.map(p => p.y);
-          } else if (layer.corners) {
-            xs = layer.corners.map(p => p.x);
-            ys = layer.corners.map(p => p.y);
-          }
-
-          if (xs.length > 0) {
-            const xMin = Math.min(...xs);
-            const xMax = Math.max(...xs);
-            const yMin = Math.min(...ys);
-            const yMax = Math.max(...ys);
-
-            const wBbox = Math.max(1, Math.round(xMax - xMin));
-            const hBbox = Math.max(1, Math.round(yMax - yMin));
-
-            let bakedCanvas: HTMLCanvasElement;
-
-            if (mode === 'warp' && layer.warpGrid) {
+            
+            if (xs.length > 0) {
+              const xMin = Math.min(...xs);
+              const xMax = Math.max(...xs);
+              const yMin = Math.min(...ys);
+              const yMax = Math.max(...ys);
+              const wBbox = Math.max(1, Math.round(xMax - xMin));
+              const hBbox = Math.max(1, Math.round(yMax - yMin));
+              
               bakedCanvas = document.createElement('canvas');
               bakedCanvas.width = wBbox;
               bakedCanvas.height = hBbox;
@@ -737,30 +701,78 @@ const Canvas: React.FC = () => {
                   srcGrid.push({ x: u * w, y: v * h });
                 }
               }
-
               const dstGrid = layer.warpGrid.map(p => ({
                 x: p.x - xMin,
                 y: p.y - yMin
               }));
-
               drawTrianglesWarp(ctx, origCanvas, srcGrid, dstGrid, 4, 4);
-            } else {
-              const dstPoints = layer.corners.map(p => ({
+              
+              updateLayer(activeLayerId, {
+                dataUrl: bakedCanvas.toDataURL(),
+                position: { x: xMin, y: yMin },
+                width: wBbox,
+                height: hBbox,
+                rotation: 0,
+                corners: undefined,
+                warpGrid: undefined
+              });
+            }
+          } else {
+            // For corners mode, or standard scale/rotate/free modes
+            let finalCorners = layer.corners;
+            
+            if (!finalCorners) {
+              // Calculate 4 corners based on position, width, height, and rotation
+              const lx = layer.position?.x || 0;
+              const ly = layer.position?.y || 0;
+              const lw = layer.width || origCanvas.width;
+              const lh = layer.height || origCanvas.height;
+              const lr = layer.rotation || 0;
+              const theta = (lr * Math.PI) / 180;
+              const cosT = Math.cos(theta);
+              const sinT = Math.sin(theta);
+              
+              const localCorners = [
+                { x: 0, y: 0 },
+                { x: lw, y: 0 },
+                { x: lw, y: lh },
+                { x: 0, y: lh }
+              ];
+              
+              finalCorners = localCorners.map(p => ({
+                x: lx + p.x * cosT - p.y * sinT,
+                y: ly + p.x * sinT + p.y * cosT
+              }));
+            }
+            
+            xs = finalCorners.map(p => p.x);
+            ys = finalCorners.map(p => p.y);
+            
+            if (xs.length > 0) {
+              const xMin = Math.min(...xs);
+              const xMax = Math.max(...xs);
+              const yMin = Math.min(...ys);
+              const yMax = Math.max(...ys);
+              const wBbox = Math.max(1, Math.round(xMax - xMin));
+              const hBbox = Math.max(1, Math.round(yMax - yMin));
+              
+              const dstPoints = finalCorners.map(p => ({
                 x: p.x - xMin,
                 y: p.y - yMin
               }));
+              
               bakedCanvas = warpQuad(origCanvas, dstPoints, wBbox, hBbox);
+              
+              updateLayer(activeLayerId, {
+                dataUrl: bakedCanvas.toDataURL(),
+                position: { x: xMin, y: yMin },
+                width: wBbox,
+                height: hBbox,
+                rotation: 0,
+                corners: undefined,
+                warpGrid: undefined
+              });
             }
-
-            updateLayer(activeLayerId, {
-              dataUrl: bakedCanvas.toDataURL(),
-              position: { x: xMin, y: yMin },
-              width: wBbox,
-              height: hBbox,
-              rotation: 0,
-              corners: undefined,
-              warpGrid: undefined
-            });
           }
         }
       }
@@ -775,6 +787,7 @@ const Canvas: React.FC = () => {
     delete toolState._transformOriginalLayerProperties;
     delete toolState._transformOriginalLayer;
     delete toolState.transformOriginalCanvas;
+    delete toolState.transformOriginalImage;
     setActiveTool('move');
   }, [activeLayerId, layers, updateLayer, recordHistory, setActiveTool]);
 
@@ -844,6 +857,7 @@ const Canvas: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Alt') setIsAltPressed(true);
       if (e.key === 'Control' || e.key === 'Meta') setIsCtrlPressed(true);
+      if (e.key === 'Shift') setIsShiftPressed(true);
 
       if (activeTool === 'transform') {
         if (e.key === 'Enter') {
@@ -879,6 +893,7 @@ const Canvas: React.FC = () => {
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Alt') setIsAltPressed(false);
       if (e.key === 'Control' || e.key === 'Meta') setIsCtrlPressed(false);
+      if (e.key === 'Shift') setIsShiftPressed(false);
     };
     const preventScroll = (e: KeyboardEvent) => {
       if (textEditor && e.key === 'Escape') {
@@ -1006,7 +1021,7 @@ const Canvas: React.FC = () => {
           transform: `scale(${zoom}) translate(${canvasOffset.x}px, ${canvasOffset.y}px) rotate(${canvasRotation}deg)`,
           width: `${documentSize.w}px`,
           height: `${documentSize.h}px`,
-          overflow: (activeTool === 'artboard' || activeTool === 'crop' || activeTool === 'perspective_crop' || activeTool === 'slice' || hasArtboards) ? 'visible' : 'hidden',
+          overflow: (activeTool === 'artboard' || activeTool === 'crop' || activeTool === 'perspective_crop' || activeTool === 'transform' || activeTool === 'slice' || hasArtboards) ? 'visible' : 'hidden',
           backgroundColor: hasArtboards ? 'transparent' : undefined,
           backgroundImage: hasArtboards ? 'none' : undefined,
           boxShadow: hasArtboards ? 'none' : undefined,
@@ -1139,14 +1154,14 @@ const Canvas: React.FC = () => {
 
 
         {cloneSource && activeTool === 'clone' && (
-          <div className="source-cursor" style={{ position: 'absolute', left: cloneSource.x / 2, top: cloneSource.y / 2, width: '20px', height: '20px', border: '1px solid white', borderRadius: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1000 }}>
+          <div className="source-cursor" style={{ position: 'absolute', left: cloneSource.x, top: cloneSource.y, width: '20px', height: '20px', border: '1px solid white', borderRadius: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1000 }}>
             <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '1px', background: 'white' }} />
             <div style={{ position: 'absolute', left: '50%', top: 0, width: '1px', height: '100%', background: 'white' }} />
           </div>
         )}
 
         {toolState._healingSource && activeTool === 'healing_brush' && (
-          <div className="source-cursor" style={{ position: 'absolute', left: toolState._healingSource.x / 2, top: toolState._healingSource.y / 2, width: '20px', height: '20px', border: '1px solid #00ff00', borderRadius: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1000 }}>
+          <div className="source-cursor" style={{ position: 'absolute', left: toolState._healingSource.x, top: toolState._healingSource.y, width: '20px', height: '20px', border: '1px solid #00ff00', borderRadius: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 1000 }}>
             <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '1px', background: '#00ff00' }} />
             <div style={{ position: 'absolute', left: '50%', top: 0, width: '1px', height: '100%', background: '#00ff00' }} />
           </div>
@@ -1163,8 +1178,23 @@ const Canvas: React.FC = () => {
       {activeLayerId && activeTool === 'move' && (isInteracting || moveShowTransform) && (() => {
         const rect = findLayerAbsoluteRect(activeLayerId, layers);
         if (rect) {
-          const w = rect.w || documentSize.w;
-          const h = rect.h || documentSize.h;
+          const activeLayer = layers.find(l => l.id === activeLayerId);
+          const isWarped = activeLayer && activeLayer.type === 'text' && activeLayer.textWarp && activeLayer.textWarp.style !== 'None';
+          
+          let w = rect.w || documentSize.w;
+          let h = rect.h || documentSize.h;
+          let x = rect.x;
+          let y = rect.y;
+
+          if (isWarped) {
+            const padX = Math.round(w * 0.3) + 20;
+            const padY = Math.round(h * 0.8) + 20;
+            w = w + 2 * padX;
+            h = h + 2 * padY;
+            x = x - padX;
+            y = y - padY;
+          }
+
           return (
             <div
               style={{
@@ -1187,7 +1217,7 @@ const Canvas: React.FC = () => {
                   top: 0,
                   width: `${w}px`,
                   height: `${h}px`,
-                  transform: `translate(${rect.x}px, ${rect.y}px) rotate(${rect.rotation}deg)`,
+                  transform: `translate(${x}px, ${y}px) rotate(${rect.rotation}deg)`,
                   transformOrigin: '0 0',
                 }}
               >

@@ -1,5 +1,7 @@
 import React from 'react';
 import { useStore } from '../../../store/useStore';
+import { Z_INDEX } from '../../../constants/zIndex';
+import { loadGoogleFont } from '../../../utils/canvasUtils';
 import { findLayerById } from '../../../utils/layerUtils';
 import { toolState } from '../../../tools/toolState';
 
@@ -23,20 +25,32 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
   cancelText
 }) => {
   const brushSize = useStore(state => state.brushSize);
+  const brushColor = useStore(state => state.brushColor);
   const layers = useStore(state => state.layers);
+  const textAlign = useStore(state => state.textAlign);
+  const textFontWeight = useStore(state => state.textFontWeight);
+  const textFontStyle = useStore(state => state.textFontStyle);
+
+  const defaultFontFamily = useStore(state => state.textFontFamily);
+  const activeLayer = textEditor?.layerId ? findLayerById(layers, textEditor.layerId) : null;
+  const hasCustomFont = !!activeLayer?.fontChecksum;
+  const editorFamily = activeLayer?.fontFamily || defaultFontFamily;
+
+  React.useEffect(() => {
+    if (textEditor && editorFamily && !hasCustomFont) {
+      loadGoogleFont(editorFamily);
+    }
+  }, [textEditor, editorFamily, hasCustomFont]);
 
   if (!textEditor) return null;
 
-  const activeLayer = textEditor.layerId ? findLayerById(layers, textEditor.layerId) : null;
   const isVertical = activeLayer?.isVertical || toolState._lastTextTool === 'vertical_text';
-
-  const hasCustomFont = !!activeLayer?.fontChecksum;
   const customFontKey = hasCustomFont ? `pdf-font-${activeLayer.fontChecksum}` : '';
   const cleanFamily = activeLayer?.fontFamily || '';
 
   const editorFontFamily = hasCustomFont
     ? `"${customFontKey}", "${cleanFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
-    : `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
+    : `"${editorFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`;
 
   const fs = brushSize * 2;
   const lines = textEditor.value.split('\n');
@@ -95,6 +109,7 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
       <textarea
         ref={hiddenTextInputRef}
         className="text-editor-input"
+        autoFocus
         style={{
           position: 'absolute',
           left: textEditor.x - padding,
@@ -103,11 +118,17 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
           height: height,
           fontSize: `${fs}px`,
           fontFamily: editorFontFamily,
+          fontWeight: activeLayer?.fontWeight || textFontWeight || 'normal',
+          fontStyle: activeLayer?.fontStyle || textFontStyle || 'normal',
+          color: activeLayer?.color || brushColor,
+          caretColor: activeLayer?.color || brushColor,
+          textAlign: activeLayer?.textAlign || textAlign || 'left',
           lineHeight: 1.2,
           padding: `${padding}px`,
           boxSizing: 'border-box',
           writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
-          zIndex: 10001
+          zIndex: Z_INDEX.textEditorInput,
+          whiteSpace: 'pre'
         }}
         value={textEditor.value}
         onChange={handleChange}
@@ -116,6 +137,7 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
         autoCapitalize="sentences"
         spellCheck={false}
         inputMode="text"
+        wrap="off"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
@@ -130,7 +152,7 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
           top: 0, left: 0,
           width: '100%', height: '100%',
           opacity: 1,
-          zIndex: 9999, // Render above everything while typing
+          zIndex: Z_INDEX.systemAlert, // Render above everything while typing
           mixBlendMode: 'normal',
           pointerEvents: 'none'
         }}
@@ -141,7 +163,7 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
           position: 'absolute',
           left: textEditor.x,
           top: textEditor.y - 45,
-          zIndex: 20000,
+          zIndex: Z_INDEX.textEditorSubmit,
           display: 'flex',
           gap: '8px',
           pointerEvents: 'auto',

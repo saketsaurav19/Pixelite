@@ -1,6 +1,4 @@
 import { useStore } from '../store/useStore';
-import { ImportEngine } from '../services/import/ImportEngine';
-import { workerExportBridge } from '../services/export/WorkerExportBridge';
 import type { Layer } from '../store/types';
 
 export const useFileImporter = () => {
@@ -17,9 +15,11 @@ export const useFileImporter = () => {
 
   const handleFileImport = async (file: File, isPlace: boolean = false): Promise<void> => {
     try {
+      const { ImportEngine } = await import('../services/import/ImportEngine');
       const result = await ImportEngine.importFile(file);
 
       if (result.type === 'psd') {
+        const { workerExportBridge } = await import('../services/export/WorkerExportBridge');
         const psdData = await workerExportBridge.parsePSD(result.psdData);
 
         if (!isPlace) {

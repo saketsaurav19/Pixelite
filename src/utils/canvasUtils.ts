@@ -384,3 +384,15 @@ export const findBestEdgePoint = (
     return { x: bestX, y: bestY };
   } catch { return { x, y }; }
 };
+
+export const loadGoogleFont = (family: string) => {
+  if (typeof window === 'undefined') return;
+  const linkId = `google-font-${family.replace(/\s+/g, '-').toLowerCase()}`;
+  if (document.getElementById(linkId)) return;
+
+  const link = document.createElement('link');
+  link.id = linkId;
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600;1,700&display=swap`;
+  document.head.appendChild(link);
+};

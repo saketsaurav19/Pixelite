@@ -1,8 +1,25 @@
 import { flushSync } from 'react-dom';
+import { nanoid } from 'nanoid';
 import type { CanvasContext, Point, Rect, CanvasRefs } from '../types';
 import { getToolModule } from '../../../tools';
 import { useStore } from '../../../store/useStore';
 import { toolState } from '../../../tools/toolState';
+
+const getClickedTextLayer = (layers: any[], coords: { x: number, y: number }) => {
+  for (let i = 0; i < layers.length; i++) {
+    const layer = layers[i];
+    if (layer.type === 'text' && layer.visible) {
+      const lx = layer.position?.x || 0;
+      const ly = layer.position?.y || 0;
+      const lw = layer.width || 100;
+      const lh = layer.height || 100;
+      if (coords.x >= lx && coords.x <= lx + lw && coords.y >= ly && coords.y <= ly + lh) {
+        return layer;
+      }
+    }
+  }
+  return null;
+};
 
 export const startAction = (
   clientX: number,
@@ -93,16 +110,49 @@ export const startAction = (
   refs.startOffsetRef.current = { ...canvasOffset };
 
   if (activeTool === 'text' || activeTool === 'vertical_text') {
+    const clickedTextLayer = getClickedTextLayer(layers, coords);
+    if (clickedTextLayer) {
+      useStore.getState().setActiveLayer(clickedTextLayer.id);
+      
+      // Open the text editor immediately for the clicked text layer when using text tools
+      const currentEditor = useStore.getState().textEditor;
+      if (!currentEditor || currentEditor.layerId !== clickedTextLayer.id) {
+        if (context.setIsTyping) context.setIsTyping(true);
+        handlers.setTextEditor({
+          x: clickedTextLayer.position?.x || 0,
+          y: clickedTextLayer.position?.y || 0,
+          value: clickedTextLayer.textContent || '',
+          layerId: clickedTextLayer.id
+        });
+        setTimeout(() => {
+          const input = refs.hiddenTextInputRef.current;
+          if (input) {
+            input.focus();
+            const len = input.value.length;
+            input.setSelectionRange(len, len);
+          }
+        }, 50);
+      }
+      
+      handlers.setIsInteracting(false);
+      refs.lastPointRef.current = null;
+      return;
+    }
+
     if (context.setIsTyping) context.setIsTyping(true);
     flushSync(() => {
       handlers.setTextEditor({ ...coords, value: '' });
     });
     toolState._lastTextTool = activeTool;
-    const input = refs.hiddenTextInputRef.current;
-    if (input) {
-      input.focus();
-      input.setSelectionRange(0, 0);
-    }
+    
+    // Defer focus so the browser completes the click event pipeline, ensuring textarea successfully captures focus
+    setTimeout(() => {
+      const input = refs.hiddenTextInputRef.current;
+      if (input) {
+        input.focus();
+        input.setSelectionRange(0, 0);
+      }
+    }, 50);
   }
 };
 
@@ -220,20 +270,64 @@ export const endAction = (
     if (w > 10 && h > 10) {
       const x = state.draftShape.w >= 0 ? state.draftShape.x : state.draftShape.x + state.draftShape.w;
       const y = state.draftShape.h >= 0 ? state.draftShape.y : state.draftShape.y + state.draftShape.h;
-      handlers.addLayer({
-        name: 'Artboard',
-        type: 'artboard',
-        visible: true,
-        opacity: 1,
-        position: { x, y },
-        width: w,
-        height: h,
-        backgroundColor: '#ffffff',
-        backgroundTransparent: false,
-        clippingEnabled: true,
-        children: [],
-      });
-      handlers.recordHistory('New Artboard');
+      
+      const currentArtboards = layers.filter(layer => layer.type === 'artboard');
+      
+      if (currentArtboards.length === 0) {
+        // Convert existing layers to Artboard 1 representing the original canvas
+        const firstArtboardId = nanoid();
+        const firstArtboard = {
+          id: firstArtboardId,
+          type: 'artboard' as const,
+          name: 'Artboard 1',
+          width: useStore.getState().documentSize.w,
+          height: useStore.getState().documentSize.h,
+          position: { x: 0, y: 0 },
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'source-over' as const,
+          clippingEnabled: true,
+          children: [...layers]
+        };
+
+        const newArtboardId = nanoid();
+        const newArtboard = {
+          id: newArtboardId,
+          type: 'artboard' as const,
+          name: 'Artboard 2',
+          width: w,
+          height: h,
+          position: { x, y },
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'source-over' as const,
+          clippingEnabled: true,
+          children: []
+        };
+
+        // Replace entire tree to establish proper nesting
+        useStore.getState().setLayers([firstArtboard, newArtboard]);
+        useStore.getState().setActiveLayer(newArtboardId);
+        handlers.recordHistory('Convert to Artboards');
+      } else {
+        // There are already artboards in the document
+        handlers.addLayer({
+          name: `Artboard ${currentArtboards.length + 1}`,
+          type: 'artboard',
+          visible: true,
+          opacity: 1,
+          position: { x, y },
+          width: w,
+          height: h,
+          backgroundColor: '#ffffff',
+          backgroundTransparent: false,
+          clippingEnabled: true,
+          children: [],
+        });
+        handlers.recordHistory('New Artboard');
+      }
     }
     handlers.setDraftShape(null);
   }
@@ -324,6 +418,25 @@ export const endAction = (
 };
 
 export const handleDoubleClick = (context: CanvasContext) => {
+  const { coords, layers } = context;
+
+  // Double-clicking on a text layer with any tool should open the text editor and switch to the text tool
+  const clickedTextLayer = getClickedTextLayer(layers, coords);
+  if (clickedTextLayer) {
+    if (context.setIsTyping) context.setIsTyping(true);
+    const storeState = useStore.getState() as any;
+    storeState.setActiveLayer(clickedTextLayer.id);
+    storeState.setActiveTool('text');
+    storeState.setTextEditor({
+      x: clickedTextLayer.position.x,
+      y: clickedTextLayer.position.y,
+      value: clickedTextLayer.textContent || '',
+      layerId: clickedTextLayer.id
+    });
+    toolState._lastTextTool = 'text';
+    return;
+  }
+
   const toolModule = getToolModule(context.activeTool);
   if (toolModule?.doubleClick) {
     toolModule.doubleClick(context as any);

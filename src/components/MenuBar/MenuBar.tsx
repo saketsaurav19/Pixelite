@@ -113,6 +113,12 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const visiblePanels = useStore((s) => s.visiblePanels);
   const togglePanel = useStore((s) => s.togglePanel);
   const addAdjustmentLayer = useStore((s) => s.addAdjustmentLayer);
+  const layers = useStore((s) => s.layers);
+  const activeLayerId = useStore((s) => s.activeLayerId);
+  const autoAlignLayers = useStore((s) => s.autoAlignLayers);
+  
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+  const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
 
 
   useEffect(() => {
@@ -228,9 +234,9 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Scale', action: () => onTransformMode?.('scale') },
             { label: 'Rotate', action: () => onTransformMode?.('rotate') },
             { label: 'Skew', action: () => onTransformMode?.('skew') },
-            { label: 'Distort', action: () => onTransformMode?.('distort') },
-            { label: 'Perspective', action: () => onTransformMode?.('perspective') },
-            { label: 'Warp', action: () => onTransformMode?.('warp') },
+            { label: 'Distort', action: () => onTransformMode?.('distort'), disabled: !!isVector },
+            { label: 'Perspective', action: () => onTransformMode?.('perspective'), disabled: !!isVector },
+            { label: 'Warp', action: () => onTransformMode?.('warp'), disabled: !!isVector },
             { label: 'Rotate 180°', action: () => onTransformLayer?.('rotate180') },
             { label: 'Rotate 90° Clockwise', action: () => onTransformLayer?.('rotate90CW') },
             { label: 'Rotate 90° Counter Clockwise', action: () => onTransformLayer?.('rotate90CCW') },
@@ -240,7 +246,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
           ]
         },
         { divider: true },
-        { label: 'Auto-Align' },
+        { label: 'Auto-Align', action: autoAlignLayers },
         { label: 'Auto-Blend' },
         { divider: true },
         {

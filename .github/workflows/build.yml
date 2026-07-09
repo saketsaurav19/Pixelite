@@ -33,7 +33,15 @@ jobs:
 
       - name: Bump version
         run: |
-          npm version patch -m "Bump version to %s [skip ci]"
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$COMMIT_MSG" == *"[major]"* ]]; then
+            BUMP_TYPE="major"
+          elif [[ "$COMMIT_MSG" == *"[minor]"* ]]; then
+            BUMP_TYPE="minor"
+          else
+            BUMP_TYPE="patch"
+          fi
+          npm version $BUMP_TYPE -m "Bump version to %s [skip ci]"
 
       - name: Push version bump
         run: |

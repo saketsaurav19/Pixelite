@@ -100,14 +100,14 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   const [inputValue, setInputValue] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
   const svRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [popoverCoords, setPopoverCoords] = useState({ top: 0, left: 0 });
 
   const [internalHue, setInternalHue] = useState(0);
 
   const { r, g, b } = hexToRgb(color);
   const { h: derivedH, s, v } = rgbToHsv(r, g, b);
   
-  // Sync internal hue with prop-derived hue ONLY if the color has saturation
-  // This prevents the hue from snapping to 0 when clicking grayscale areas
   useEffect(() => {
     if (s > 0) {
       setInternalHue(derivedH);
@@ -129,6 +129,39 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     if (isOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
+
+  useEffect(() => {
+    const updateCoords = () => {
+      if (isOpen && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        if (popoverDirection === 'bottom') {
+          setPopoverCoords({
+            top: rect.bottom + 8,
+            left: rect.left
+          });
+        } else if (popoverDirection === 'right') {
+          setPopoverCoords({
+            top: rect.top + rect.height / 2 - 140,
+            left: rect.right + 12
+          });
+        } else if (popoverDirection === 'top') {
+          setPopoverCoords({
+            top: rect.top - 310,
+            left: rect.left
+          });
+        }
+      }
+    };
+    updateCoords();
+    if (isOpen) {
+      window.addEventListener('resize', updateCoords);
+      window.addEventListener('scroll', updateCoords, true);
+    }
+    return () => {
+      window.removeEventListener('resize', updateCoords);
+      window.removeEventListener('scroll', updateCoords, true);
+    };
+  }, [isOpen, popoverDirection]);
 
   const handleSvChange = useCallback((e: React.MouseEvent | MouseEvent) => {
     if (!svRef.current) return;
@@ -152,14 +185,23 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
 
   const handleTextChange = (value: string) => {
     setInputValue(value);
-    const match = value.match(/(?:rgba?\(|)?(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?\)??/);
-    if (match) {
-      const nr = Math.min(255, Math.max(0, parseInt(match[1])));
-      const ng = Math.min(255, Math.max(0, parseInt(match[2])));
-      const nb = Math.min(255, Math.max(0, parseInt(match[3])));
-      const na = match[4] ? Math.min(1, Math.max(0, parseFloat(match[4]))) : 1;
+    const matchRgb = value.match(/(?:rgba?\(|)?(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?\)??/);
+    if (matchRgb) {
+      const nr = Math.min(255, Math.max(0, parseInt(matchRgb[1])));
+      const ng = Math.min(255, Math.max(0, parseInt(matchRgb[2])));
+      const nb = Math.min(255, Math.max(0, parseInt(matchRgb[3])));
+      const na = matchRgb[4] ? Math.min(1, Math.max(0, parseFloat(matchRgb[4]))) : 1;
       onColorChange(`#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`);
       onOpacityChange(na);
+      return;
+    }
+
+    const hexClean = value.trim().replace('#', '');
+    if (hexClean.length === 3 || hexClean.length === 6) {
+      const hexPattern = /^[0-9a-fA-F]+$/;
+      if (hexPattern.test(hexClean)) {
+        onColorChange(`#${hexClean}`);
+      }
     }
   };
 
@@ -173,7 +215,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
     
     const base: React.CSSProperties = {
-      position: 'absolute',
+      position: 'fixed',
       width: isMobile ? 'calc(100vw - 40px)' : '240px',
       maxWidth: '300px',
       background: '#2d2d2d',
@@ -189,7 +231,6 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     if (isMobile) {
       return { 
         ...base, 
-        position: 'fixed',
         top: '50%', 
         left: '50%', 
         transform: 'translate(-50%, -50%)',
@@ -197,18 +238,15 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
       };
     }
 
-    if (popoverDirection === 'bottom') {
-      return { ...base, top: '100%', left: 0, marginTop: '10px' };
-    } else if (popoverDirection === 'right') {
-      return { ...base, top: '50%', left: '100%', marginLeft: '15px', transform: 'translateY(-50%)' };
-    } else if (popoverDirection === 'top') {
-      return { ...base, bottom: '100%', left: 0, marginBottom: '10px' };
-    }
-    return base;
+    return {
+      ...base,
+      top: `${popoverCoords.top}px`,
+      left: `${popoverCoords.left}px`
+    };
   };
 
   return (
-    <div className="option-control premium-picker" style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+    <div ref={containerRef} className="option-control premium-picker" style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
       {renderTrigger ? (
         renderTrigger(() => setIsOpen(!isOpen))
       ) : (

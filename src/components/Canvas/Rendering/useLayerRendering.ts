@@ -4,6 +4,9 @@ import type { CanvasRefs } from '../types';
 import { useStore } from '../../../store/useStore';
 import { applyPixiAdjustments } from '../../../utils/pixiUtils';
 import { flattenTree } from '../../../utils/layerUtils';
+import { drawTrianglesWarp } from '../../../utils/canvasUtils';
+import { applyWarpDeformation } from '../../../utils/textWarpUtils';
+import { toolState } from '../../../tools/toolState';
 
 const renderLayer = (
   layer: Layer,
@@ -15,7 +18,7 @@ const renderLayer = (
   allLayers: Layer[]
 ): void => {
   // Skip re-rendering the active layer if we are currently interacting with it
-  if (isInteracting && layer.id === activeLayerId) return;
+  if (isInteracting && layer.id === activeLayerId && useStore.getState().activeTool !== 'transform') return;
 
   // If it's a group, recursively render children in bottom-to-top order
   if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
@@ -88,37 +91,76 @@ const renderLayer = (
   }
 
   if (layer.dataUrl) {
-    const img = new Image();
-    img.onload = () => {
+    const activeTool = useStore.getState().activeTool;
+    const isTransformingThisLayer = activeTool === 'transform' && layer.id === activeLayerId && toolState.transformOriginalImage;
+
+    if (isTransformingThisLayer) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const img = toolState.transformOriginalImage as HTMLImageElement;
       if (layer.width && layer.height) {
         ctx.drawImage(img, 0, 0, layer.width, layer.height);
       } else {
         ctx.drawImage(img, 0, 0);
       }
-    };
-    img.src = layer.dataUrl;
+    } else {
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (layer.width && layer.height) {
+          ctx.drawImage(img, 0, 0, layer.width, layer.height);
+        } else {
+          ctx.drawImage(img, 0, 0);
+        }
+      };
+      img.src = layer.dataUrl;
+    }
   } else if (layer.type === 'paint' && layer.name === 'Background') {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, documentSize.w, documentSize.h);
   } else if (layer.type === 'text' && layer.textContent) {
-    ctx.save();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (layer.rotation) {
+    const isWarped = layer.textWarp && layer.textWarp.style !== 'None';
+    const origW = layer.width || 0;
+    const origH = layer.height || 0;
+    const padX = isWarped ? Math.round(origW * 0.3) + 20 : 0;
+    const padY = isWarped ? Math.round(origH * 0.8) + 20 : 0;
+
+    const targetCtx = isWarped ? document.createElement('canvas').getContext('2d')! : ctx;
+    if (isWarped) {
+      targetCtx.canvas.width = origW + 2 * padX;
+      targetCtx.canvas.height = origH + 2 * padY;
+    }
+
+    targetCtx.save();
+    targetCtx.clearRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+    if (isWarped) {
+      targetCtx.translate(padX, padY);
+    } else if (layer.rotation) {
       const rad = (layer.rotation * Math.PI) / 180;
       const normalizedRot = ((layer.rotation % 360) + 360) % 360;
       if (normalizedRot === 90) {
-        ctx.translate(canvas.width, 0);
+        targetCtx.translate(canvas.width, 0);
       } else if (normalizedRot === 180) {
-        ctx.translate(canvas.width, canvas.height);
+        targetCtx.translate(canvas.width, canvas.height);
       } else if (normalizedRot === 270) {
-        ctx.translate(0, canvas.height);
+        targetCtx.translate(0, canvas.height);
       }
-      ctx.rotate(rad);
+      targetCtx.rotate(rad);
     }
-    ctx.fillStyle = layer.color || '#000000';
+    targetCtx.fillStyle = layer.color || '#000000';
+    targetCtx.textAlign = layer.textAlign || 'left';
     const fs = layer.fontSize || 40;
-    ctx.font = `${fs}px "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Kohinoor Devanagari", "Devanagari MT", "Noto Sans", sans-serif, Arial`;
+
+    const hasCustomFont = !!layer.fontChecksum;
+    const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
+    const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
+
+    const fontFamily = hasCustomFont
+      ? `"${customFontKey}", "${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+      : isGeneric
+        ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`
+        : `"${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`;
+
+    targetCtx.font = `${layer.fontStyle || 'normal'} ${layer.fontWeight || 'normal'} ${fs}px ${fontFamily}`;
 
     layer.textContent.split('\n').forEach((line: string, i: number) => {
       if (layer.isVertical) {
@@ -127,23 +169,73 @@ const renderLayer = (
         chars.forEach((char: string, j: number) => {
           const yPos = (j + 1) * fs;
           if (layer.strokeColor && layer.strokeWidth && layer.strokeWidth > 0) {
-            ctx.strokeStyle = layer.strokeColor;
-            ctx.lineWidth = layer.strokeWidth;
-            ctx.strokeText(char, xPos, yPos);
+            targetCtx.strokeStyle = layer.strokeColor;
+            targetCtx.lineWidth = layer.strokeWidth;
+            targetCtx.strokeText(char, xPos, yPos);
           }
-          ctx.fillText(char, xPos, yPos);
+          targetCtx.fillText(char, xPos, yPos);
         });
       } else {
         const yPos = (i + 1) * fs;
-        if (layer.strokeColor && layer.strokeWidth && layer.strokeWidth > 0) {
-          ctx.strokeStyle = layer.strokeColor;
-          ctx.lineWidth = layer.strokeWidth;
-          ctx.strokeText(line, 0, yPos);
+        let xPos = 0;
+        if (layer.textAlign === 'center') {
+          xPos = origW / 2;
+        } else if (layer.textAlign === 'right') {
+          xPos = origW;
         }
-        ctx.fillText(line, 0, yPos);
+        if (layer.strokeColor && layer.strokeWidth && layer.strokeWidth > 0) {
+          targetCtx.strokeStyle = layer.strokeColor;
+          targetCtx.lineWidth = layer.strokeWidth;
+          targetCtx.strokeText(line, xPos, yPos);
+        }
+        targetCtx.fillText(line, xPos, yPos);
       }
     });
-    ctx.restore();
+    targetCtx.restore();
+
+    if (isWarped) {
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (layer.rotation) {
+        const rad = (layer.rotation * Math.PI) / 180;
+        const normalizedRot = ((layer.rotation % 360) + 360) % 360;
+        if (normalizedRot === 90) {
+          ctx.translate(canvas.width, 0);
+        } else if (normalizedRot === 180) {
+          ctx.translate(canvas.width, canvas.height);
+        } else if (normalizedRot === 270) {
+          ctx.translate(0, canvas.height);
+        }
+        ctx.rotate(rad);
+      }
+
+      const gridW = 10;
+      const gridH = 10;
+      const srcGrid: { x: number; y: number }[] = [];
+      const dstGrid: { x: number; y: number }[] = [];
+
+      for (let y = 0; y < gridH; y++) {
+        const vVal = y / (gridH - 1);
+        for (let x = 0; x < gridW; x++) {
+          const uVal = x / (gridW - 1);
+          const px = uVal * (origW + 2 * padX);
+          const py = vVal * (origH + 2 * padY);
+          srcGrid.push({ x: px, y: py });
+
+          const uNorm = (px - padX) / origW;
+          const vNorm = (py - padY) / origH;
+
+          const deformed = applyWarpDeformation(uNorm, vNorm, origW, origH, layer.textWarp!);
+          dstGrid.push({
+            x: deformed.x + padX,
+            y: deformed.y + padY
+          });
+        }
+      }
+
+      drawTrianglesWarp(ctx, targetCtx.canvas, srcGrid, dstGrid, gridW, gridH);
+      ctx.restore();
+    }
   } else if (layer.type === 'shape' && layer.shapeData) {
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);

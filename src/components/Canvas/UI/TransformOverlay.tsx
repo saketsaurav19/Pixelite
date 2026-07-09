@@ -38,11 +38,24 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
   const rect = findLayerAbsoluteRect(activeLayerId, layers);
   if (!rect) return null;
 
-  const w = rect.w || documentSize.w;
-  const h = rect.h || documentSize.h;
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+  const isWarped = activeLayer && activeLayer.type === 'text' && activeLayer.textWarp && activeLayer.textWarp.style !== 'None';
+
+  let w = rect.w || documentSize.w;
+  let h = rect.h || documentSize.h;
+  let x = rect.x;
+  let y = rect.y;
+
+  if (isWarped) {
+    const padX = Math.round(w * 0.3) + 20;
+    const padY = Math.round(h * 0.8) + 20;
+    w = w + 2 * padX;
+    h = h + 2 * padY;
+    x = x - padX;
+    y = y - padY;
+  }
 
   const mode = useStore(state => state.transformMode);
-  const activeLayer = layers.find(l => l.id === activeLayerId);
   const corners = activeLayer?.corners;
   const warpGrid = activeLayer?.warpGrid;
 
@@ -55,8 +68,20 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
     }
     const layer = layers.find(l => l.id === activeLayerId);
     if (layer) {
-      toolState._transformStartLayerPos = { x: layer.position?.x || 0, y: layer.position?.y || 0 };
-      toolState._transformStartLayerSize = { w: layer.width || documentSize.w, h: layer.height || documentSize.h };
+      let startW = layer.width || documentSize.w;
+      let startH = layer.height || documentSize.h;
+      let startX = layer.position?.x || 0;
+      let startY = layer.position?.y || 0;
+      if (isWarped) {
+        const padX = Math.round(startW * 0.3) + 20;
+        const padY = Math.round(startH * 0.8) + 20;
+        startW = startW + 2 * padX;
+        startH = startH + 2 * padY;
+        startX = startX - padX;
+        startY = startY - padY;
+      }
+      toolState._transformStartLayerPos = { x: startX, y: startY };
+      toolState._transformStartLayerSize = { w: startW, h: startH };
       toolState._transformStartLayerRotation = layer.rotation || 0;
       toolState._transformStartCornersList = layer.corners ? layer.corners.map((p: any) => ({ ...p })) : undefined;
     }
@@ -74,8 +99,20 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
     }
     const layer = layers.find(l => l.id === activeLayerId);
     if (layer) {
-      toolState._transformStartLayerPos = { x: layer.position?.x || 0, y: layer.position?.y || 0 };
-      toolState._transformStartLayerSize = { w: layer.width || documentSize.w, h: layer.height || documentSize.h };
+      let startW = layer.width || documentSize.w;
+      let startH = layer.height || documentSize.h;
+      let startX = layer.position?.x || 0;
+      let startY = layer.position?.y || 0;
+      if (isWarped) {
+        const padX = Math.round(startW * 0.3) + 20;
+        const padY = Math.round(startH * 0.8) + 20;
+        startW = startW + 2 * padX;
+        startH = startH + 2 * padY;
+        startX = startX - padX;
+        startY = startY - padY;
+      }
+      toolState._transformStartLayerPos = { x: startX, y: startY };
+      toolState._transformStartLayerSize = { w: startW, h: startH };
       toolState._transformStartLayerRotation = layer.rotation || 0;
       toolState._transformStartCornersList = layer.corners ? layer.corners.map((p: any) => ({ ...p })) : undefined;
     }
@@ -85,11 +122,44 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
   };
 
   // Determine bounds of current transformed layout to position the confirmation actions bar
-  const xs = corners ? corners.map(p => p.x) : (warpGrid ? warpGrid.map(p => p.x) : [rect.x, rect.x + w]);
-  const ys = corners ? corners.map(p => p.y) : (warpGrid ? warpGrid.map(p => p.y) : [rect.y, rect.y + h]);
-  const xMin = Math.min(...xs);
-  const xMax = Math.max(...xs);
-  const yMax = Math.max(...ys);
+  let xs: number[] = [];
+  let ys: number[] = [];
+
+  if (corners) {
+    xs = corners.map(p => p.x);
+    ys = corners.map(p => p.y);
+  } else if (warpGrid) {
+    xs = warpGrid.map(p => p.x);
+    ys = warpGrid.map(p => p.y);
+  } else {
+    // Standard mode: calculate 4 corners of rotated layer
+    const lx = rect.x;
+    const ly = rect.y;
+    const lw = w;
+    const lh = h;
+    const lr = rect.rotation || 0;
+    const theta = (lr * Math.PI) / 180;
+    const cosT = Math.cos(theta);
+    const sinT = Math.sin(theta);
+    
+    const localCorners = [
+      { x: 0, y: 0 },
+      { x: lw, y: 0 },
+      { x: lw, y: lh },
+      { x: 0, y: lh }
+    ];
+    const rotatedCorners = localCorners.map(p => ({
+      x: lx + p.x * cosT - p.y * sinT,
+      y: ly + p.x * sinT + p.y * cosT
+    }));
+    
+    xs = rotatedCorners.map(p => p.x);
+    ys = rotatedCorners.map(p => p.y);
+  }
+
+  const xMin = xs.length > 0 ? Math.min(...xs) : rect.x;
+  const xMax = xs.length > 0 ? Math.max(...xs) : rect.x + w;
+  const yMax = ys.length > 0 ? Math.max(...ys) : rect.y + h;
 
   const isDeformed = ['skew', 'distort', 'perspective', 'warp'].includes(mode);
 
@@ -247,7 +317,7 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
             top: 0,
             width: `${w}px`,
             height: `${h}px`,
-            transform: `translate(${rect.x}px, ${rect.y}px) rotate(${rect.rotation}deg)`,
+            transform: `translate(${x}px, ${y}px) rotate(${rect.rotation}deg)`,
             transformOrigin: '0 0',
             pointerEvents: 'auto',
             cursor: 'move',
@@ -331,6 +401,8 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
           position: 'absolute',
           left: `${(xMin + xMax) / 2}px`,
           top: `${yMax + 20}px`,
+          bottom: 'auto',
+          right: 'auto',
           transform: `translateX(-50%) scale(${1 / zoom})`,
           transformOrigin: 'top center',
           width: 'fit-content',

@@ -22,9 +22,10 @@ export interface LayerSlice {
   flattenImage: () => void;
   rasterizeLayer: (id: string) => void;
   addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance') => void;
+  autoAlignLayers: () => Promise<void>;
 }
 
-export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set) => ({
+export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set, get) => ({
   layers: [],
   activeLayerId: null,
 
@@ -280,4 +281,175 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       adjustmentSourceLayerId: state.activeLayerId
     };
   }),
+
+  autoAlignLayers: async () => {
+    const { layers, documentSize, updateLayer, recordHistory, addAlert } = get();
+    
+    const visiblePaintLayers = flattenTree(layers).filter(l => l.visible && l.type === 'paint');
+    if (visiblePaintLayers.length < 2) {
+      addAlert({ type: 'warning', message: 'Select at least two visible layers.' });
+      return;
+    }
+    
+    const refLayer = visiblePaintLayers[visiblePaintLayers.length - 1];
+    const targetLayers = visiblePaintLayers.slice(0, visiblePaintLayers.length - 1);
+    
+    const loadImage = (src: string): Promise<HTMLImageElement> => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load layer image'));
+        img.src = src;
+      });
+    };
+    
+    try {
+      if (!refLayer.dataUrl) {
+        addAlert({ type: 'error', message: 'Reference layer has no image data.' });
+        return;
+      }
+      
+      const docW = documentSize.w;
+      const docH = documentSize.h;
+      
+      const refCanvas = document.createElement('canvas');
+      refCanvas.width = 256;
+      refCanvas.height = 256;
+      const refCtx = refCanvas.getContext('2d')!;
+      
+      const refImg = await loadImage(refLayer.dataUrl);
+      refCtx.drawImage(
+        refImg,
+        (refLayer.position?.x || 0) * 256 / docW,
+        (refLayer.position?.y || 0) * 256 / docH,
+        (refLayer.width || docW) * 256 / docW,
+        (refLayer.height || docH) * 256 / docH
+      );
+      
+      const getGrayscaleData = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+        const gray = new Float32Array(w * h);
+        const alpha = new Uint8Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+          gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+          alpha[i] = data[i * 4 + 3];
+        }
+        return { gray, alpha };
+      };
+      
+      const refData = getGrayscaleData(refCtx, 256, 256);
+      
+      for (const tgtLayer of targetLayers) {
+        if (!tgtLayer.dataUrl) continue;
+        
+        const tgtCanvas = document.createElement('canvas');
+        tgtCanvas.width = 256;
+        tgtCanvas.height = 256;
+        const tgtCtx = tgtCanvas.getContext('2d')!;
+        
+        const tgtImg = await loadImage(tgtLayer.dataUrl);
+        tgtCtx.drawImage(
+          tgtImg,
+          (tgtLayer.position?.x || 0) * 256 / docW,
+          (tgtLayer.position?.y || 0) * 256 / docH,
+          (tgtLayer.width || docW) * 256 / docW,
+          (tgtLayer.height || docH) * 256 / docH
+        );
+        
+        const tgtData = getGrayscaleData(tgtCtx, 256, 256);
+        
+        let minSsd = Infinity;
+        let bestDx = 0;
+        let bestDy = 0;
+        
+        // Coarse search: step 4
+        for (let dy = -64; dy <= 64; dy += 4) {
+          for (let dx = -64; dx <= 64; dx += 4) {
+            let ssd = 0;
+            let count = 0;
+            for (let y = 0; y < 256; y++) {
+              const ty = y + dy;
+              if (ty < 0 || ty >= 256) continue;
+              for (let x = 0; x < 256; x++) {
+                const tx = x + dx;
+                if (tx < 0 || tx >= 256) continue;
+                
+                const refIdx = y * 256 + x;
+                const tgtIdx = ty * 256 + tx;
+                
+                if (refData.alpha[refIdx] > 10 && tgtData.alpha[tgtIdx] > 10) {
+                  const diff = refData.gray[refIdx] - tgtData.gray[tgtIdx];
+                  ssd += diff * diff;
+                  count++;
+                }
+              }
+            }
+            if (count > 200) {
+              const avgSsd = ssd / count;
+              if (avgSsd < minSsd) {
+                minSsd = avgSsd;
+                bestDx = dx;
+                bestDy = dy;
+              }
+            }
+          }
+        }
+        
+        // Fine search: step 1 around bestDx, bestDy
+        let fineMinSsd = minSsd;
+        let fineBestDx = bestDx;
+        let fineBestDy = bestDy;
+        
+        for (let dy = bestDy - 3; dy <= bestDy + 3; dy++) {
+          for (let dx = bestDx - 3; dx <= bestDx + 3; dx++) {
+            let ssd = 0;
+            let count = 0;
+            for (let y = 0; y < 256; y++) {
+              const ty = y + dy;
+              if (ty < 0 || ty >= 256) continue;
+              for (let x = 0; x < 256; x++) {
+                const tx = x + dx;
+                if (tx < 0 || tx >= 256) continue;
+                
+                const refIdx = y * 256 + x;
+                const tgtIdx = ty * 256 + tx;
+                
+                if (refData.alpha[refIdx] > 10 && tgtData.alpha[tgtIdx] > 10) {
+                  const diff = refData.gray[refIdx] - tgtData.gray[tgtIdx];
+                  ssd += diff * diff;
+                  count++;
+                }
+              }
+            }
+            if (count > 200) {
+              const avgSsd = ssd / count;
+              if (avgSsd < fineMinSsd) {
+                fineMinSsd = avgSsd;
+                fineBestDx = dx;
+                fineBestDy = dy;
+              }
+            }
+          }
+        }
+        
+        const shiftX = Math.round(fineBestDx * docW / 256);
+        const shiftY = Math.round(fineBestDy * docH / 256);
+        
+        updateLayer(tgtLayer.id, {
+          position: {
+            x: (tgtLayer.position?.x || 0) - shiftX,
+            y: (tgtLayer.position?.y || 0) - shiftY
+          }
+        });
+      }
+      
+      recordHistory('Auto-Align Layers');
+      addAlert({ type: 'success', message: 'Auto-aligned visible layers successfully.' });
+    } catch (err: any) {
+      console.error(err);
+      addAlert({ type: 'error', message: 'Failed to auto-align layers: ' + err.message });
+    }
+  },
 });
