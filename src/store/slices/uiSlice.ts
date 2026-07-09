@@ -28,6 +28,10 @@ export interface UISlice {
   setAdjustmentSourceLayerId: (id: string | null) => void;
   activeMobileSubmenu: string | null;
   screenMode: 'standard' | 'full-menu' | 'full';
+  visibleChannels: { r: boolean; g: boolean; b: boolean };
+  selectedChannel: 'RGB' | 'r' | 'g' | 'b';
+  toggleChannelVisibility: (channel: 'r' | 'g' | 'b') => void;
+  setSelectedChannel: (channel: 'RGB' | 'r' | 'g' | 'b') => void;
   visiblePanels: {
     layers: boolean;
     history: boolean;
