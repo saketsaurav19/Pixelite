@@ -42,7 +42,7 @@ interface MenuBarProps {
   onPaste?: () => void;
   onTransformLayer?: (type: string) => void;
   onTransformImage?: (type: string) => void;
-  onFreeTransform?: () => void;
+  onTransformMode?: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp') => void;
   onCanvasSize?: () => void;
   onImageSize?: () => void;
   onAddEmptyLayer?: () => void;
@@ -86,7 +86,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   onPaste,
   onTransformLayer,
   onTransformImage,
-  onFreeTransform,
+  onTransformMode,
   onCanvasSize,
   onImageSize,
   onAddEmptyLayer,
@@ -221,16 +221,16 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Fill...', action: onFillLayer },
         { label: 'Stroke...' },
         { divider: true },
-        { label: 'Free Transform', shortcut: 'Alt+Ctrl+T', action: onFreeTransform },
+        { label: 'Free Transform', shortcut: 'Alt+Ctrl+T', action: () => onTransformMode?.('free') },
         {
           label: 'Transform',
           subItems: [
-            { label: 'Scale' },
-            { label: 'Rotate' },
-            { label: 'Skew' },
-            { label: 'Distort' },
-            { label: 'Perspective' },
-            { label: 'Warp' },
+            { label: 'Scale', action: () => onTransformMode?.('scale') },
+            { label: 'Rotate', action: () => onTransformMode?.('rotate') },
+            { label: 'Skew', action: () => onTransformMode?.('skew') },
+            { label: 'Distort', action: () => onTransformMode?.('distort') },
+            { label: 'Perspective', action: () => onTransformMode?.('perspective') },
+            { label: 'Warp', action: () => onTransformMode?.('warp') },
             { label: 'Rotate 180°', action: () => onTransformLayer?.('rotate180') },
             { label: 'Rotate 90° Clockwise', action: () => onTransformLayer?.('rotate90CW') },
             { label: 'Rotate 90° Counter Clockwise', action: () => onTransformLayer?.('rotate90CCW') },

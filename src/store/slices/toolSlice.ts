@@ -30,6 +30,8 @@ export interface ToolSlice {
   textFontFamily: string;
   textAlign: 'left' | 'center' | 'right';
   textEditor: { x: number; y: number; value: string; layerId?: string } | null;
+  transformMode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp';
+  setTransformMode: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp') => void;
   
   setActiveTool: (tool: Tool) => void;
   setToolVariant: (groupId: string, tool: Tool) => void;
@@ -111,8 +113,10 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
   textFontFamily: 'Inter, system-ui, sans-serif',
   textAlign: 'left',
   textEditor: null,
+  transformMode: 'free',
 
   setActiveTool: (tool) => set({ activeTool: tool }),
+  setTransformMode: (mode) => set({ transformMode: mode }),
   setToolVariant: (groupId, tool) => set((state) => ({
     activeToolVariants: { ...state.activeToolVariants, [groupId]: tool },
     activeTool: tool

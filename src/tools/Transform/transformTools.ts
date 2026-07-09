@@ -2,7 +2,107 @@ import type { ToolModule } from '../types';
 import { warpPerspective } from '../../utils/canvasUtils';
 import { toolState } from '../toolState';
 import { findLayerById } from '../../utils/layerUtils';
+import { useStore } from '../../store/useStore';
 
+const getLayerCorners = (layer: any) => {
+  if (layer.corners && layer.corners.length === 4) {
+    return layer.corners.map((c: any) => ({ ...c }));
+  }
+  const x = layer.position?.x || 0;
+  const y = layer.position?.y || 0;
+  const w = layer.width || 100;
+  const h = layer.height || 100;
+  const rot = ((layer.rotation || 0) * Math.PI) / 180;
+  const cosT = Math.cos(rot);
+  const sinT = Math.sin(rot);
+
+  return [
+    { x, y }, // TL
+    { x: x + w * cosT, y: y + w * sinT }, // TR
+    { x: x + w * cosT - h * sinT, y: y + w * sinT + h * cosT }, // BR
+    { x: x - h * sinT, y: y + h * cosT } // BL
+  ];
+};
+
+const getBilinearPoint = (corners: { x: number; y: number }[], u: number, v: number) => {
+  const [p0, p1, p2, p3] = corners;
+  const x = (1 - u) * (1 - v) * p0.x + u * (1 - v) * p1.x + u * v * p2.x + (1 - u) * v * p3.x;
+  const y = (1 - u) * (1 - v) * p0.y + u * (1 - v) * p1.y + u * v * p2.y + (1 - u) * v * p3.y;
+  return { x, y };
+};
+
+const initWarpGrid = (corners: { x: number; y: number }[]) => {
+  const grid: { x: number; y: number }[] = [];
+  for (let r = 0; r < 4; r++) {
+    const v = r / 3;
+    for (let c = 0; c < 4; c++) {
+      const u = c / 3;
+      grid.push(getBilinearPoint(corners, u, v));
+    }
+  }
+  return grid;
+};
+
+const rasterizeVectorLayer = (layer: any, canvas: HTMLCanvasElement) => {
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+
+  if (layer.type === 'text') {
+    const fontSize = layer.fontSize || 16;
+    const textColor = layer.color || '#000000';
+    const fontWeight = layer.fontWeight || 'normal';
+    const text = layer.textContent || '';
+    const cleanFamily = layer.fontFamily || 'sans-serif';
+    ctx.font = `${fontWeight} ${fontSize}px ${cleanFamily}`;
+    ctx.fillStyle = textColor;
+    ctx.textBaseline = 'top';
+
+    if (layer.isVertical) {
+      const lines = text.split('\n');
+      lines.forEach((line: string, i: number) => {
+        const chars = line.split('');
+        chars.forEach((char: string, j: number) => {
+          ctx.fillText(char, i * fontSize * 1.2, j * fontSize);
+        });
+      });
+    } else {
+      const lines = text.split('\n');
+      lines.forEach((line: string, i: number) => {
+        ctx.fillText(line, 0, i * fontSize);
+      });
+    }
+  } else if (layer.type === 'shape' && layer.shapeData) {
+    const { type, w, h, points, fill, stroke, strokeWidth } = layer.shapeData;
+    const sw = strokeWidth || 0;
+    ctx.fillStyle = fill || 'transparent';
+    ctx.strokeStyle = stroke || 'transparent';
+    ctx.lineWidth = sw;
+
+    if (type === 'rect') {
+      ctx.beginPath();
+      ctx.rect(sw/2, sw/2, w - sw, h - sw);
+      ctx.fill();
+      if (sw > 0) ctx.stroke();
+    } else if (type === 'ellipse') {
+      ctx.beginPath();
+      ctx.ellipse(w/2, h/2, w/2 - sw/2, h/2 - sw/2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (sw > 0) ctx.stroke();
+    } else if (type === 'path' && points && points.length > 0) {
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      if (layer.shapeData.closed) ctx.closePath();
+      ctx.fill();
+      if (sw > 0) ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+};
 
 const getLayerAtCoords = (
   layersList: any[],
@@ -21,17 +121,13 @@ const getLayerAtCoords = (
       if (layer.type === 'artboard') {
         const w = layer.width || 0;
         const h = layer.height || 0;
-        // Bounds check using absolute position
         if (coords.x < layerX || coords.x > layerX + w || coords.y < layerY || coords.y > layerY + h) {
           continue;
         }
-        // Clicking inside an artboard always selects the artboard itself
-        // (Move tool should move the whole artboard, not individual child layers)
         return layer.id;
       }
 
       if (layer.children) {
-        // For groups (non-artboards), recurse into children with same offset
         const found = getLayerAtCoords(layer.children, coords, canvasRefs, parentOffset);
         if (found) return found;
       }
@@ -41,7 +137,6 @@ const getLayerAtCoords = (
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) continue;
 
-      // Child position is LOCAL within parent; add parentOffset to get absolute
       const absX = (layer.position?.x || 0) + parentOffset.x;
       const absY = (layer.position?.y || 0) + parentOffset.y;
       const localX = Math.round(coords.x - absX);
@@ -82,18 +177,26 @@ export const transformTools: ToolModule[] = [
     },
     move: ({ coords, lastPoint, activeLayerId, layers, updateLayer }) => {
       if (!lastPoint || !activeLayerId) return;
-      // Search deeply — active layer may be nested inside an artboard
       const activeLayer = findLayerById(layers, activeLayerId);
-      // Only check the layer's OWN lock — not descendants' locks (those are just visual indicators)
       if (activeLayer && !activeLayer.locked && !activeLayer.lockPosition) {
         const dx = coords.x - lastPoint.x;
         const dy = coords.y - lastPoint.y;
-        updateLayer(activeLayerId, { 
+        
+        // If layer has corners or warpGrid, move them as well
+        const updates: any = {
           position: { 
             x: (activeLayer.position?.x || 0) + dx, 
             y: (activeLayer.position?.y || 0) + dy 
-          } 
-        });
+          }
+        };
+        if (activeLayer.corners) {
+          updates.corners = activeLayer.corners.map((p: any) => ({ x: p.x + dx, y: p.y + dy }));
+        }
+        if (activeLayer.warpGrid) {
+          updates.warpGrid = activeLayer.warpGrid.map((p: any) => ({ x: p.x + dx, y: p.y + dy }));
+        }
+
+        updateLayer(activeLayerId, updates);
       }
     }
   },
@@ -101,16 +204,12 @@ export const transformTools: ToolModule[] = [
   {
     id: 'artboard',
     start: ({ coords, setSelectionRect, setIsInteracting, activeCropHandle }) => {
-      // Allow dragging handles from ArtboardOverlay
       if (activeCropHandle) return;
-
-      // Start drawing a new artboard selection rect
       setSelectionRect({ x: coords.x, y: coords.y, w: 0, h: 0 }, 'rect');
       setIsInteracting(true);
     },
     move: ({ coords, startCoords, setSelectionRect, activeCropHandle, activeLayerId, layers, updateLayer }) => {
       if (activeCropHandle && activeLayerId) {
-        // Manipulating an existing artboard via handles
         const artboard = layers.find(l => l.id === activeLayerId);
         if (artboard && startCoords) {
            const dx = coords.x - startCoords.x;
@@ -129,10 +228,8 @@ export const transformTools: ToolModule[] = [
            else if (activeCropHandle === 'bm') { h += dy; }
            else if (activeCropHandle === 'lm') { x += dx; w -= dx; }
            else if (activeCropHandle === 'rm') { w += dx; }
-           // For move handle (we can use 'move')
            else if (activeCropHandle === 'move') { x += dx; y += dy; }
 
-           // Update the active layer properties
            updateLayer(activeLayerId, { position: { x, y }, width: w, height: h });
         }
         return;
@@ -140,7 +237,6 @@ export const transformTools: ToolModule[] = [
 
       if (!startCoords) return;
 
-      // Creating a new artboard
       setSelectionRect({
         x: Math.min(startCoords.x, coords.x),
         y: Math.min(startCoords.y, coords.y),
@@ -164,7 +260,6 @@ export const transformTools: ToolModule[] = [
           children: []
         });
 
-        // Auto-expand document if needed
         let newDocW = documentSize.w;
         let newDocH = documentSize.h;
         if (x + w > documentSize.w) newDocW = x + w;
@@ -182,7 +277,6 @@ export const transformTools: ToolModule[] = [
   {
     id: 'crop',
     start: ({ coords, setSelectionRect, setIsInteracting, activeCropHandle }) => {
-      // If we are already manipulating a handle (set by CropOverlay), don't start a new rect
       if (activeCropHandle) return;
       setSelectionRect({ x: coords.x, y: coords.y, w: 0, h: 0 }, 'rect');
       setIsInteracting(true);
@@ -232,7 +326,6 @@ export const transformTools: ToolModule[] = [
     start: ({ coords, setIsInteracting, zoom, lassoPaths }) => {
       const threshold = 25 / (zoom || 1);
       
-      // If lassoPaths is empty (e.g. after Undo), clear internal state
       if (!lassoPaths || lassoPaths.length === 0 || lassoPaths[0].length !== 4) {
         delete toolState._pcPoints;
         delete toolState._pcDragIdx;
@@ -240,22 +333,19 @@ export const transformTools: ToolModule[] = [
 
       const points = toolState._pcPoints;
       if (points && points.length === 4) {
-        // Check corners first (0-3)
         let dragIdx = points.findIndex((p: any) => Math.hypot(p.x - coords.x, p.y - coords.y) < threshold);
         
-        // Check midpoints (4-7)
         if (dragIdx === -1) {
           const midpoints = [
-            { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 }, // Top
-            { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 }, // Right
-            { x: (points[2].x + points[3].x) / 2, y: (points[2].y + points[3].y) / 2 }, // Bottom
-            { x: (points[3].x + points[0].x) / 2, y: (points[3].y + points[0].y) / 2 }  // Left
+            { x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 },
+            { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 },
+            { x: (points[2].x + points[3].x) / 2, y: (points[2].y + points[3].y) / 2 },
+            { x: (points[3].x + points[0].x) / 2, y: (points[3].y + points[0].y) / 2 }
           ];
           dragIdx = midpoints.findIndex((p: any) => Math.hypot(p.x - coords.x, p.y - coords.y) < threshold);
           if (dragIdx !== -1) dragIdx += 4;
         }
 
-        // Check if inside the quad (8)
         if (dragIdx === -1) {
           const isInside = (p: {x:number, y:number}, poly: any[]) => {
             let inside = false;
@@ -279,7 +369,6 @@ export const transformTools: ToolModule[] = [
         }
       }
       
-      // Prepare for a potential new quad (but wait for move)
       toolState._pcPendingCoords = { ...coords };
       setIsInteracting(true);
     },
@@ -287,19 +376,18 @@ export const transformTools: ToolModule[] = [
       let points = toolState._pcPoints;
       let dragIdx = toolState._pcDragIdx;
       
-      // Check if we need to start a new quad (min movement 5px)
       if (dragIdx === undefined && toolState._pcPendingCoords) {
         const start = toolState._pcPendingCoords;
         const dist = Math.hypot(coords.x - start.x, coords.y - start.y);
         if (dist > 5 / (zoom || 1)) {
           toolState._pcPoints = [ { ...start }, { ...start }, { ...start }, { ...start } ];
-          toolState._pcDragIdx = 2; // Bottom right
+          toolState._pcDragIdx = 2;
           toolState._pcIsInitialDrag = true;
           delete toolState._pcPendingCoords;
           dragIdx = 2;
           points = toolState._pcPoints;
         } else {
-          return; // Still in dead zone
+          return;
         }
       }
 
@@ -318,10 +406,8 @@ export const transformTools: ToolModule[] = [
         ];
         toolState._pcPoints = points;
       } else if (dragIdx < 4) {
-        // Dragging a corner
         points[dragIdx] = { ...coords };
       } else if (dragIdx === 8) {
-        // Moving the whole quad
         if (startPoint && origPoints) {
           const dx = coords.x - startPoint.x;
           const dy = coords.y - startPoint.y;
@@ -329,16 +415,13 @@ export const transformTools: ToolModule[] = [
           toolState._pcPoints = points;
         }
       } else {
-        // Dragging a midpoint
         if (startPoint && origPoints) {
           const dx = coords.x - startPoint.x;
           const dy = coords.y - startPoint.y;
           const midIdx = dragIdx - 4;
-          // midIdx: 0=top(0,1), 1=right(1,2), 2=bottom(2,3), 3=left(3,0)
           const p1Idx = midIdx;
           const p2Idx = (midIdx + 1) % 4;
 
-          // Calculate normal vector of the edge
           const edgeX = origPoints[p2Idx].x - origPoints[p1Idx].x;
           const edgeY = origPoints[p2Idx].y - origPoints[p1Idx].y;
           const len = Math.hypot(edgeX, edgeY);
@@ -363,7 +446,6 @@ export const transformTools: ToolModule[] = [
     doubleClick: ({ canvas, ctx, setLassoPaths, recordHistory, setDocumentSize, setIsInteracting, activeLayerId, updateLayer }) => {
       const points = toolState._pcPoints;
       if (points && points.length === 4 && canvas && ctx) {
-        // Calculate target dimensions based on top and left edge lengths
         const w = Math.round(Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y));
         const h = Math.round(Math.hypot(points[3].x - points[0].x, points[3].y - points[0].y));
         
@@ -450,11 +532,232 @@ export const transformTools: ToolModule[] = [
   },
   {
     id: 'transform',
-    start: ({ setIsInteracting }) => {
+    start: ({ activeLayerId, layers, updateLayer, setIsInteracting, coords }) => {
       setIsInteracting(true);
-    },
-    move: ({ coords, activeLayerId, updateLayer, isShift }) => {
       if (!activeLayerId) return;
+      let layer = findLayerById(layers, activeLayerId);
+      if (!layer) return;
+
+      const mode = useStore.getState().transformMode;
+      const startCorners = getLayerCorners(layer);
+      toolState._transformStartCornersList = startCorners;
+
+      if (['skew', 'distort', 'perspective', 'warp'].includes(mode)) {
+        if (layer.type === 'text' || layer.type === 'shape') {
+          const canvas = document.createElement('canvas');
+          canvas.width = layer.width || 100;
+          canvas.height = layer.height || 100;
+          rasterizeVectorLayer(layer, canvas);
+          
+          updateLayer(activeLayerId, {
+            type: 'paint',
+            dataUrl: canvas.toDataURL(),
+            textContent: undefined,
+            shapeData: undefined,
+            corners: startCorners
+          });
+
+          layer = {
+            ...layer,
+            type: 'paint',
+            dataUrl: canvas.toDataURL(),
+            corners: startCorners
+          };
+        } else if (!layer.corners) {
+          updateLayer(activeLayerId, { corners: startCorners });
+        }
+      }
+
+      if (mode === 'warp') {
+        const currentCorners = layer.corners || startCorners;
+        if (!layer.warpGrid) {
+          const grid = initWarpGrid(currentCorners);
+          updateLayer(activeLayerId, { warpGrid: grid });
+          toolState._warpStartGrid = grid;
+        } else {
+          toolState._warpStartGrid = layer.warpGrid.map((p: any) => ({ ...p }));
+        }
+
+        const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+        if (canvas) {
+          const copy = document.createElement('canvas');
+          copy.width = canvas.width;
+          copy.height = canvas.height;
+          copy.getContext('2d')!.drawImage(canvas, 0, 0);
+          toolState.transformOriginalCanvas = copy;
+        }
+
+        const grid = layer.warpGrid || initWarpGrid(currentCorners);
+        const zoom = useStore.getState().zoom || 1;
+        const threshold = 20 / zoom;
+        let closestIdx = -1;
+        let minDist = Infinity;
+        grid.forEach((pt: any, idx: number) => {
+          const dist = Math.hypot(pt.x - coords.x, pt.y - coords.y);
+          if (dist < threshold && dist < minDist) {
+            minDist = dist;
+            closestIdx = idx;
+          }
+        });
+        toolState._warpActivePointIdx = closestIdx;
+        toolState._warpStartCoords = { ...coords };
+      }
+    },
+    move: ({ coords, activeLayerId, layers, updateLayer, isShift }) => {
+      if (!activeLayerId) return;
+      const activeLayer = findLayerById(layers, activeLayerId);
+      if (!activeLayer) return;
+
+      const mode = useStore.getState().transformMode;
+
+      if (mode === 'warp' && activeLayer.warpGrid) {
+        const startGrid = toolState._warpStartGrid;
+        const startCoords = toolState._warpStartCoords;
+        const ptIdx = toolState._warpActivePointIdx;
+
+        if (startGrid && startCoords) {
+          const dx = coords.x - startCoords.x;
+          const dy = coords.y - startCoords.y;
+          const newGrid = startGrid.map((p: any, idx: number) => {
+            if (ptIdx === undefined || ptIdx === -1) {
+              return { x: p.x + dx, y: p.y + dy };
+            } else if (idx === ptIdx) {
+              return { x: p.x + dx, y: p.y + dy };
+            }
+            return { ...p };
+          });
+
+          const p0 = newGrid[0];
+          const p1 = newGrid[3];
+          const p2 = newGrid[15];
+          const p3 = newGrid[12];
+
+          updateLayer(activeLayerId, {
+            warpGrid: newGrid,
+            corners: [p0, p1, p2, p3]
+          });
+        }
+        return;
+      }
+
+      if (['skew', 'distort', 'perspective'].includes(mode)) {
+        const startCorners = toolState._transformStartCornersList || getLayerCorners(activeLayer);
+        const handle = toolState._transformActiveHandle;
+        if (!handle) return;
+
+        const startCoords = toolState._transformStartCoords;
+        if (!startCoords) return;
+
+        const dx = coords.x - startCoords.x;
+        const dy = coords.y - startCoords.y;
+
+        let [p0, p1, p2, p3] = startCorners.map((p: any) => ({ ...p }));
+
+        if (mode === 'distort') {
+          if (handle === 'tl') p0 = { x: p0.x + dx, y: p0.y + dy };
+          else if (handle === 'tr') p1 = { x: p1.x + dx, y: p1.y + dy };
+          else if (handle === 'br') p2 = { x: p2.x + dx, y: p2.y + dy };
+          else if (handle === 'bl') p3 = { x: p3.x + dx, y: p3.y + dy };
+          else if (handle === 'tm') { p0 = { x: p0.x + dx, y: p0.y + dy }; p1 = { x: p1.x + dx, y: p1.y + dy }; }
+          else if (handle === 'bm') { p2 = { x: p2.x + dx, y: p2.y + dy }; p3 = { x: p3.x + dx, y: p3.y + dy }; }
+          else if (handle === 'ml') { p0 = { x: p0.x + dx, y: p0.y + dy }; p3 = { x: p3.x + dx, y: p3.y + dy }; }
+          else if (handle === 'mr') { p1 = { x: p1.x + dx, y: p1.y + dy }; p2 = { x: p2.x + dx, y: p2.y + dy }; }
+          else if (handle === 'move') {
+            p0 = { x: p0.x + dx, y: p0.y + dy };
+            p1 = { x: p1.x + dx, y: p1.y + dy };
+            p2 = { x: p2.x + dx, y: p2.y + dy };
+            p3 = { x: p3.x + dx, y: p3.y + dy };
+          }
+        } else if (mode === 'skew') {
+          if (handle === 'tm' || handle === 'bm') {
+            const ux = p1.x - p0.x;
+            const uy = p1.y - p0.y;
+            const len = Math.hypot(ux, uy);
+            if (len > 0) {
+              const nx = ux / len;
+              const ny = uy / len;
+              const dot = dx * nx + dy * ny;
+              const sx = nx * dot;
+              const sy = ny * dot;
+              if (handle === 'tm') {
+                p0 = { x: p0.x + sx, y: p0.y + sy };
+                p1 = { x: p1.x + sx, y: p1.y + sy };
+              } else {
+                p2 = { x: p2.x + sx, y: p2.y + sy };
+                p3 = { x: p3.x + sx, y: p3.y + sy };
+              }
+            }
+          } else if (handle === 'ml' || handle === 'mr') {
+            const ux = p3.x - p0.x;
+            const uy = p3.y - p0.y;
+            const len = Math.hypot(ux, uy);
+            if (len > 0) {
+              const nx = ux / len;
+              const ny = uy / len;
+              const dot = dx * nx + dy * ny;
+              const sx = nx * dot;
+              const sy = ny * dot;
+              if (handle === 'ml') {
+                p0 = { x: p0.x + sx, y: p0.y + sy };
+                p3 = { x: p3.x + sx, y: p3.y + sy };
+              } else {
+                p1 = { x: p1.x + sx, y: p1.y + sy };
+                p2 = { x: p2.x + sx, y: p2.y + sy };
+              }
+            }
+          } else if (handle === 'move') {
+            p0 = { x: p0.x + dx, y: p0.y + dy };
+            p1 = { x: p1.x + dx, y: p1.y + dy };
+            p2 = { x: p2.x + dx, y: p2.y + dy };
+            p3 = { x: p3.x + dx, y: p3.y + dy };
+          }
+        } else if (mode === 'perspective') {
+          const ux = p1.x - p0.x;
+          const uy = p1.y - p0.y;
+          const lenX = Math.hypot(ux, uy);
+
+          const vx = p3.x - p0.x;
+          const vy = p3.y - p0.y;
+          const lenY = Math.hypot(vx, vy);
+
+          if (lenX > 0 && lenY > 0) {
+            const ux_norm = { x: ux / lenX, y: uy / lenX };
+            const uy_norm = { x: vx / lenY, y: vy / lenY };
+
+            const projX = dx * ux_norm.x + dy * ux_norm.y;
+            const projY = dx * uy_norm.x + dy * uy_norm.y;
+
+            const dispX = { x: ux_norm.x * projX, y: ux_norm.y * projX };
+            const dispY = { x: uy_norm.x * projY, y: uy_norm.y * projY };
+
+            if (handle === 'tl') {
+              p0 = { x: p0.x + dispX.x + dispY.x, y: p0.y + dispX.y + dispY.y };
+              p1 = { x: p1.x - dispX.x + dispY.x, y: p1.y - dispX.y + dispY.y };
+              p3 = { x: p3.x + dispX.x - dispY.x, y: p3.y + dispX.y - dispY.y };
+            } else if (handle === 'tr') {
+              p1 = { x: p1.x + dispX.x + dispY.x, y: p1.y + dispX.y + dispY.y };
+              p0 = { x: p0.x - dispX.x + dispY.x, y: p0.y - dispX.y + dispY.y };
+              p2 = { x: p2.x + dispX.x - dispY.x, y: p2.y + dispX.y - dispY.y };
+            } else if (handle === 'br') {
+              p2 = { x: p2.x + dispX.x + dispY.x, y: p2.y + dispX.y + dispY.y };
+              p3 = { x: p3.x - dispX.x + dispY.x, y: p3.y - dispX.y + dispY.y };
+              p1 = { x: p1.x + dispX.x - dispY.x, y: p1.y + dispX.y - dispY.y };
+            } else if (handle === 'bl') {
+              p3 = { x: p3.x + dispX.x + dispY.x, y: p3.y + dispX.y + dispY.y };
+              p2 = { x: p2.x - dispX.x + dispY.x, y: p2.y - dispX.y + dispY.y };
+              p0 = { x: p0.x + dispX.x - dispY.x, y: p0.y + dispX.y - dispY.y };
+            } else if (handle === 'move') {
+              p0 = { x: p0.x + dx, y: p0.y + dy };
+              p1 = { x: p1.x + dx, y: p1.y + dy };
+              p2 = { x: p2.x + dx, y: p2.y + dy };
+              p3 = { x: p3.x + dx, y: p3.y + dy };
+            }
+          }
+        }
+        updateLayer(activeLayerId, { corners: [p0, p1, p2, p3] });
+        return;
+      }
+
       const handle = toolState._transformActiveHandle;
       if (!handle) return;
 
@@ -485,7 +788,7 @@ export const transformTools: ToolModule[] = [
         return;
       }
 
-      if (handle === 'rot') {
+      if (mode === 'rotate' || handle === 'rot') {
         const cx = startPos.x + (startSize.w / 2) * cosT - (startSize.h / 2) * sinT;
         const cy = startPos.y + (startSize.w / 2) * sinT + (startSize.h / 2) * cosT;
 
@@ -582,6 +885,7 @@ export const transformTools: ToolModule[] = [
     },
     end: ({ setIsInteracting }) => {
       setIsInteracting(false);
+      delete toolState._warpActivePointIdx;
     }
   }
 ];

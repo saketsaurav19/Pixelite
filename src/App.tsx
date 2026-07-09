@@ -541,6 +541,7 @@ const App: React.FC = () => {
         height: layer.height || documentSize.h,
         rotation: layer.rotation || 0
       };
+      toolState._transformOriginalLayer = JSON.parse(JSON.stringify(layer));
     }
     setActiveTool('transform');
   };
@@ -2192,7 +2193,10 @@ const App: React.FC = () => {
           onPaste={handlePaste}
           onTransformLayer={handleTransformLayer}
           onTransformImage={handleTransformImage}
-          onFreeTransform={handleFreeTransform}
+          onTransformMode={(mode) => {
+            handleFreeTransform();
+            useStore.getState().setTransformMode(mode);
+          }}
           onCanvasSize={() => {
             const w = prompt('New Canvas Width:', documentSize.w.toString());
             const h = prompt('New Canvas Height:', documentSize.h.toString());

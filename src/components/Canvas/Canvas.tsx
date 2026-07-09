@@ -16,6 +16,7 @@ import { startAction as startActionHandler, moveAction as moveActionHandler, end
 import { handleTouchStart as handleTouchStartUtil, handleTouchMove as handleTouchMoveUtil } from './Events/touchHandlers';
 import { BRUSH_TOOLS } from './Core/toolUtils';
 import { toolState } from '../../tools/toolState';
+import { warpQuad, drawTrianglesWarp } from '../../utils/canvasUtils';
 import { useLayerRendering } from './Rendering/useLayerRendering';
 import { useThumbnailGeneration } from './Rendering/useThumbnailGeneration';
 import { useSelectionAnimation } from './Rendering/useSelectionAnimation';
@@ -691,6 +692,80 @@ const Canvas: React.FC = () => {
   }, [isInteracting, initialTouchDistance, handleTouchMove]);
 
   const handleConfirmTransform = useCallback(() => {
+    if (activeLayerId) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      const mode = useStore.getState().transformMode;
+      
+      if (layer && (layer.corners || layer.warpGrid)) {
+        const origCanvas = toolState.transformOriginalCanvas;
+        if (origCanvas) {
+          let xs: number[] = [];
+          let ys: number[] = [];
+          
+          if (mode === 'warp' && layer.warpGrid) {
+            xs = layer.warpGrid.map(p => p.x);
+            ys = layer.warpGrid.map(p => p.y);
+          } else if (layer.corners) {
+            xs = layer.corners.map(p => p.x);
+            ys = layer.corners.map(p => p.y);
+          }
+
+          if (xs.length > 0) {
+            const xMin = Math.min(...xs);
+            const xMax = Math.max(...xs);
+            const yMin = Math.min(...ys);
+            const yMax = Math.max(...ys);
+
+            const wBbox = Math.max(1, Math.round(xMax - xMin));
+            const hBbox = Math.max(1, Math.round(yMax - yMin));
+
+            let bakedCanvas: HTMLCanvasElement;
+
+            if (mode === 'warp' && layer.warpGrid) {
+              bakedCanvas = document.createElement('canvas');
+              bakedCanvas.width = wBbox;
+              bakedCanvas.height = hBbox;
+              const ctx = bakedCanvas.getContext('2d')!;
+
+              const w = origCanvas.width;
+              const h = origCanvas.height;
+              const srcGrid: { x: number; y: number }[] = [];
+              for (let r = 0; r < 4; r++) {
+                const v = r / 3;
+                for (let c = 0; c < 4; c++) {
+                  const u = c / 3;
+                  srcGrid.push({ x: u * w, y: v * h });
+                }
+              }
+
+              const dstGrid = layer.warpGrid.map(p => ({
+                x: p.x - xMin,
+                y: p.y - yMin
+              }));
+
+              drawTrianglesWarp(ctx, origCanvas, srcGrid, dstGrid, 4, 4);
+            } else {
+              const dstPoints = layer.corners.map(p => ({
+                x: p.x - xMin,
+                y: p.y - yMin
+              }));
+              bakedCanvas = warpQuad(origCanvas, dstPoints, wBbox, hBbox);
+            }
+
+            updateLayer(activeLayerId, {
+              dataUrl: bakedCanvas.toDataURL(),
+              position: { x: xMin, y: yMin },
+              width: wBbox,
+              height: hBbox,
+              rotation: 0,
+              corners: undefined,
+              warpGrid: undefined
+            });
+          }
+        }
+      }
+    }
+
     recordHistory('Free Transform');
     delete toolState._transformStartCoords;
     delete toolState._transformStartLayerPos;
@@ -698,18 +773,30 @@ const Canvas: React.FC = () => {
     delete toolState._transformStartLayerRotation;
     delete toolState._transformActiveHandle;
     delete toolState._transformOriginalLayerProperties;
+    delete toolState._transformOriginalLayer;
+    delete toolState.transformOriginalCanvas;
     setActiveTool('move');
-  }, [recordHistory, setActiveTool]);
+  }, [activeLayerId, layers, updateLayer, recordHistory, setActiveTool]);
 
   const handleCancelTransform = useCallback(() => {
     const orig = toolState._transformOriginalLayerProperties;
     if (orig && activeLayerId === orig.id) {
-      updateLayer(orig.id, {
-        position: orig.position,
-        width: orig.width,
-        height: orig.height,
-        rotation: orig.rotation
-      });
+      if (toolState._transformOriginalLayer) {
+        updateLayer(orig.id, {
+          ...toolState._transformOriginalLayer,
+          corners: undefined,
+          warpGrid: undefined
+        });
+      } else {
+        updateLayer(orig.id, {
+          position: orig.position,
+          width: orig.width,
+          height: orig.height,
+          rotation: orig.rotation,
+          corners: undefined,
+          warpGrid: undefined
+        });
+      }
     }
     delete toolState._transformStartCoords;
     delete toolState._transformStartLayerPos;
@@ -717,6 +804,8 @@ const Canvas: React.FC = () => {
     delete toolState._transformStartLayerRotation;
     delete toolState._transformActiveHandle;
     delete toolState._transformOriginalLayerProperties;
+    delete toolState._transformOriginalLayer;
+    delete toolState.transformOriginalCanvas;
     setActiveTool('move');
   }, [activeLayerId, updateLayer, setActiveTool]);
 

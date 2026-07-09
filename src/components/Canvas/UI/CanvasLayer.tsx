@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
 import { FontRegistry } from '../../../pdf/worker/engines/FontRegistry';
+import { getHomography, drawTrianglesWarp } from '../../../utils/canvasUtils';
+import { toolState } from '../../../tools/toolState';
 
 interface CanvasLayerProps {
   layer: Layer;
@@ -547,24 +549,96 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
     );
   }
 
+  const activeTool = useStore(state => state.activeTool);
+  const transformMode = useStore(state => state.transformMode);
+
+  // Render warp grid onto canvas
+  useEffect(() => {
+    if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid && layer.warpGrid.length === 16) {
+      const canvas = canvasRefs?.current?.[layer.id];
+      const origCanvas = toolState.transformOriginalCanvas;
+      if (canvas && origCanvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const w = origCanvas.width;
+          const h = origCanvas.height;
+          const srcGrid: { x: number; y: number }[] = [];
+          for (let r = 0; r < 4; r++) {
+            const v = r / 3;
+            for (let c = 0; c < 4; c++) {
+              const u = c / 3;
+              srcGrid.push({ x: u * w, y: v * h });
+            }
+          }
+
+          const xs = layer.warpGrid.map(p => p.x);
+          const ys = layer.warpGrid.map(p => p.y);
+          const xMin = Math.min(...xs);
+          const yMin = Math.min(...ys);
+
+          const dstGrid = layer.warpGrid.map(p => ({
+            x: p.x - xMin,
+            y: p.y - yMin
+          }));
+
+          drawTrianglesWarp(ctx, origCanvas, srcGrid, dstGrid, 4, 4);
+        }
+      }
+    }
+  }, [activeTool, transformMode, layer.warpGrid, layer.id, canvasRefs]);
+
   // Regular layer — use native dimensions if available (e.g. PDF bitmap pages)
-  const canvasW = layer.width || documentSize.w;
-  const canvasH = layer.height || documentSize.h;
+  let canvasW = layer.width || documentSize.w;
+  let canvasH = layer.height || documentSize.h;
+
+  if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid) {
+    const xs = layer.warpGrid.map(p => p.x);
+    const ys = layer.warpGrid.map(p => p.y);
+    canvasW = Math.max(1, Math.round(Math.max(...xs) - Math.min(...xs)));
+    canvasH = Math.max(1, Math.round(Math.max(...ys) - Math.min(...ys)));
+  }
 
   const isVector = layer.type === 'text' || layer.type === 'shape' || layer.type === 'table';
 
-  // Build the CSS transform string:
-  //   translate() always present (positions the layer)
-  //   rotate() added when the layer has a non-zero rotation (from PDF extraction)
-  // Transform origin is top-left (0 0) so PDF-space position stays accurate.
   const rotationDeg = layer.rotation ?? 0;
-  const layerTransform = rotationDeg !== 0
-    ? `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px) rotate(${rotationDeg}deg)`
-    : `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px)`;
+  let layerTransform = `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px)`;
+  let layerWidth = layer.width ? `${layer.width}px` : '100%';
+  let layerHeight = layer.height ? `${layer.height}px` : '100%';
 
-  // We ALWAYS use transform-origin: 0 0 for all layers (including watermarks)
-  // to ensure that absolute run coordinate projection in VectorTextLayer aligns perfectly.
-  // const isWatermark = layer.isWatermark === true;
+  if (layer.corners && layer.corners.length === 4) {
+    if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid) {
+      const xs = layer.warpGrid.map(p => p.x);
+      const ys = layer.warpGrid.map(p => p.y);
+      const xMin = Math.min(...xs);
+      const xMax = Math.max(...xs);
+      const yMin = Math.min(...ys);
+      const yMax = Math.max(...ys);
+      layerTransform = `translate(${xMin}px, ${yMin}px)`;
+      layerWidth = `${xMax - xMin}px`;
+      layerHeight = `${yMax - yMin}px`;
+    } else {
+      const w = layer.width || documentSize.w;
+      const h = layer.height || documentSize.h;
+      const srcPoints = [
+        { x: 0, y: 0 },
+        { x: w, y: 0 },
+        { x: w, y: h },
+        { x: 0, y: h }
+      ];
+      const homography = getHomography(srcPoints, layer.corners);
+      if (homography) {
+        layerTransform = `matrix3d(
+          ${homography[0]}, ${homography[3]}, 0, ${homography[6]},
+          ${homography[1]}, ${homography[4]}, 0, ${homography[7]},
+          0, 0, 1, 0,
+          ${homography[2]}, ${homography[5]}, 0, ${homography[8]}
+        )`;
+      }
+    }
+  } else if (rotationDeg !== 0) {
+    layerTransform = `translate(${layer.position?.x || 0}px, ${layer.position?.y || 0}px) rotate(${rotationDeg}deg)`;
+  }
+
   const transformOrigin = '0 0';
 
   return (
@@ -573,8 +647,8 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
       style={{
         position: 'absolute',
         top: 0, left: 0,
-        width: layer.width ? `${layer.width}px` : '100%',
-        height: layer.height ? `${layer.height}px` : '100%',
+        width: layerWidth,
+        height: layerHeight,
         zIndex: layersCount - layerIndex,
         pointerEvents: 'none',
         mixBlendMode: (layer.blendMode === 'source-over' ? 'normal' : (layer.blendMode || 'normal')) as any,

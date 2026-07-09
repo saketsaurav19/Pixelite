@@ -160,6 +160,36 @@ export const findAllContours = (
   return allContours;
 };
 
+export const getHomography = (src: { x: number, y: number }[], dst: { x: number, y: number }[]) => {
+  const A: number[][] = [];
+  for (let i = 0; i < 4; i++) {
+    A.push([src[i].x, src[i].y, 1, 0, 0, 0, -dst[i].x * src[i].x, -dst[i].x * src[i].y]);
+    A.push([0, 0, 0, src[i].x, src[i].y, 1, -dst[i].y * src[i].x, -dst[i].y * src[i].y]);
+  }
+  const B = [dst[0].x, dst[0].y, dst[1].x, dst[1].y, dst[2].x, dst[2].y, dst[3].x, dst[3].y];
+  
+  // Gaussian elimination solver
+  const n = B.length;
+  for (let i = 0; i < n; i++) {
+    let max = i;
+    for (let j = i + 1; j < n; j++) if (Math.abs(A[j][i]) > Math.abs(A[max][i])) max = j;
+    [A[i], A[max]] = [A[max], A[i]]; [B[i], B[max]] = [B[max], B[i]];
+    if (Math.abs(A[i][i]) < 1e-10) return null;
+    for (let j = i + 1; j < n; j++) {
+      const factor = A[j][i] / A[i][i];
+      B[j] -= factor * B[i];
+      for (let k = i; k < n; k++) A[j][k] -= factor * A[i][k];
+    }
+  }
+  const X = new Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = 0;
+    for (let j = i + 1; j < n; j++) sum += A[i][j] * X[j];
+    X[i] = (B[i] - sum) / A[i][i];
+  }
+  return [...X, 1];
+};
+
 export const warpPerspective = (
   ctx: CanvasRenderingContext2D,
   points: { x: number, y: number }[], // 4 corners: TL, TR, BR, BL
@@ -174,43 +204,15 @@ export const warpPerspective = (
   const dstCtx = dstCanvas.getContext('2d')!;
   const dstData = dstCtx.createImageData(targetWidth, targetHeight);
 
-  // Solve for Homography Matrix H (3x3) using 4 points
-  const getTransform = (src: { x: number, y: number }[], dst: { x: number, y: number }[]) => {
-    const A: number[][] = [];
-    for (let i = 0; i < 4; i++) {
-      A.push([dst[i].x, dst[i].y, 1, 0, 0, 0, -src[i].x * dst[i].x, -src[i].x * dst[i].y]);
-      A.push([0, 0, 0, dst[i].x, dst[i].y, 1, -src[i].y * dst[i].x, -src[i].y * dst[i].y]);
-    }
-    const B = [src[0].x, src[0].y, src[1].x, src[1].y, src[2].x, src[2].y, src[3].x, src[3].y];
-    
-    // Gaussian elimination solver
-    const n = B.length;
-    for (let i = 0; i < n; i++) {
-      let max = i;
-      for (let j = i + 1; j < n; j++) if (Math.abs(A[j][i]) > Math.abs(A[max][i])) max = j;
-      [A[i], A[max]] = [A[max], A[i]]; [B[i], B[max]] = [B[max], B[i]];
-      for (let j = i + 1; j < n; j++) {
-        const factor = A[j][i] / A[i][i];
-        B[j] -= factor * B[i];
-        for (let k = i; k < n; k++) A[j][k] -= factor * A[i][k];
-      }
-    }
-    const X = new Array(n);
-    for (let i = n - 1; i >= 0; i--) {
-      let sum = 0;
-      for (let j = i + 1; j < n; j++) sum += A[i][j] * X[j];
-      X[i] = (B[i] - sum) / A[i][i];
-    }
-    return [...X, 1];
-  };
-
   const dstPoints = [{x:0, y:0}, {x:targetWidth, y:0}, {x:targetWidth, y:targetHeight}, {x:0, y:targetHeight}];
-  const h = getTransform(points, dstPoints);
+  const h = getHomography(dstPoints, points);
+  if (!h) return dstData;
 
   const src = srcData.data, dst = dstData.data;
   for (let y = 0; y < targetHeight; y++) {
     for (let x = 0; x < targetWidth; x++) {
       const z = h[6] * x + h[7] * y + h[8];
+      if (Math.abs(z) < 0.0001) continue;
       const px = (h[0] * x + h[1] * y + h[2]) / z;
       const py = (h[3] * x + h[4] * y + h[5]) / z;
       
@@ -227,6 +229,130 @@ export const warpPerspective = (
     }
   }
   return dstData;
+};
+
+export const warpQuad = (
+  srcCanvas: HTMLCanvasElement | HTMLImageElement,
+  dstPoints: { x: number; y: number }[],
+  dstWidth: number,
+  dstHeight: number
+) => {
+  const dstCanvas = document.createElement('canvas');
+  dstCanvas.width = dstWidth;
+  dstCanvas.height = dstHeight;
+  const dstCtx = dstCanvas.getContext('2d')!;
+
+  const srcWidth = srcCanvas.width;
+  const srcHeight = srcCanvas.height;
+
+  let srcCanvasElement: HTMLCanvasElement;
+  if (srcCanvas instanceof HTMLCanvasElement) {
+    srcCanvasElement = srcCanvas;
+  } else {
+    srcCanvasElement = document.createElement('canvas');
+    srcCanvasElement.width = srcWidth;
+    srcCanvasElement.height = srcHeight;
+    srcCanvasElement.getContext('2d')!.drawImage(srcCanvas, 0, 0);
+  }
+
+  const srcCtx = srcCanvasElement.getContext('2d')!;
+  const srcData = srcCtx.getImageData(0, 0, srcWidth, srcHeight);
+  const dstData = dstCtx.createImageData(dstWidth, dstHeight);
+
+  const srcPoints = [
+    { x: 0, y: 0 },
+    { x: srcWidth, y: 0 },
+    { x: srcWidth, y: srcHeight },
+    { x: 0, y: srcHeight }
+  ];
+
+  const h = getHomography(dstPoints, srcPoints);
+  if (!h) return dstCanvas;
+
+  const src = srcData.data, dst = dstData.data;
+  for (let y = 0; y < dstHeight; y++) {
+    for (let x = 0; x < dstWidth; x++) {
+      const z = h[6] * x + h[7] * y + h[8];
+      if (Math.abs(z) < 0.0001) continue;
+      const px = (h[0] * x + h[1] * y + h[2]) / z;
+      const py = (h[3] * x + h[4] * y + h[5]) / z;
+
+      if (px >= 0 && px < srcWidth - 1 && py >= 0 && py < srcHeight - 1) {
+        const ix = Math.floor(px), iy = Math.floor(py);
+        const idx1 = (iy * srcWidth + ix) * 4, idx2 = idx1 + 4, idx3 = idx1 + srcWidth * 4, idx4 = idx3 + 4;
+        const fx = px - ix, fy = py - iy;
+        const dIdx = (y * dstWidth + x) * 4;
+        for (let c = 0; c < 4; c++) {
+          dst[dIdx + c] = 
+            src[idx1 + c] * (1-fx) * (1-fy) + src[idx2 + c] * fx * (1-fy) +
+            src[idx3 + c] * (1-fx) * fy + src[idx4 + c] * fx * fy;
+        }
+      }
+    }
+  }
+  dstCtx.putImageData(dstData, 0, 0);
+  return dstCanvas;
+};
+
+const drawTriangle = (
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement | HTMLCanvasElement,
+  s0: { x: number; y: number },
+  s1: { x: number; y: number },
+  s2: { x: number; y: number },
+  d0: { x: number; y: number },
+  d1: { x: number; y: number },
+  d2: { x: number; y: number }
+) => {
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.moveTo(d0.x, d0.y);
+  ctx.lineTo(d1.x, d1.y);
+  ctx.lineTo(d2.x, d2.y);
+  ctx.closePath();
+  ctx.clip();
+
+  const delta = (s0.x - s2.x) * (s1.y - s2.y) - (s1.x - s2.x) * (s0.y - s2.y);
+  if (Math.abs(delta) < 0.0001) {
+    ctx.restore();
+    return;
+  }
+
+  const a = ((d0.x - d2.x) * (s1.y - s2.y) - (d1.x - d2.x) * (s0.y - s2.y)) / delta;
+  const c = ((s0.x - s2.x) * (d1.x - d2.x) - (s1.x - s2.x) * (d0.x - d2.x)) / delta;
+  const e = d2.x - a * s2.x - c * s2.y;
+
+  const b = ((d0.y - d2.y) * (s1.y - s2.y) - (d1.y - d2.y) * (s0.y - s2.y)) / delta;
+  const d = ((s0.x - s2.x) * (d1.y - d2.y) - (s1.x - s2.x) * (d0.y - d2.y)) / delta;
+  const f = d2.y - b * s2.x - d * s2.y;
+
+  ctx.transform(a, b, c, d, e, f);
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+};
+
+export const drawTrianglesWarp = (
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement | HTMLCanvasElement,
+  srcGrid: { x: number; y: number }[],
+  dstGrid: { x: number; y: number }[],
+  gridWidth: number,
+  gridHeight: number
+) => {
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+  for (let y = 0; y < gridHeight - 1; y++) {
+    for (let x = 0; x < gridWidth - 1; x++) {
+      const i00 = y * gridWidth + x;
+      const i10 = y * gridWidth + (x + 1);
+      const i01 = (y + 1) * gridWidth + x;
+      const i11 = (y + 1) * gridWidth + (x + 1);
+
+      drawTriangle(ctx, img, srcGrid[i00], srcGrid[i10], srcGrid[i01], dstGrid[i00], dstGrid[i10], dstGrid[i01]);
+      drawTriangle(ctx, img, srcGrid[i10], srcGrid[i11], srcGrid[i01], dstGrid[i10], dstGrid[i11], dstGrid[i01]);
+    }
+  }
 };
 
 export const findBestEdgePoint = (

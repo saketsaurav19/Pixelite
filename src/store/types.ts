@@ -169,6 +169,9 @@ export type Layer = BaseLayer & {
       textAlign: 'left' | 'center' | 'right';
     }>;
   };
+  corners?: { x: number; y: number }[];
+  warpGrid?: { x: number; y: number }[];
+  warpGridSize?: { rows: number; cols: number };
 };
 
 export interface Light {
