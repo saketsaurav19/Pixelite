@@ -108,14 +108,25 @@ export const useFileImporter = () => {
 
       } else if (result.type === 'pdf' && result.layers) {
         // ── NEW: PDF returns a tree of page-group layers ──────────────────────
+        console.log(`[useFileImporter] Processing imported PDF. isPlace=${isPlace}, result.width=${result.width}, result.height=${result.height}`);
+        result.layers.forEach((layer, i) => {
+          console.log(`[useFileImporter] Layer ${i} "${layer.name}": width=${layer.width}, height=${layer.height}, position=(${layer.position?.x}, ${layer.position?.y})`);
+          if (layer.children) {
+            layer.children.forEach((child, j) => {
+              console.log(`[useFileImporter]   Child ${j} "${child.name}": width=${child.width}, height=${child.height}, position=(${child.position?.x}, ${child.position?.y})`);
+            });
+          }
+        });
         if (!isPlace) {
           setCurrentProjectId(null);
           setHistory([], 0);
+          console.log(`[useFileImporter] Setting Document Size to width=${result.width}, height=${result.height}`);
           setDocumentSize({ w: result.width, h: result.height });
           setLayers(result.layers);
           if (result.layers.length > 0) setActiveLayer(result.layers[0].id);
         } else {
           // When placing, offset each page group to center it
+          console.log(`[useFileImporter] Placing PDF onto canvas size: width=${documentSize.w}, height=${documentSize.h}`);
           const offsetLayers = result.layers.map((pg) => ({
             ...pg,
             position: {

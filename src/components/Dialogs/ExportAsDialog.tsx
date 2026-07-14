@@ -6,7 +6,7 @@ import './Dialogs.css';
 
 export const ExportAsDialog: React.FC = () => {
   const { isExportDialogOpen, setIsExportDialogOpen, documentSize, layers, addAlert, exportFormat, exifData, iccProfile } = useStore();
-  const [format, setFormat] = useState<'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf'>(exportFormat);
+  const [format, setFormat] = useState<string>(exportFormat);
   const [quality, setQuality] = useState(100);
   const [name, setName] = useState('New Project');
   const [width, setWidth] = useState(documentSize.w);
@@ -30,10 +30,15 @@ export const ExportAsDialog: React.FC = () => {
 
   useEffect(() => {
     if (isExportDialogOpen && previewCanvasRef.current) {
-        // Render a flattened preview
         const previewCanvas = previewCanvasRef.current;
+        const container = previewCanvas.parentElement;
+        const maxW = (container?.clientWidth || 400) - 40;
+        const maxH = (container?.clientHeight || 300) - 40;
+        const scale = Math.min(1, maxW / documentSize.w, maxH / documentSize.h);
         previewCanvas.width = documentSize.w;
         previewCanvas.height = documentSize.h;
+        previewCanvas.style.width = `${documentSize.w * scale}px`;
+        previewCanvas.style.height = `${documentSize.h * scale}px`;
         const ctx = previewCanvas.getContext('2d');
         if (ctx) {
              ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
@@ -51,7 +56,7 @@ export const ExportAsDialog: React.FC = () => {
                      if (layerCanvas) {
                          ctx.save();
                          ctx.globalAlpha = currentOpacity;
-                         ctx.drawImage(layerCanvas, lx, ly);
+                         ctx.drawImage(layerCanvas, lx, ly, layer.width || layerCanvas.width, layer.height || layerCanvas.height);
                          ctx.restore();
                      }
                  }
@@ -111,7 +116,9 @@ export const ExportAsDialog: React.FC = () => {
                      if (layerCanvas) {
                          ctx.save();
                          ctx.globalAlpha = currentOpacity;
-                         ctx.drawImage(layerCanvas, lx * scaleX, ly * scaleY, layerCanvas.width * scaleX, layerCanvas.height * scaleY);
+                         const drawW = (layer.width || layerCanvas.width) * scaleX;
+                         const drawH = (layer.height || layerCanvas.height) * scaleY;
+                         ctx.drawImage(layerCanvas, lx * scaleX, ly * scaleY, drawW, drawH);
                          ctx.restore();
                      }
                  }
@@ -121,14 +128,16 @@ export const ExportAsDialog: React.FC = () => {
              });
         }
 
-        const actualFormat = (format === 'image/svg+xml' || format === 'image/gif' || format === 'application/pdf') ? 'image/png' : format;
+        const fallbackToPng = format === 'image/svg+xml' || format === 'image/gif' || format === 'application/pdf' || format === 'image/tiff' || format === 'image/bmp';
+        const actualFormat = fallbackToPng ? 'image/png' : format;
+        const ext = format === 'image/jpeg' ? 'jpg' : format.split('/')[1];
 
         await ExportEngine.downloadExport(tempCanvas, {
             exifData: attachMetadata ? exifData : undefined,
             iccProfile: attachMetadata ? iccProfile : undefined,
             format: actualFormat as any,
             quality: quality / 100,
-            filename: `${name || 'export'}.${actualFormat.split('/')[1]}`
+            filename: `${name || 'export'}.${ext}`
         });
         setIsExportDialogOpen(false);
     } catch (error) {
@@ -180,7 +189,9 @@ export const ExportAsDialog: React.FC = () => {
                      if (layerCanvas) {
                          ctx.save();
                          ctx.globalAlpha = currentOpacity;
-                         ctx.drawImage(layerCanvas, lx * scaleX, ly * scaleY, layerCanvas.width * scaleX, layerCanvas.height * scaleY);
+                         const drawW = (layer.width || layerCanvas.width) * scaleX;
+                         const drawH = (layer.height || layerCanvas.height) * scaleY;
+                         ctx.drawImage(layerCanvas, lx * scaleX, ly * scaleY, drawW, drawH);
                          ctx.restore();
                      }
                  }
@@ -190,7 +201,8 @@ export const ExportAsDialog: React.FC = () => {
              });
         }
 
-        const actualFormat = (format === 'image/svg+xml' || format === 'image/gif' || format === 'application/pdf') ? 'image/png' : format;
+        const fallbackToPng = format === 'image/svg+xml' || format === 'image/gif' || format === 'application/pdf' || format === 'image/tiff' || format === 'image/bmp';
+        const actualFormat = fallbackToPng ? 'image/png' : format;
 
         try {
             const blob = await new Promise<Blob | null>((resolve) => {
@@ -260,6 +272,8 @@ export const ExportAsDialog: React.FC = () => {
                             <option value="image/webp">WEBP</option>
                             <option value="image/svg+xml">SVG</option>
                             <option value="image/gif">GIF</option>
+                            <option value="image/tiff">TIFF</option>
+                            <option value="image/bmp">BMP</option>
                             <option value="application/pdf">PDF</option>
                         </select>
                     </div>

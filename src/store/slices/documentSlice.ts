@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { EditorState, DocumentSpecificState, DocumentArchive } from '../types';
+import type { EditorState, DocumentSpecificState, DocumentArchive, SavedPattern } from '../types';
 
 export interface DocumentSlice {
   currentProjectId: string | null;
@@ -25,6 +25,18 @@ export interface DocumentSlice {
   showRulers: boolean;
   showGrid: boolean;
   showGuides: boolean;
+  guidesColor: string;
+  globalGuidesColor: string;
+  gridColor: string;
+  gridType: 'square' | 'horizontal' | 'vertical' | 'cross';
+  gridGapX: number;
+  gridGapY: number;
+  gridSubdivision: number;
+  interpolation: 'nearest-neighbor' | 'bilinear' | 'bicubic';
+  colorMode: 'rgb' | 'grayscale';
+  setColorMode: (mode: 'rgb' | 'grayscale') => void;
+  bitDepth: 8 | 16 | 32;
+  setBitDepth: (depth: 8 | 16 | 32) => void;
   exifData: any;
   iccProfile: string;
 
@@ -47,10 +59,21 @@ export interface DocumentSlice {
   setPenMode: (mode: 'path' | 'shape') => void;
   setCloneSource: (source: { x: number; y: number } | null) => void;
   setCustomPattern: (pattern: string | null) => void;
+  savedPatterns: SavedPattern[];
+  addSavedPattern: (pattern: Omit<SavedPattern, 'id'>) => void;
+  removeSavedPattern: (id: string) => void;
   setCropRect: (updater: any) => void;
   setShowRulers: (val: boolean) => void;
   setShowGrid: (val: boolean) => void;
   setShowGuides: (val: boolean) => void;
+  setGuidesColor: (color: string) => void;
+  setGlobalGuidesColor: (color: string) => void;
+  setGridColor: (color: string) => void;
+  setGridType: (type: 'square' | 'horizontal' | 'vertical' | 'cross') => void;
+  setGridGapX: (val: number) => void;
+  setGridGapY: (val: number) => void;
+  setGridSubdivision: (val: number) => void;
+  setInterpolation: (val: 'nearest-neighbor' | 'bilinear' | 'bicubic') => void;
 
   // Multi-tab actions
   addDocument: (name?: string, size?: { w: number; h: number }, initialState?: any) => void;
@@ -84,6 +107,16 @@ const extractDocumentState = (state: EditorState): DocumentSpecificState => ({
   showRulers: state.showRulers,
   showGrid: state.showGrid,
   showGuides: state.showGuides,
+  guidesColor: state.guidesColor,
+  globalGuidesColor: state.globalGuidesColor,
+  gridColor: state.gridColor,
+  gridType: state.gridType,
+  gridGapX: state.gridGapX,
+  gridGapY: state.gridGapY,
+  gridSubdivision: state.gridSubdivision,
+  interpolation: state.interpolation,
+  colorMode: state.colorMode,
+  bitDepth: state.bitDepth,
   lights: state.lights,
   isLightingEnabled: state.isLightingEnabled,
   lightingQuality: state.lightingQuality,
@@ -118,6 +151,8 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
     zoom: 0.5,
     canvasOffset: { x: 0, y: 0 },
     canvasRotation: 0,
+    colorMode: 'rgb',
+    bitDepth: 8,
     lassoPaths: [],
     selectionRect: null,
     isInverseSelection: false,
@@ -135,6 +170,14 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
     showRulers: true,
     showGrid: false,
     showGuides: true,
+    guidesColor: '#00ff00',
+    globalGuidesColor: '#0088ff',
+    gridColor: '#808080',
+    gridType: 'square',
+    gridGapX: 105,
+    gridGapY: 105,
+    gridSubdivision: 4,
+    interpolation: 'bilinear',
     lights: [],
     isLightingEnabled: false,
     lightingQuality: 'medium',
@@ -174,6 +217,18 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   penMode: 'path',
   cloneSource: null,
   customPattern: null,
+  savedPatterns: JSON.parse(localStorage.getItem('pixelite_savedPatterns') || '[]'),
+  addSavedPattern: (pattern) => set((state) => {
+    const newPattern = { ...pattern, id: nanoid() };
+    const updated = [...state.savedPatterns, newPattern];
+    localStorage.setItem('pixelite_savedPatterns', JSON.stringify(updated));
+    return { savedPatterns: updated };
+  }),
+  removeSavedPattern: (id) => set((state) => {
+    const updated = state.savedPatterns.filter((p) => p.id !== id);
+    localStorage.setItem('pixelite_savedPatterns', JSON.stringify(updated));
+    return { savedPatterns: updated };
+  }),
   cropRect: null,
   exifData: null,
   iccProfile: 'sRGB IEC61966-2.1',
@@ -210,9 +265,29 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   showRulers: true,
   showGrid: false,
   showGuides: true,
+  guidesColor: '#00ff00',
+  globalGuidesColor: '#0088ff',
+  gridColor: '#808080',
+  gridType: 'square',
+  gridGapX: 105,
+  gridGapY: 105,
+  gridSubdivision: 4,
+  interpolation: 'bilinear',
   setShowRulers: (showRulers) => set({ showRulers }),
   setShowGrid: (showGrid) => set({ showGrid }),
   setShowGuides: (showGuides) => set({ showGuides }),
+  setGuidesColor: (guidesColor) => set({ guidesColor }),
+  setGlobalGuidesColor: (globalGuidesColor) => set({ globalGuidesColor }),
+  setGridColor: (gridColor) => set({ gridColor }),
+  setGridType: (gridType) => set({ gridType }),
+  setGridGapX: (gridGapX) => set({ gridGapX }),
+  setGridGapY: (gridGapY) => set({ gridGapY }),
+  setGridSubdivision: (gridSubdivision) => set({ gridSubdivision }),
+  setInterpolation: (interpolation) => set({ interpolation }),
+  colorMode: 'rgb',
+  setColorMode: (colorMode) => set({ colorMode }),
+  bitDepth: 8,
+  setBitDepth: (bitDepth) => set({ bitDepth }),
 
   addDocument: (name, size, initialState) => set((state) => {
     const currentDocIndex = state.documents.findIndex(d => d.id === state.activeDocumentId);

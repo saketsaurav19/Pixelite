@@ -19,7 +19,7 @@ const storage = localforage.createInstance({
   description: 'Stores recent project states'
 });
 
-const MAX_PROJECTS = 3;
+const MAX_PROJECTS = 5;
 const MAX_STORAGE_PERCENTAGE = 0.9;
 
 /**

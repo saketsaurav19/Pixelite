@@ -27,6 +27,7 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
   const brushSize = useStore(state => state.brushSize);
   const brushColor = useStore(state => state.brushColor);
   const layers = useStore(state => state.layers);
+  const zoom = useStore(state => state.zoom || 1);
   const textAlign = useStore(state => state.textAlign);
   const textFontWeight = useStore(state => state.textFontWeight);
   const textFontStyle = useStore(state => state.textFontStyle);
@@ -35,6 +36,10 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
   const activeLayer = textEditor?.layerId ? findLayerById(layers, textEditor.layerId) : null;
   const hasCustomFont = !!activeLayer?.fontChecksum;
   const editorFamily = activeLayer?.fontFamily || defaultFontFamily;
+
+  // A PDF-imported layer with runs: the VectorTextLayer shows the live text during editing.
+  // We only need the textarea for keystroke capture — make it invisible but focusable.
+  const isPdfRunLayer = !!(activeLayer?.importedFromPdf && activeLayer?.runs && activeLayer.runs.length > 0);
 
   React.useEffect(() => {
     if (textEditor && editorFamily && !hasCustomFont) {
@@ -49,17 +54,22 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
   const cleanFamily = activeLayer?.fontFamily || '';
 
   const editorFontFamily = hasCustomFont
-    ? `"${customFontKey}", "${cleanFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
-    : `"${editorFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`;
+    ? `"${customFontKey}", "${cleanFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
+    : `"${editorFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`;
 
-  const fs = brushSize * 2;
+  // Use the layer's actual font size (in screen pixels, scaled by zoom), or fall back to tool brush size.
+  const fs = activeLayer ? (activeLayer.fontSize || 16) * zoom : brushSize * 2;
   const lines = textEditor.value.split('\n');
   const padding = 10;
 
   let width = 100;
   let height = 40;
 
-  if (isVertical) {
+  if (isPdfRunLayer && activeLayer) {
+    // Size the invisible capture textarea to cover the entire layer bounds
+    width = (activeLayer.width || 200) * zoom;
+    height = Math.max(40, (activeLayer.height || 40) * zoom);
+  } else if (isVertical) {
     let maxLineLength = 1;
     lines.forEach(line => {
       if (line.length > maxLineLength) maxLineLength = line.length;
@@ -104,15 +114,33 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
     });
   };
 
+  // Commit on Enter (but allow Shift+Enter for newlines in non-pdf layers)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelText();
+    }
+    if (e.key === 'Enter' && !e.shiftKey && isPdfRunLayer) {
+      e.preventDefault();
+      commitText();
+    }
+  };
+
   return (
     <>
+      {/* 
+        Keystroke-capture textarea.
+        - For PDF-run layers: fully invisible (opacity 0, transparent bg/border/text).
+          The VectorTextLayer renders the live text visually during editing.
+        - For regular text layers: visible styled textarea.
+      */}
       <textarea
         ref={hiddenTextInputRef}
         className="text-editor-input"
         autoFocus
         style={{
           position: 'absolute',
-          left: textEditor.x - padding,
+          left: textEditor.x - (isPdfRunLayer ? 0 : padding),
           top: textEditor.y,
           width: width,
           height: height,
@@ -120,18 +148,25 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
           fontFamily: editorFontFamily,
           fontWeight: activeLayer?.fontWeight || textFontWeight || 'normal',
           fontStyle: activeLayer?.fontStyle || textFontStyle || 'normal',
-          color: activeLayer?.color || brushColor,
-          caretColor: activeLayer?.color || brushColor,
+          // For PDF-run layers: invisible but accessible for keyboard capture
+          color: isPdfRunLayer ? 'transparent' : (activeLayer?.color || brushColor),
+          caretColor: isPdfRunLayer ? 'transparent' : (activeLayer?.color || brushColor),
+          background: isPdfRunLayer ? 'transparent' : undefined,
+          border: isPdfRunLayer ? 'none' : undefined,
+          outline: isPdfRunLayer ? 'none' : undefined,
+          resize: 'none' as const,
           textAlign: activeLayer?.textAlign || textAlign || 'left',
-          lineHeight: 1.2,
-          padding: `${padding}px`,
+          lineHeight: 1,
+          padding: isPdfRunLayer ? '0' : `${padding}px`,
           boxSizing: 'border-box',
           writingMode: isVertical ? 'vertical-rl' : 'horizontal-tb',
           zIndex: Z_INDEX.textEditorInput,
-          whiteSpace: 'pre'
+          whiteSpace: 'pre',
+          overflow: 'hidden',
         }}
         value={textEditor.value}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="sentences"
@@ -152,7 +187,8 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
           top: 0, left: 0,
           width: '100%', height: '100%',
           opacity: 1,
-          zIndex: Z_INDEX.systemAlert, // Render above everything while typing
+          // Only show draft canvas for non-PDF layers; PDF layers use VectorTextLayer for live preview
+          zIndex: isPdfRunLayer ? -1 : Z_INDEX.systemAlert,
           mixBlendMode: 'normal',
           pointerEvents: 'none'
         }}
@@ -193,4 +229,3 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
     </>
   );
 };
-

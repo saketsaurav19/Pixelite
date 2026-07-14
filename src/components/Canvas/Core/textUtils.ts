@@ -64,6 +64,7 @@ export const commitText = (
           textContent: value,
           width: size.width,
           height: size.height,
+          isModified: true,
           name: value.trim().length > 20 ? value.trim().substring(0, 20) + '...' : value.trim()
         });
         recordHistory('Edit Text Layer');

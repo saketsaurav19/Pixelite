@@ -7,13 +7,84 @@ const generateThumbnail = (
   documentSize: { w: number; h: number },
   canvasRefs: CanvasRefs,
   updateLayer: (id: string, updates: Partial<Layer>) => void,
-  lastContentRef: React.MutableRefObject<{ [key: string]: string }>
+  lastContentRef: React.MutableRefObject<{ [key: string]: string }>,
+  parentArtboard?: Layer
 ): void => {
-  // If it's a group, recursively generate thumbnails for children
+  // If it's a group or artboard, recursively generate thumbnails for children
   if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
     layer.children.forEach(child => {
-      generateThumbnail(child, documentSize, canvasRefs, updateLayer, lastContentRef);
+      generateThumbnail(
+        child,
+        documentSize,
+        canvasRefs,
+        updateLayer,
+        lastContentRef,
+        layer.type === 'artboard' ? layer : parentArtboard
+      );
     });
+
+    // Also composite children onto the group/artboard's own thumbnail
+    const refW = layer.width || documentSize.w;
+    const refH = layer.height || documentSize.h;
+    const aspect = refW / refH;
+    const maxSize = 48;
+    let thumbW, thumbH;
+    if (aspect > 1) {
+      thumbW = maxSize;
+      thumbH = maxSize / aspect;
+    } else {
+      thumbH = maxSize;
+      thumbW = maxSize * aspect;
+    }
+
+    const { thumbnail, ...content } = layer;
+    const contentStr = JSON.stringify(content);
+    if (lastContentRef.current[layer.id] !== contentStr) {
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = thumbW;
+      thumbCanvas.height = thumbH;
+      const thumbCtx = thumbCanvas.getContext('2d');
+      if (thumbCtx) {
+        if (layer.type === 'artboard') {
+          thumbCtx.fillStyle = layer.backgroundTransparent ? 'transparent' : (layer.backgroundColor || '#ffffff');
+          thumbCtx.fillRect(0, 0, thumbW, thumbH);
+        }
+
+        const scaleX = thumbW / refW;
+        const scaleY = thumbH / refH;
+
+        const drawChildOntoThumb = (node: Layer) => {
+          if (!node.visible) return;
+          if (node.type === 'group' || node.type === 'artboard') {
+            if (node.children) {
+              [...node.children].reverse().forEach(drawChildOntoThumb);
+            }
+          } else {
+            const canvas = canvasRefs.current[node.id];
+            if (canvas) {
+              const nodeX = node.position?.x || 0;
+              const nodeY = node.position?.y || 0;
+              const nodeW = node.width || (canvas.width / (window.devicePixelRatio || 1));
+              const nodeH = node.height || (canvas.height / (window.devicePixelRatio || 1));
+
+              thumbCtx.drawImage(
+                canvas,
+                0, 0, canvas.width, canvas.height,
+                nodeX * scaleX, nodeY * scaleY,
+                nodeW * scaleX, nodeH * scaleY
+              );
+            }
+          }
+        };
+
+        // Render children bottom-to-top (reverse the list order since index 0 is top)
+        const childrenCopy = [...layer.children].reverse();
+        childrenCopy.forEach(drawChildOntoThumb);
+
+        updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
+        lastContentRef.current[layer.id] = contentStr;
+      }
+    }
     return;
   }
 
@@ -176,27 +247,33 @@ const generateThumbnail = (
     } else {
       const canvas = canvasRefs.current[layer.id];
       if (canvas) {
-        const docAspect = documentSize.w / documentSize.h;
+        const refW = parentArtboard ? (parentArtboard.width || documentSize.w) : documentSize.w;
+        const refH = parentArtboard ? (parentArtboard.height || documentSize.h) : documentSize.h;
+        const aspect = refW / refH;
+
         let thumbW, thumbH;
-        if (docAspect > 1) {
+        if (aspect > 1) {
           thumbW = maxSize;
-          thumbH = maxSize / docAspect;
+          thumbH = maxSize / aspect;
         } else {
           thumbH = maxSize;
-          thumbW = maxSize * docAspect;
+          thumbW = maxSize * aspect;
         }
 
         thumbCanvas.width = thumbW;
         thumbCanvas.height = thumbH;
         const thumbCtx = thumbCanvas.getContext('2d');
         if (thumbCtx) {
-          const scaleX = thumbW / documentSize.w;
-          const scaleY = thumbH / documentSize.h;
+          const scaleX = thumbW / refW;
+          const scaleY = thumbH / refH;
+          const layerW = layer.width || (canvas.width / (window.devicePixelRatio || 1));
+          const layerH = layer.height || (canvas.height / (window.devicePixelRatio || 1));
+
           thumbCtx.drawImage(
             canvas,
             0, 0, canvas.width, canvas.height,
             layer.position.x * scaleX, layer.position.y * scaleY,
-            thumbW, thumbH
+            layerW * scaleX, layerH * scaleY
           );
           updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
           lastContentRef.current[layer.id] = contentStr;

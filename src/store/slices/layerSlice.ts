@@ -90,8 +90,15 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
 
   updateLayer: (id, updates) => set((state) => {
     const targetLayer = findLayerById(state.layers, id);
+    let finalUpdates = updates;
+    if (targetLayer && targetLayer.importedFromPdf) {
+      const isVisualUpdate = Object.keys(updates).some(key => key !== 'importedFromPdf' && key !== 'isModified' && key !== 'thumbnail');
+      if (isVisualUpdate) {
+        finalUpdates = { ...updates, isModified: true };
+      }
+    }
     let newLayers = state.layers;
-    if (targetLayer && targetLayer.type === 'artboard' && updates.locked !== undefined) {
+    if (targetLayer && targetLayer.type === 'artboard' && finalUpdates.locked !== undefined) {
       const applyLockRecursively = (node: Layer, lockedVal: boolean): Layer => {
         const nextNode = { ...node, locked: lockedVal };
         if (nextNode.children) {
@@ -99,10 +106,10 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
         }
         return nextNode;
       };
-      const updatedArtboard = applyLockRecursively(targetLayer, updates.locked);
+      const updatedArtboard = applyLockRecursively(targetLayer, finalUpdates.locked);
       newLayers = updateNode(state.layers, id, updatedArtboard);
     } else {
-      newLayers = updateNode(state.layers, id, updates);
+      newLayers = updateNode(state.layers, id, finalUpdates);
     }
     return { layers: newLayers };
   }),

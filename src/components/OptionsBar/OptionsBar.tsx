@@ -189,7 +189,8 @@ const OptionsBar: React.FC = () => {
     lightingDepthScale, showLightSource, updateLighting,
     documentSize,
     transformMode, setTransformMode, layers,
-    setIsWarpDialogOpen
+    setIsWarpDialogOpen,
+    brushPresets, customShapes, savedPatterns
   } = useStore();
 
   const [googleFonts, setGoogleFonts] = React.useState<any[]>([]);
@@ -1037,6 +1038,27 @@ const OptionsBar: React.FC = () => {
           />
         </div>
       )}
+      {activeTool === 'pattern_stamp' && savedPatterns.length > 0 && (
+        <div className="option-control">
+          <label>Saved</label>
+          <select
+            className="preset-select"
+            onChange={(e) => {
+              const pattern = savedPatterns.find(p => p.id === e.target.value);
+              if (pattern) {
+                useStore.getState().setCustomPattern(pattern.dataUrl);
+              }
+              e.target.value = '';
+            }}
+            value=""
+          >
+            <option value="" disabled>Select pattern...</option>
+            {savedPatterns.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       {activeTool === 'marquee' && selectionRect && (
         <div className="option-control">
           <button
@@ -1057,6 +1079,27 @@ const OptionsBar: React.FC = () => {
             onChange={(e) => setPolygonSides(parseInt(e.target.value))}
           />
           <EditableValue value={polygonSides} unit="" onCommit={setPolygonSides} />
+        </div>
+      )}
+      {activeTool === 'custom_shape' && customShapes.length > 0 && (
+        <div className="option-control">
+          <label>Shape</label>
+          <select
+            className="preset-select"
+            onChange={(e) => {
+              const shape = customShapes.find(s => s.id === e.target.value);
+              if (shape) {
+                window.dispatchEvent(new CustomEvent('apply-custom-shape', { detail: shape.shapeData }));
+              }
+              e.target.value = '';
+            }}
+            value=""
+          >
+            <option value="" disabled>Select shape...</option>
+            {customShapes.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
         </div>
       )}
       {activeTool === 'custom_shape' && (
@@ -1466,6 +1509,30 @@ const OptionsBar: React.FC = () => {
           </div>
           <div className="options-divider" />
         </>
+      )}
+      {brushLikeTools.includes(activeTool) && brushPresets.length > 0 && (
+        <div className="option-control">
+          <label>Preset</label>
+          <select
+            className="preset-select"
+            onChange={(e) => {
+              const preset = brushPresets.find(p => p.id === e.target.value);
+              if (preset) {
+                setBrushSize(preset.size);
+                setBrushColor(preset.color);
+                setToolHardness(preset.hardness);
+                setPrimaryOpacity(preset.opacity);
+              }
+              e.target.value = '';
+            }}
+            value=""
+          >
+            <option value="" disabled>Select preset...</option>
+            {brushPresets.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
       )}
       {(brushLikeTools.includes(activeTool) || textTools.includes(activeTool) || shapeTools.includes(activeTool) || activeTool === 'quick_selection' || detailTools.includes(activeTool) || penTools.includes(activeTool)) && (
         <>

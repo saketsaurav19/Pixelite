@@ -37,6 +37,7 @@ interface MenuBarProps {
   onInverseSelection?: () => void;
   onNewDocument?: () => void;
   onExport?: (format: string) => void;
+  onOpenExportDialog?: (format?: string) => void;
   onCut?: () => void;
   onCopy?: () => void;
   onPaste?: () => void;
@@ -58,6 +59,12 @@ interface MenuBarProps {
   onTakeSnapshot?: () => void;
   onPrint?: () => void;
   onScript?: () => void;
+  onDefineBrush?: () => void;
+  onDefinePattern?: () => void;
+  onDefineCustomShape?: () => void;
+  onAssignProfile?: (profile: string) => void;
+  onConvertToProfile?: (profile: string) => void;
+  onPreferences?: () => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
   onSaveToStorage?: (provider: string) => void;
@@ -81,6 +88,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   onInverseSelection,
   onNewDocument,
   onExport,
+  onOpenExportDialog,
   onCut,
   onCopy,
   onPaste,
@@ -102,6 +110,12 @@ const MenuBar: React.FC<MenuBarProps> = ({
   onTakeSnapshot,
   onPrint,
   onScript,
+  onDefineBrush,
+  onDefinePattern,
+  onDefineCustomShape,
+  onAssignProfile,
+  onConvertToProfile,
+  onPreferences,
   isMobileOpen,
   onCloseMobile,
   onSaveToStorage,
@@ -144,6 +158,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'From Storage...', shortcut: 'Alt+Ctrl+O' },
             { label: 'Open from URL...', action: onOpenURL },
             { label: 'Take a picture...', action: onTakeSnapshot },
+            { label: 'Recent Projects', action: () => useStore.getState().setIsOpenRecentDialogOpen(true) },
             { label: 'PSD Templates...' },
             { label: 'Import from Figma (PSD/SVG)...' },
             { label: 'Sample files' },
@@ -152,13 +167,13 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Open and Place...', action: onPlaceFile },
         { label: 'Open Recent', disabled: true },
         { divider: true },
-        {
-          label: 'Share',
-          subItems: [
-            { label: 'PNG', action: () => onExport?.('png') },
-            { label: 'JPG', action: () => onExport?.('jpg') },
-          ]
-        },
+          {
+            label: 'Share',
+            subItems: [
+              { label: 'PNG', action: () => onOpenExportDialog?.('png') },
+              { label: 'JPG', action: () => onOpenExportDialog?.('jpg') },
+            ]
+          },
         { divider: true },
         { label: 'Save', shortcut: 'Ctrl+S', action: () => onSave?.(false) },
         { label: 'Save as PSD', action: () => onExport?.('psd') },
@@ -183,17 +198,19 @@ const MenuBar: React.FC<MenuBarProps> = ({
             },
           ]
         },
+        { label: 'Export...', action: () => onOpenExportDialog?.() },
+        { divider: true },
         {
           label: 'Export as',
           subItems: [
-            { label: 'PNG', action: () => onExport?.('png') },
-            { label: 'JPG', action: () => onExport?.('jpg') },
-            { label: 'SVG', action: () => onExport?.('svg') },
-            { label: 'WEBP', action: () => onExport?.('webp') },
-            { label: 'TIFF', action: () => onExport?.('tiff') },
-            { label: 'BMP', action: () => onExport?.('bmp') },
-            { label: 'GIF', action: () => onExport?.('gif') },
-            { label: 'PDF', action: () => onExport?.('pdf') },
+            { label: 'PNG', action: () => onOpenExportDialog?.('png') },
+            { label: 'JPG', action: () => onOpenExportDialog?.('jpg') },
+            { label: 'SVG', action: () => onOpenExportDialog?.('svg') },
+            { label: 'WEBP', action: () => onOpenExportDialog?.('webp') },
+            { label: 'TIFF', action: () => onOpenExportDialog?.('tiff') },
+            { label: 'BMP', action: () => onOpenExportDialog?.('bmp') },
+            { label: 'GIF', action: () => onOpenExportDialog?.('gif') },
+            { label: 'PDF', action: () => onOpenExportDialog?.('pdf') },
             { label: 'More...' },
           ]
         },
@@ -253,13 +270,38 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Define New',
           subItems: [
-            { label: 'Brush' },
-            { label: 'Pattern' },
-            { label: 'Custom Shape' },
+            { label: 'Brush', action: onDefineBrush },
+            { label: 'Pattern', action: onDefinePattern },
+            { label: 'Custom Shape', action: onDefineCustomShape },
           ]
         },
         { divider: true },
-        { label: 'Preferences...', shortcut: 'Ctrl+K' },
+        {
+          label: 'Assign Profile',
+          subItems: [
+            { label: 'sRGB IEC61966-2.1', action: () => onAssignProfile?.('sRGB IEC61966-2.1') },
+            { label: 'Adobe RGB (1998)', action: () => onAssignProfile?.('Adobe RGB (1998)') },
+            { label: 'Display P3', action: () => onAssignProfile?.('Display P3') },
+            { label: 'ProPhoto RGB', action: () => onAssignProfile?.('ProPhoto RGB') },
+            { label: 'Apple RGB', action: () => onAssignProfile?.('Apple RGB') },
+            { label: 'ColorMatch RGB', action: () => onAssignProfile?.('ColorMatch RGB') },
+            { label: 'Wide Gamut RGB', action: () => onAssignProfile?.('Wide Gamut RGB') },
+          ]
+        },
+        {
+          label: 'Convert to Profile',
+          subItems: [
+            { label: 'sRGB IEC61966-2.1', action: () => onConvertToProfile?.('sRGB IEC61966-2.1') },
+            { label: 'Adobe RGB (1998)', action: () => onConvertToProfile?.('Adobe RGB (1998)') },
+            { label: 'Display P3', action: () => onConvertToProfile?.('Display P3') },
+            { label: 'ProPhoto RGB', action: () => onConvertToProfile?.('ProPhoto RGB') },
+            { label: 'Apple RGB', action: () => onConvertToProfile?.('Apple RGB') },
+            { label: 'ColorMatch RGB', action: () => onConvertToProfile?.('ColorMatch RGB') },
+            { label: 'Wide Gamut RGB', action: () => onConvertToProfile?.('Wide Gamut RGB') },
+          ]
+        },
+        { divider: true },
+        { label: 'Preferences...', shortcut: 'Ctrl+K', action: onPreferences },
       ]
     },
     {

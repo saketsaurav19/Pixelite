@@ -714,6 +714,22 @@ flex-direction: column;
   user-select: none;
 }
 
+.dialog-overlay.fill-layer-overlay {
+  background: transparent;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+.dialog-overlay.fill-layer-overlay .dialog-content {
+  pointer-events: auto;
+  box-shadow: 0 0.625rem 2.5rem rgba(0, 0, 0, 0.65);
+}
+
+.dialog-overlay.fill-layer-overlay .draggable-header {
+  cursor: move;
+  user-select: none;
+}
+
 /* ==========================================================================
    New Adjustments Styles (Levels, Curves, Color Balance, Exposure, Vibrance)
    ========================================================================== */

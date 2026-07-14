@@ -46,6 +46,11 @@ export interface BaseLayer {
   type?: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'layer' | 'artboard' | 'table' | 'adjustment';
   blendMode: BlendMode;
   position?: { x: number; y: number };
+  importedFromPdf?: boolean;
+  isModified?: boolean;
+  isPdfBackground?: boolean;
+  pdfData?: string;
+  pdfPageIndex?: number;
 }
 
 export interface AnnotationData {
@@ -71,6 +76,8 @@ export type Layer = BaseLayer & {
   children?: Layer[];
   collapsed?: boolean;
   isNew?: boolean;
+  /** For PDF background layers in vector mode: raw SVG markup string */
+  svgMarkup?: string;
   adjustmentData?: {
     type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance';
     settings: {
@@ -226,6 +233,16 @@ export interface DocumentSpecificState {
   showRulers: boolean;
   showGrid: boolean;
   showGuides: boolean;
+  guidesColor: string;
+  globalGuidesColor: string;
+  gridColor: string;
+  gridType: 'square' | 'horizontal' | 'vertical' | 'cross';
+  gridGapX: number;
+  gridGapY: number;
+  gridSubdivision: number;
+  interpolation: 'nearest-neighbor' | 'bilinear' | 'bicubic';
+  colorMode: 'rgb' | 'grayscale';
+  bitDepth: 8 | 16 | 32;
   lights: Light[];
   isLightingEnabled: boolean;
   lightingQuality: 'low' | 'medium' | 'high';
@@ -303,7 +320,13 @@ export interface EditorState extends DocumentSpecificState {
   isFileInfoDialogOpen: boolean;
   isWarpDialogOpen: boolean;
   isOpenRecentDialogOpen: boolean;
+  isPreferencesDialogOpen: boolean;
   isOpenFromCloudDialogOpen: boolean;
+  quickMaskColor: string;
+  zoomScroll: boolean;
+  glassMenus: boolean;
+  cursorOffset: number;
+  dezgoApiKey: string;
   isHelpDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
@@ -346,8 +369,40 @@ export interface EditorState extends DocumentSpecificState {
     documentBounds: boolean;
   };
 
+  // Panel collapse & tab states (persisted)
+  topDockCollapsed: boolean;
+  adjustmentsCollapsed: boolean;
+  bottomDockCollapsed: boolean;
+  topDockTab: 'history' | 'swatches';
+  bottomDockTab: 'layers' | 'channels' | 'paths';
+  mobileActivePanel: 'layers' | 'adjustments' | 'history';
+
   // Actions - These will be defined in slices
   [key: string]: any;
+}
+
+export interface BrushPreset {
+  id: string;
+  name: string;
+  size: number;
+  color: string;
+  hardness: number;
+  opacity: number;
+}
+
+export interface SavedPattern {
+  id: string;
+  name: string;
+  dataUrl: string;
+}
+
+export interface CustomShapePreset {
+  id: string;
+  name: string;
+  shapeData: {
+    points: { x: number; y: number }[];
+    closed: boolean;
+  };
 }
 
 export interface Alert {

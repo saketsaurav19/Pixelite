@@ -56,7 +56,7 @@ const getRulerSettings = (rulerUnit: 'px' | 'in' | 'cm', zoom: number) => {
 };
 
 export const GlobalRulers: React.FC = () => {
-  const { showRulers, rulerUnit, zoom, canvasOffset, documentSize, showGuides } = useStore();
+  const { showRulers, rulerUnit, zoom, canvasOffset, documentSize, showGuides, guidesColor, globalGuidesColor } = useStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const topGuidesRef = useRef<any>(null);
   const leftGuidesRef = useRef<any>(null);
@@ -87,17 +87,26 @@ export const GlobalRulers: React.FC = () => {
     if (leftGuidesRef.current) leftGuidesRef.current.resize();
   }, [zoom, canvasOffset, documentSize, rulerUnit, viewportWidth, viewportHeight]);
 
+  useEffect(() => {
+    if (!showRulers) return;
+    const { calculatedZoom: cz } = getRulerSettings(rulerUnit, zoom);
+    const dsx = (viewportWidth / 2) + (canvasOffset.x * zoom) - (documentSize.w * zoom / 2);
+    const dsy = (viewportHeight / 2) + (canvasOffset.y * zoom) - (documentSize.h * zoom / 2);
+    const hsp = -(dsx - 40) / cz;
+    const vsp = -(dsy - 40) / cz;
+    if (topGuidesRef.current) topGuidesRef.current.scrollGuides(vsp);
+    if (leftGuidesRef.current) leftGuidesRef.current.scrollGuides(hsp);
+  }, [showRulers, zoom, canvasOffset.x, canvasOffset.y, documentSize.w, documentSize.h, rulerUnit, viewportWidth, viewportHeight]);
+
   if (!showRulers) return null;
 
   const { calculatedZoom, unit, segment } = getRulerSettings(rulerUnit, zoom);
 
-  // docStartScreen calculation:
-  // Relative to top ruler container, document starts at docStartScreenX - 20
   const docStartScreenX = (viewportWidth / 2) + (canvasOffset.x * zoom) - (documentSize.w * zoom / 2);
   const docStartScreenY = (viewportHeight / 2) + (canvasOffset.y * zoom) - (documentSize.h * zoom / 2);
 
-  const horizontalScrollPos = -(docStartScreenX - 20) / calculatedZoom;
-  const verticalScrollPos = -(docStartScreenY - 20) / calculatedZoom;
+  const horizontalScrollPos = -(docStartScreenX - 40) / calculatedZoom;
+  const verticalScrollPos = -(docStartScreenY - 40) / calculatedZoom;
 
   const textFormat = (val: number) => {
     const rounded = Math.round(val * 10000) / 10000;
@@ -123,8 +132,8 @@ export const GlobalRulers: React.FC = () => {
           textFormat={textFormat}
           displayDragPos={true}
           displayGuidePos={true}
-          guideStyle={{ backgroundColor: '#00ffff' }}
-          dragGuideStyle={{ backgroundColor: '#00ffff' }}
+          guideStyle={{ backgroundColor: guidesColor }}
+          dragGuideStyle={{ backgroundColor: globalGuidesColor }}
           style={{ width: '100%', height: '100%' }}
         />
       </div>
@@ -146,8 +155,8 @@ export const GlobalRulers: React.FC = () => {
           textFormat={textFormat}
           displayDragPos={true}
           displayGuidePos={true}
-          guideStyle={{ backgroundColor: '#00ffff' }}
-          dragGuideStyle={{ backgroundColor: '#00ffff' }}
+          guideStyle={{ backgroundColor: guidesColor }}
+          dragGuideStyle={{ backgroundColor: globalGuidesColor }}
           style={{ width: '100%', height: '100%' }}
         />
       </div>

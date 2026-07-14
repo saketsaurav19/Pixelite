@@ -33,6 +33,9 @@ const CameraDialog = React.lazy(() => import('./components/Dialogs/CameraDialog'
 const MobileCameraDialog = React.lazy(() => import('./components/Dialogs/MobileCameraDialog').then(m => ({ default: m.MobileCameraDialog })));
 const AdjustmentDialog = React.lazy(() => import('./components/Dialogs/AdjustmentDialog').then(m => ({ default: m.AdjustmentDialog })));
 const WarpDialog = React.lazy(() => import('./components/Dialogs/WarpDialog').then(m => ({ default: m.WarpDialog })));
+const OpenRecentDialog = React.lazy(() => import('./components/Dialogs/OpenRecentDialog').then(m => ({ default: m.OpenRecentDialog })));
+const PreferencesDialog = React.lazy(() => import('./components/Dialogs/PreferencesDialog').then(m => ({ default: m.PreferencesDialog })));
+const FillLayerDialog = React.lazy(() => import('./components/Dialogs/FillLayerDialog').then(m => ({ default: m.FillLayerDialog })));
 
 const BACKGROUND_REMOVAL_REMOTE_PUBLIC_PATH =
   'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
@@ -77,7 +80,8 @@ const App: React.FC = () => {
 
   // RECURSIVE LAYER COMPONENT
   const renderLayerTree = (layerList: any[], depth = 0): React.ReactNode => {
-    return layerList.map((layer) => (
+    return layerList
+      .map((layer) => (
       <div key={layer.id} style={{ marginLeft: depth * 12 + 'px' }}>
         <div
           className={`layer-node ${draggedIndex === layer.id ? 'dragging' : ''}`}
@@ -580,9 +584,6 @@ const App: React.FC = () => {
   const [isPanelsOpen, setIsPanelsOpen] = React.useState(false);
   const [isFillPickerOpen, setIsFillPickerOpen] = React.useState(false);
 
-
-  const [fillColor, setFillColor] = React.useState('#ffffff');
-  const [fillOpacity, setFillOpacity] = React.useState(1);
   const [draggedIndex, setDraggedIndex] = React.useState<string | null>(null);
   const [isEditingOpacity, setIsEditingOpacity] = React.useState(false);
   const [tempOpacityValue, setTempOpacityValue] = React.useState('');
@@ -591,12 +592,19 @@ const App: React.FC = () => {
 
   const [saveModal, setSaveModal] = React.useState<{ type: 'cloud' | 'public' | null; provider?: string }>({ type: null });
   const [isLightingProcessing, setIsLightingProcessing] = React.useState(false);
-  const [topDockTab, setTopDockTab] = React.useState<'history' | 'swatches'>('history');
-  const [bottomDockTab, setBottomDockTab] = React.useState<'layers' | 'channels' | 'paths'>('layers');
-  const [mobileActivePanel, setMobileActivePanel] = React.useState<'layers' | 'adjustments' | 'history'>('layers');
-  const [topDockCollapsed, setTopDockCollapsed] = React.useState(false);
-  const [adjustmentsCollapsed, setAdjustmentsCollapsed] = React.useState(false);
-  const [bottomDockCollapsed, setBottomDockCollapsed] = React.useState(false);
+
+  const topDockTab = useStore(s => s.topDockTab);
+  const bottomDockTab = useStore(s => s.bottomDockTab);
+  const mobileActivePanel = useStore(s => s.mobileActivePanel);
+  const topDockCollapsed = useStore(s => s.topDockCollapsed);
+  const adjustmentsCollapsed = useStore(s => s.adjustmentsCollapsed);
+  const bottomDockCollapsed = useStore(s => s.bottomDockCollapsed);
+  const setTopDockTab = useStore(s => s.setTopDockTab);
+  const setBottomDockTab = useStore(s => s.setBottomDockTab);
+  const setMobileActivePanel = useStore(s => s.setMobileActivePanel);
+  const setTopDockCollapsed = useStore(s => s.setTopDockCollapsed);
+  const setAdjustmentsCollapsed = useStore(s => s.setAdjustmentsCollapsed);
+  const setBottomDockCollapsed = useStore(s => s.setBottomDockCollapsed);
 
 
   const handleFade = () => { alert("Fade action triggered (Placeholder)"); };
@@ -619,7 +627,7 @@ const App: React.FC = () => {
     }
     setActiveTool('transform');
   };
-  const handlePreferences = () => { alert("Preferences action triggered (Placeholder)"); };
+  const handlePreferences = () => { useStore.getState().setIsPreferencesDialogOpen(true); };
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1781,7 +1789,7 @@ const App: React.FC = () => {
 
   const handleCopy = async () => {
     if (!activeLayerId) return;
-    const activeLayer = layers.find(l => l.id === activeLayerId);
+    const activeLayer = findLayerById(layers, activeLayerId);
     if (!activeLayer) return;
 
     setClipboard({ ...activeLayer, id: undefined, name: `${activeLayer.name} Copy` });
@@ -1836,7 +1844,7 @@ const App: React.FC = () => {
 
   const handleCut = async () => {
     if (!activeLayerId) return;
-    const activeLayer = layers.find(l => l.id === activeLayerId);
+    const activeLayer = findLayerById(layers, activeLayerId);
     if (!activeLayer) return;
 
     await handleCopy();
@@ -2337,7 +2345,9 @@ const App: React.FC = () => {
           <MobileCameraDialog />
           <AdjustmentDialog />
           <WarpDialog />
-        </React.Suspense>
+        <OpenRecentDialog />
+        <PreferencesDialog />
+      </React.Suspense>
         <AlertContainer />
       </div>
     );
@@ -2440,6 +2450,66 @@ const App: React.FC = () => {
           onTakeSnapshot={handleTakeSnapshot}
           onPrint={handlePrint}
           onScript={handleScript}
+          onPreferences={handlePreferences}
+          onOpenExportDialog={(format) => {
+            const store = useStore.getState();
+            if (format) {
+              const mimeMap: Record<string, any> = {
+                png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+                webp: 'image/webp', svg: 'image/svg+xml',
+                gif: 'image/gif', pdf: 'application/pdf',
+                tiff: 'image/tiff', bmp: 'image/bmp',
+              };
+              store.setExportFormat(mimeMap[format] || 'image/png');
+            }
+            store.setIsExportDialogOpen(true);
+          }}
+          onDefineBrush={() => {
+            const name = prompt('Brush Preset Name:');
+            if (!name) return;
+            const state = useStore.getState();
+            state.addBrushPreset({
+              name,
+              size: state.brushSize,
+              color: state.brushColor,
+              hardness: state.toolHardness,
+              opacity: state.primaryOpacity,
+            });
+          }}
+          onDefinePattern={() => {
+            const state = useStore.getState();
+            if (!state.selectionRect) {
+              alert('Please make a selection first to define a pattern.');
+              return;
+            }
+            window.dispatchEvent(new CustomEvent('define-pattern'));
+            const patternDataUrl = useStore.getState().customPattern;
+            if (patternDataUrl) {
+              const name = prompt('Pattern Name:');
+              if (name) {
+                state.addSavedPattern({ name, dataUrl: patternDataUrl });
+              }
+            }
+          }}
+          onDefineCustomShape={() => {
+            const state = useStore.getState();
+            const layer = state.layers.find(l => l.id === state.activeLayerId);
+            if (!layer || layer.type !== 'shape' || !layer.shapeData?.points) {
+              alert('Please select a shape layer first to define a custom shape.');
+              return;
+            }
+            const name = prompt('Custom Shape Name:');
+            if (!name) return;
+            state.addCustomShapePreset({
+              name,
+              shapeData: {
+                points: layer.shapeData.points,
+                closed: layer.shapeData.closed ?? true,
+              },
+            });
+          }}
+          onAssignProfile={(profile) => useStore.getState().setIccProfile(profile)}
+          onConvertToProfile={(profile) => useStore.getState().setIccProfile(profile)}
           onSaveToStorage={(provider) => setSaveModal({ type: 'cloud', provider })}
           onSaveToPublic={(service) => setSaveModal({ type: 'public', provider: service })}
         />
@@ -3264,62 +3334,14 @@ const App: React.FC = () => {
         </aside>
       </div>
 
-      {/* Fill Color Picker Modal */}
-      {isFillPickerOpen && (
-        <div className="modal-overlay" onClick={() => setIsFillPickerOpen(false)}>
-          <div className="modal-content color-picker-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Fill Layer</h3>
-              <button className="modal-close-btn" onClick={() => setIsFillPickerOpen(false)}>
-                <LucideIcons.X size={18} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <ColorPicker
-                label="Fill Color"
-                color={fillColor}
-                opacity={fillOpacity}
-                onColorChange={setFillColor}
-                onOpacityChange={setFillOpacity}
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="premium-btn-sm secondary" onClick={() => setIsFillPickerOpen(false)}>Cancel</button>
-              <button className="premium-btn-sm" onClick={() => {
-                if (!activeLayerId) return;
-                const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-                const ctx = canvas?.getContext('2d');
-                if (ctx) {
-                  const { lassoPaths, selectionRect } = useStore.getState();
-                  ctx.save();
-                  ctx.fillStyle = hexToRgba(fillColor, fillOpacity);
-
-                  if (lassoPaths.length > 0) {
-                    ctx.beginPath();
-                    lassoPaths.forEach(path => {
-                      if (path.length < 3) return;
-                      ctx.moveTo(path[0].x, path[0].y);
-                      path.forEach(p => ctx.lineTo(p.x, p.y));
-                      ctx.closePath();
-                    });
-                    ctx.clip('evenodd');
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                  } else if (selectionRect) {
-                    ctx.fillRect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
-                  } else {
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                  }
-
-                  ctx.restore();
-                  updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
-                  recordHistory('Fill Layer');
-                  setIsFillPickerOpen(false);
-                }
-              }}>Fill Layer</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <React.Suspense fallback={null}>
+        {isFillPickerOpen && (
+          <FillLayerDialog
+            isOpen={isFillPickerOpen}
+            onClose={() => setIsFillPickerOpen(false)}
+          />
+        )}
+      </React.Suspense>
       <React.Suspense fallback={null}>
         {saveModal.type === 'cloud' && (
           <CloudStorageModal
@@ -3408,11 +3430,12 @@ const App: React.FC = () => {
         <MobileCameraDialog />
         <AdjustmentDialog />
         <WarpDialog />
-      </React.Suspense>
-
-      <AlertContainer />
-    </div>
-  );
-};
+          <OpenRecentDialog />
+          <PreferencesDialog />
+        </React.Suspense>
+        <AlertContainer />
+      </div>
+    );
+  };
 
 export default App;

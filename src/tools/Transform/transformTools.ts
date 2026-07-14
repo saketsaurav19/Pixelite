@@ -113,23 +113,23 @@ const getLayerAtCoords = (
   for (let i = 0; i < layersList.length; i++) {
     const layer = layersList[i];
     if (!layer.visible) continue;
+    if (layer.isPdfBackground) continue;
 
     if (layer.type === 'group' || layer.type === 'artboard') {
       const layerX = (layer.position?.x || 0) + parentOffset.x;
       const layerY = (layer.position?.y || 0) + parentOffset.y;
 
+      if (layer.children) {
+        const found = getLayerAtCoords(layer.children, coords, canvasRefs, { x: layerX, y: layerY });
+        if (found) return found;
+      }
+
       if (layer.type === 'artboard') {
         const w = layer.width || 0;
         const h = layer.height || 0;
-        if (coords.x < layerX || coords.x > layerX + w || coords.y < layerY || coords.y > layerY + h) {
-          continue;
+        if (coords.x >= layerX && coords.x <= layerX + w && coords.y >= layerY && coords.y <= layerY + h) {
+          return layer.id;
         }
-        return layer.id;
-      }
-
-      if (layer.children) {
-        const found = getLayerAtCoords(layer.children, coords, canvasRefs, parentOffset);
-        if (found) return found;
       }
     } else {
       const canvas = canvasRefs?.current?.[layer.id];
@@ -142,12 +142,24 @@ const getLayerAtCoords = (
       const localX = Math.round(coords.x - absX);
       const localY = Math.round(coords.y - absY);
 
-      if (localX >= 0 && localX < canvas.width && localY >= 0 && localY < canvas.height) {
+      // Display dimensions: what the user sees (CSS pixels)
+      const dispW = layer.width || canvas.width;
+      const dispH = layer.height || canvas.height;
+
+      if (localX >= 0 && localX < dispW && localY >= 0 && localY < dispH) {
         if (layer.type === 'text') {
           return layer.id;
         }
+        // Scale from display coordinates to canvas pixel coordinates
+        // Canvas pixel dimensions may differ from display dimensions
+        // (e.g. placed images use native resolution for the canvas)
+        const scaleX = canvas.width / dispW;
+        const scaleY = canvas.height / dispH;
+        const pixelX = Math.round(localX * scaleX);
+        const pixelY = Math.round(localY * scaleY);
+
         try {
-          const imgData = ctx.getImageData(localX, localY, 1, 1);
+          const imgData = ctx.getImageData(pixelX, pixelY, 1, 1);
           if (imgData.data[3] > 10) {
             return layer.id;
           }
@@ -171,7 +183,7 @@ export const transformTools: ToolModule[] = [
     id: 'move',
     start: ({ coords, layers, canvasRefs, setActiveLayer, moveAutoSelect, setIsInteracting, activeLayerId }) => {
       if (setIsInteracting) setIsInteracting(true);
-      
+
       let targetId = activeLayerId;
       if (moveAutoSelect && canvasRefs && setActiveLayer) {
         const targetLayerId = getLayerAtCoords(layers, coords, canvasRefs);
@@ -180,6 +192,8 @@ export const transformTools: ToolModule[] = [
           targetId = targetLayerId;
         }
       }
+
+      toolState._moveTargetId = targetId;
 
       if (targetId) {
         const activeLayer = findLayerById(layers, targetId);
@@ -191,9 +205,10 @@ export const transformTools: ToolModule[] = [
         }
       }
     },
-    move: ({ coords, lastPoint, activeLayerId, layers, updateLayer, isShift, startCoords }) => {
-      if (!lastPoint || !activeLayerId) return;
-      const activeLayer = findLayerById(layers, activeLayerId);
+    move: ({ coords, lastPoint, layers, updateLayer, isShift, startCoords }) => {
+      const targetId = toolState._moveTargetId;
+      if (!lastPoint || !targetId) return;
+      const activeLayer = findLayerById(layers, targetId);
       if (activeLayer && !activeLayer.locked && !activeLayer.lockPosition) {
         let dx = coords.x - lastPoint.x;
         let dy = coords.y - lastPoint.y;
@@ -229,11 +244,12 @@ export const transformTools: ToolModule[] = [
           updates.warpGrid = activeLayer.warpGrid.map((p: any) => ({ x: p.x + dx, y: p.y + dy }));
         }
 
-        updateLayer(activeLayerId, updates);
+        updateLayer(targetId, updates);
       }
     },
     end: () => {
       delete toolState._moveStartLayerPos;
+      delete toolState._moveTargetId;
     }
   },
 

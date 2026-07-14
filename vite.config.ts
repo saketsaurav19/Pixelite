@@ -59,6 +59,7 @@ export default defineConfig({
     })
   ],
   optimizeDeps: {
+    include: ['@embedpdf/pdfium'],
     exclude: ['harfbuzzjs']
   },
   base: '/',

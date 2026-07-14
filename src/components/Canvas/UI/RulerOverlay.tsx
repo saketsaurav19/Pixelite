@@ -26,10 +26,10 @@ export const RulerOverlay: React.FC<RulerOverlayProps> = ({
                 className="slice-rect"
                 style={{
                   position: 'absolute',
-                  left: slice.rect.x / 2,
-                  top: slice.rect.y / 2,
-                  width: slice.rect.w / 2,
-                  height: slice.rect.h / 2,
+                  left: slice.rect.x,
+                  top: slice.rect.y,
+                  width: slice.rect.w,
+                  height: slice.rect.h,
                   border: isSelected ? '2px solid #0055ff' : '1px solid #00aaff',
                   backgroundColor: isSelected ? 'rgba(0, 85, 255, 0.25)' : 'rgba(0, 170, 255, 0.1)'
                 }}
@@ -60,8 +60,8 @@ export const RulerOverlay: React.FC<RulerOverlayProps> = ({
               key={s.id}
               style={{
                 position: 'absolute',
-                left: s.x / 2,
-                top: s.y / 2,
+                left: s.x,
+                top: s.y,
                 width: '1px', height: '1px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}
@@ -81,12 +81,12 @@ export const RulerOverlay: React.FC<RulerOverlayProps> = ({
       {rulerData && (
         <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1700 }} onPointerDown={(e) => e.stopPropagation()}>
           <line
-            x1={rulerData.start.x / 2} y1={rulerData.start.y / 2}
-            x2={rulerData.end.x / 2} y2={rulerData.end.y / 2}
+            x1={rulerData.start.x} y1={rulerData.start.y}
+            x2={rulerData.end.x} y2={rulerData.end.y}
             stroke="white" strokeWidth="1" strokeDasharray="4 2"
           />
-          <circle cx={rulerData.start.x / 2} cy={rulerData.start.y / 2} r="3" fill="white" stroke="black" />
-          <circle cx={rulerData.end.x / 2} cy={rulerData.end.y / 2} r="3" fill="white" stroke="black" />
+          <circle cx={rulerData.start.x} cy={rulerData.start.y} r="3" fill="white" stroke="black" />
+          <circle cx={rulerData.end.x} cy={rulerData.end.y} r="3" fill="white" stroke="black" />
         </svg>
       )}
     </>

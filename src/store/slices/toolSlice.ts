@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand';
-import type { EditorState, Tool } from '../types';
+import type { EditorState, Tool, BrushPreset, CustomShapePreset } from '../types';
+import { nanoid } from 'nanoid';
 
 export interface ToolSlice {
   activeTool: Tool;
@@ -34,7 +35,14 @@ export interface ToolSlice {
   textEditor: { x: number; y: number; value: string; layerId?: string } | null;
   transformMode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp';
   setTransformMode: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp') => void;
-  
+
+  brushPresets: BrushPreset[];
+  customShapes: CustomShapePreset[];
+  addBrushPreset: (preset: Omit<BrushPreset, 'id'>) => void;
+  removeBrushPreset: (id: string) => void;
+  addCustomShapePreset: (preset: Omit<CustomShapePreset, 'id'>) => void;
+  removeCustomShapePreset: (id: string) => void;
+
   setActiveTool: (tool: Tool) => void;
   setToolVariant: (groupId: string, tool: Tool) => void;
   setBrushSize: (size: number) => void;
@@ -120,6 +128,31 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
   textAlign: 'left',
   textEditor: null,
   transformMode: 'free',
+
+  brushPresets: JSON.parse(localStorage.getItem('pixelite_brushPresets') || '[]'),
+  customShapes: JSON.parse(localStorage.getItem('pixelite_customShapes') || '[]'),
+  addBrushPreset: (preset) => set((state) => {
+    const newPreset = { ...preset, id: nanoid() };
+    const updated = [...state.brushPresets, newPreset];
+    localStorage.setItem('pixelite_brushPresets', JSON.stringify(updated));
+    return { brushPresets: updated };
+  }),
+  removeBrushPreset: (id) => set((state) => {
+    const updated = state.brushPresets.filter((p) => p.id !== id);
+    localStorage.setItem('pixelite_brushPresets', JSON.stringify(updated));
+    return { brushPresets: updated };
+  }),
+  addCustomShapePreset: (preset) => set((state) => {
+    const newPreset = { ...preset, id: nanoid() };
+    const updated = [...state.customShapes, newPreset];
+    localStorage.setItem('pixelite_customShapes', JSON.stringify(updated));
+    return { customShapes: updated };
+  }),
+  removeCustomShapePreset: (id) => set((state) => {
+    const updated = state.customShapes.filter((s) => s.id !== id);
+    localStorage.setItem('pixelite_customShapes', JSON.stringify(updated));
+    return { customShapes: updated };
+  }),
 
   setActiveTool: (tool) => set({ activeTool: tool }),
   setTransformMode: (mode) => set({ transformMode: mode }),

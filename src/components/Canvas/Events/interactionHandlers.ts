@@ -5,17 +5,29 @@ import { getToolModule } from '../../../tools';
 import { useStore } from '../../../store/useStore';
 import { toolState } from '../../../tools/toolState';
 
-const getClickedTextLayer = (layers: any[], coords: { x: number, y: number }) => {
+const getClickedTextLayer = (
+  layers: any[],
+  coords: { x: number; y: number },
+  parentOffset: { x: number; y: number } = { x: 0, y: 0 }
+): any => {
   for (let i = 0; i < layers.length; i++) {
     const layer = layers[i];
-    if (layer.type === 'text' && layer.visible) {
-      const lx = layer.position?.x || 0;
-      const ly = layer.position?.y || 0;
+    if (!layer.visible) continue;
+
+    const lx = (layer.position?.x || 0) + parentOffset.x;
+    const ly = (layer.position?.y || 0) + parentOffset.y;
+
+    if (layer.type === 'text') {
       const lw = layer.width || 100;
       const lh = layer.height || 100;
       if (coords.x >= lx && coords.x <= lx + lw && coords.y >= ly && coords.y <= ly + lh) {
         return layer;
       }
+    }
+
+    if (layer.children) {
+      const found = getClickedTextLayer(layer.children, coords, { x: lx, y: ly });
+      if (found) return found;
     }
   }
   return null;
@@ -189,7 +201,11 @@ export const moveAction = (
   }
 ) => {
   const { coords, activeTool, zoom, isAlt, isCtrl } = context;
-  handlers.setCurrentMousePos(coords);
+  
+  const toolsNeedingMousePos = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select', 'lasso', 'polygonal_lasso', 'magnetic_lasso', 'gradient'];
+  if (toolsNeedingMousePos.includes(activeTool as string)) {
+    handlers.setCurrentMousePos(coords);
+  }
 
   if (!state.isInteracting) return;
 
@@ -223,8 +239,8 @@ export const moveAction = (
     const dx = clientX - refs.startMouseRef.current.x;
     const dy = clientY - refs.startMouseRef.current.y;
     handlers.setCanvasOffset({
-      x: refs.startOffsetRef.current.x + (dx * 2) / zoom,
-      y: refs.startOffsetRef.current.y + (dy * 2) / zoom
+      x: refs.startOffsetRef.current.x + dx / zoom,
+      y: refs.startOffsetRef.current.y + dy / zoom
     });
     return;
   }

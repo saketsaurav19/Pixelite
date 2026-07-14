@@ -1,0 +1,70 @@
+2. DIRECTORY STRUCTURE OF src/
+src/
+├── App.tsx              # Main application component (3419 lines)
+├── App.css
+├── index.css
+├── main.tsx             # Entry point
+├── vite-env.d.ts
+├── sw.ts                # Service worker
+├── assets/              # Static assets (images)
+├── components/
+│   ├── Canvas/          # Core canvas + overlays (Canvas.tsx, Events/, Core/, Rendering/, UI/)
+│   ├── Dialogs/         # 11 dialog components (NewDocument, ExportAs, FileInfo, etc.)
+│   ├── MenuBar/         # MenuBar.tsx + MenuBar.css
+│   ├── MenuSystem/      # LayerContextMenu, FileMenu, etc.
+│   ├── Modals/          # CloudStorageModal, PublicShareModal
+│   ├── OptionsBar/      # Options bar (context-specific tool options)
+│   ├── shared/          # ColorPicker
+│   ├── TabBar/          # Document tab bar
+│   ├── Toolbar/         # Tool palette (Toolbar.tsx, ToolButton.tsx, ToolContextMenu.tsx)
+│   └── UI/              # WelcomeOverlay, AlertContainer, AgentTestPanel
+├── constants/
+│   └── zIndex.ts        # Z-index constants
+├── hooks/
+│   └── useFileImporter.ts
+├── scripting/           # ExtendScript-like API (Application, Document, ArtLayer)
+├── services/
+│   ├── advanced/        # AutosaveManager, CloudSyncManager, ScriptEngine
+│   ├── export/          # ExportEngine, WorkerExportBridge
+│   ├── file/            # FileSystemService
+│   ├── import/          # ImportEngine, PdfiumManager
+│   ├── storage/         # RecentProjectsStorage
+│   └── index.ts
+├── store/
+│   ├── useStore.ts      # Zustand store composition
+│   ├── types.ts         # Core types (Layer, Tool, EditorState, etc.)
+│   └── slices/
+│       ├── toolSlice.ts     # Tool state (active tool, brush options, shape options)
+│       ├── layerSlice.ts    # Layer operations (add, remove, update, etc.)
+│       ├── selectionSlice.ts # Selection state (rect, lasso, paths)
+│       ├── historySlice.ts  # Undo/redo history
+│       ├── documentSlice.ts # Document state (multi-tab, doc size, customPattern, etc.)
+│       ├── lightingSlice.ts # 3D lighting system
+│       └── uiSlice.ts       # UI state (panels, dialogs, alerts)
+├── tools/
+│   ├── index.ts         # Tool registry (collects all tool modules)
+│   ├── types.ts         # ToolModule interface, ToolContext type
+│   ├── toolState.ts     # Transient tool state (not in Zustand)
+│   ├── Artboard/        # artboardTool.ts
+│   ├── Painting/        # paintingTools.ts (brush, pencil, eraser, clone, etc.)
+│   ├── Retouching/      # healingTools, retouchingTools, exposureTools
+│   ├── Selection/       # marqueeTools, lassoTools, magicWandTool, etc.
+│   ├── Transform/       # transformTools.ts (free transform, warp, crop)
+│   └── Utility/         # utilityTools.ts
+├── types/
+│   └── onnxruntime-web.d.ts
+├── utils/
+│   ├── blendModes.ts    # Blend mode mapping
+│   ├── canvasUtils.ts   # Canvas utilities (hexToRgba, contour finding, warp)
+│   ├── clipboardUtils.ts
+│   ├── cloudServices.ts
+│   ├── exifUtils.ts
+│   ├── googleFonts.ts
+│   ├── layerUtils.ts    # Layer tree operations (find, insert, remove, reorder)
+│   ├── metadataInjectors.ts
+│   ├── pixiUtils.ts     # PixiJS filter rendering
+│   ├── svgUtils.ts
+│   ├── textWarpUtils.ts
+│   └── webgpu/          # WebGPU lighting shaders & renderer
+└── workers/
+    └── fileWorker.ts

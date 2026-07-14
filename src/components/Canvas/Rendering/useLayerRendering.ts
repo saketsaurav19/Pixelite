@@ -7,6 +7,7 @@ import { flattenTree } from '../../../utils/layerUtils';
 import { drawTrianglesWarp } from '../../../utils/canvasUtils';
 import { applyWarpDeformation } from '../../../utils/textWarpUtils';
 import { toolState } from '../../../tools/toolState';
+import { pdfiumManager } from '../../../services/import/PdfiumManager';
 
 const renderLayer = (
   layer: Layer,
@@ -90,27 +91,30 @@ const renderLayer = (
     return;
   }
 
-  if (layer.dataUrl) {
+  if (layer.isPdfBackground && layer.pdfData && layer.pdfPageIndex !== undefined) {
+    pdfiumManager.renderPage(layer.pdfData, layer.pdfPageIndex, canvas.width, canvas.height, canvas)
+      .catch((err) => console.error('Failed to dynamically render PDF page:', err));
+  } else if (layer.dataUrl) {
     const activeTool = useStore.getState().activeTool;
     const isTransformingThisLayer = activeTool === 'transform' && layer.id === activeLayerId && toolState.transformOriginalImage;
 
     if (isTransformingThisLayer) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
       const img = toolState.transformOriginalImage as HTMLImageElement;
-      if (layer.width && layer.height) {
-        ctx.drawImage(img, 0, 0, layer.width, layer.height);
-      } else {
-        ctx.drawImage(img, 0, 0);
+      if (img.width && img.height && (canvas.width !== img.width || canvas.height !== img.height)) {
+        canvas.width = img.width;
+        canvas.height = img.height;
       }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     } else {
       const img = new Image();
       img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (layer.width && layer.height) {
-          ctx.drawImage(img, 0, 0, layer.width, layer.height);
-        } else {
-          ctx.drawImage(img, 0, 0);
+        if (img.width && img.height && (canvas.width !== img.width || canvas.height !== img.height)) {
+          canvas.width = img.width;
+          canvas.height = img.height;
         }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       };
       img.src = layer.dataUrl;
     }
@@ -337,6 +341,7 @@ export const useLayerRendering = (
   activeLayerId: string | null
 ) => {
   const activeAdjustmentModal = useStore((state) => state.activeAdjustmentModal);
+  const zoom = useStore((state) => state.zoom || 1);
 
   useEffect(() => {
     // Render bottom-to-top so adjustment layers composite correctly
@@ -344,5 +349,5 @@ export const useLayerRendering = (
     reversedLayers.forEach(layer => {
       renderLayer(layer, documentSize, canvasRefs, isInteracting, activeLayerId, activeAdjustmentModal, layers);
     });
-  }, [layers, documentSize, isInteracting, activeLayerId, activeAdjustmentModal]);
+  }, [layers, documentSize, isInteracting, activeLayerId, activeAdjustmentModal, zoom]);
 };

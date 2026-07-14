@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import * as pdfjsLib from 'pdfjs-dist';
 import './Dialogs.css';
 
 export const SignatureDialog: React.FC = () => {
@@ -130,7 +129,8 @@ export const SignatureDialog: React.FC = () => {
 
       // 2. Invoke SignatureExtractor
       // Since PDF.js version is exported in the bundle, we can read SignatureExtractor
-      const SignatureExtractor = (pdfjsLib as any).SignatureExtractor;
+      const globalPdfjs = (window as any).pdfjsLib;
+      const SignatureExtractor = globalPdfjs?.SignatureExtractor;
       if (SignatureExtractor) {
         console.log('[SignatureDialog] Calling SignatureExtractor.processDrawnLines...');
         const result = SignatureExtractor.processDrawnLines({

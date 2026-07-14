@@ -1836,6 +1836,22 @@ body {
   object-fit: cover;
 }
 
+.preset-select {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.6875rem;
+  max-width: 140px;
+  cursor: pointer;
+}
+
+.preset-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
 /* Layer Context Menu and Inline Renaming */
 .layer-rename-input {
   background: var(--bg-primary);

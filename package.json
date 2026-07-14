@@ -13,6 +13,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@embedpdf/pdfium": "^2.14.4",
     "@imgly/background-removal": "^1.7.0",
     "@scena/react-guides": "^0.28.2",
     "ag-psd": "^30.1.1",
@@ -28,7 +29,6 @@
     "lucide-react": "^1.11.0",
     "nanoid": "^5.1.9",
     "onnxruntime-web": "1.21.0",
-    "pdfjs-dist": "^6.0.227",
     "piexifjs": "^1.0.6",
     "pixi.js": "^8.19.0",
     "react": "^19.2.5",
@@ -39,7 +39,6 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.2",
-    "@types/pdfjs-dist": "^2.10.377",
     "@types/piexifjs": "^1.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

@@ -11,7 +11,13 @@ export interface UISlice {
   isFileInfoDialogOpen: boolean;
   isWarpDialogOpen: boolean;
   isOpenRecentDialogOpen: boolean;
+  isPreferencesDialogOpen: boolean;
   isOpenFromCloudDialogOpen: boolean;
+  quickMaskColor: string;
+  zoomScroll: boolean;
+  glassMenus: boolean;
+  cursorOffset: number;
+  dezgoApiKey: string;
   isHelpDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
@@ -51,13 +57,34 @@ export interface UISlice {
     documentBounds: boolean;
   };
 
+  // Panel collapse & tab states (persisted)
+  topDockCollapsed: boolean;
+  adjustmentsCollapsed: boolean;
+  bottomDockCollapsed: boolean;
+  topDockTab: 'history' | 'swatches';
+  bottomDockTab: 'layers' | 'channels' | 'paths';
+  mobileActivePanel: 'layers' | 'adjustments' | 'history';
+
+  setTopDockCollapsed: (val: boolean) => void;
+  setAdjustmentsCollapsed: (val: boolean) => void;
+  setBottomDockCollapsed: (val: boolean) => void;
+  setTopDockTab: (tab: 'history' | 'swatches') => void;
+  setBottomDockTab: (tab: 'layers' | 'channels' | 'paths') => void;
+  setMobileActivePanel: (panel: 'layers' | 'adjustments' | 'history') => void;
+
   setIsNewDocumentDialogOpen: (isOpen: boolean) => void;
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setExportFormat: (format: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf') => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
   setIsWarpDialogOpen: (isOpen: boolean) => void;
   setIsOpenRecentDialogOpen: (isOpen: boolean) => void;
+  setIsPreferencesDialogOpen: (isOpen: boolean) => void;
   setIsOpenFromCloudDialogOpen: (isOpen: boolean) => void;
+  setQuickMaskColor: (color: string) => void;
+  setZoomScroll: (val: boolean) => void;
+  setGlassMenus: (val: boolean) => void;
+  setCursorOffset: (val: number) => void;
+  setDezgoApiKey: (key: string) => void;
   setIsHelpDialogOpen: (isOpen: boolean) => void;
   setIsAboutDialogOpen: (isOpen: boolean) => void;
   setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
@@ -82,7 +109,13 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isFileInfoDialogOpen: false,
   isWarpDialogOpen: false,
   isOpenRecentDialogOpen: false,
+  isPreferencesDialogOpen: false,
   isOpenFromCloudDialogOpen: false,
+  quickMaskColor: '#000000',
+  zoomScroll: false,
+  glassMenus: false,
+  cursorOffset: 0,
+  dezgoApiKey: '',
   isHelpDialogOpen: false,
   isAboutDialogOpen: false,
   isKeyboardShortcutsDialogOpen: false,
@@ -118,13 +151,26 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
     documentBounds: true,
   },
 
+  topDockCollapsed: false,
+  adjustmentsCollapsed: false,
+  bottomDockCollapsed: false,
+  topDockTab: 'history',
+  bottomDockTab: 'layers',
+  mobileActivePanel: 'layers',
+
   setIsNewDocumentDialogOpen: (isOpen) => set({ isNewDocumentDialogOpen: isOpen }),
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
   setExportFormat: (format) => set({ exportFormat: format }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
   setIsWarpDialogOpen: (isOpen) => set({ isWarpDialogOpen: isOpen }),
   setIsOpenRecentDialogOpen: (isOpen) => set({ isOpenRecentDialogOpen: isOpen }),
+  setIsPreferencesDialogOpen: (isOpen) => set({ isPreferencesDialogOpen: isOpen }),
   setIsOpenFromCloudDialogOpen: (isOpen) => set({ isOpenFromCloudDialogOpen: isOpen }),
+  setQuickMaskColor: (quickMaskColor) => set({ quickMaskColor }),
+  setZoomScroll: (zoomScroll) => set({ zoomScroll }),
+  setGlassMenus: (glassMenus) => set({ glassMenus }),
+  setCursorOffset: (cursorOffset) => set({ cursorOffset }),
+  setDezgoApiKey: (dezgoApiKey) => set({ dezgoApiKey }),
   setIsHelpDialogOpen: (isOpen) => set({ isHelpDialogOpen: isOpen }),
   setIsAboutDialogOpen: (isOpen) => set({ isAboutDialogOpen: isOpen }),
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
@@ -167,4 +213,11 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setSnapSetting: (setting, value) => set((state) => ({
     snapSettings: { ...state.snapSettings, [setting]: value }
   })),
+
+  setTopDockCollapsed: (val) => set({ topDockCollapsed: val }),
+  setAdjustmentsCollapsed: (val) => set({ adjustmentsCollapsed: val }),
+  setBottomDockCollapsed: (val) => set({ bottomDockCollapsed: val }),
+  setTopDockTab: (tab) => set({ topDockTab: tab }),
+  setBottomDockTab: (tab) => set({ bottomDockTab: tab }),
+  setMobileActivePanel: (panel) => set({ mobileActivePanel: panel }),
 });

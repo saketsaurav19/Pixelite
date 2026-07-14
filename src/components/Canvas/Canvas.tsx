@@ -33,6 +33,7 @@ import { PerspectiveCropOverlay } from './UI/PerspectiveCropOverlay';
 import { SVGFilters } from './UI/SVGFilters';
 import { ArtboardOverlay } from './UI/ArtboardOverlay';
 import { TransformOverlay } from './UI/TransformOverlay';
+import { GridOverlay } from './UI/GridOverlay';
 
 interface AbsoluteRect {
   x: number;
@@ -313,6 +314,41 @@ const Canvas: React.FC = () => {
     return () => window.removeEventListener('define-pattern', onDefinePattern);
   }, [selectionRect, activeLayerId, layers, setSelectionRect]);
   useEffect(() => {
+    const onApplyCustomShape = (e: any) => {
+      const { points, closed } = e.detail;
+      if (!points || points.length < 2) return;
+      const { addLayer, brushColor, strokeWidth, recordHistory, documentSize } = useStore.getState();
+      const minX = Math.min(...points.map((p: any) => p.x));
+      const minY = Math.min(...points.map((p: any) => p.y));
+      const maxX = Math.max(...points.map((p: any) => p.x));
+      const maxY = Math.max(...points.map((p: any) => p.y));
+      const w = maxX - minX || 1;
+      const h = maxY - minY || 1;
+      const centeredPoints = points.map((p: any) => ({ x: p.x - minX, y: p.y - minY }));
+      addLayer({
+        name: 'Custom Shape',
+        type: 'shape',
+        width: w,
+        height: h,
+        position: {
+          x: (documentSize.w - w) / 2,
+          y: (documentSize.h - h) / 2,
+        },
+        shapeData: {
+          type: 'path',
+          points: centeredPoints,
+          fill: brushColor,
+          stroke: brushColor,
+          strokeWidth: strokeWidth,
+          closed: closed ?? true,
+        },
+      });
+      recordHistory('Apply Custom Shape');
+    };
+    window.addEventListener('apply-custom-shape', onApplyCustomShape);
+    return () => window.removeEventListener('apply-custom-shape', onApplyCustomShape);
+  }, []);
+  useEffect(() => {
     const handleDrawDraft = (e: any) => setDraftShape(e.detail);
     const handleClearDraft = () => setDraftShape(null);
     const handleDrawLasso = (e: any) => setDraftLasso(e.detail);
@@ -347,6 +383,8 @@ const Canvas: React.FC = () => {
   }, []);
 
 
+  const effectiveLayerIdRef = useRef<string | null>(null);
+
   /**
    * --- Interaction Engine ---
    * These functions manage the lifecycle of a tool interaction (Click/Touch -> Drag -> Release).
@@ -357,6 +395,7 @@ const Canvas: React.FC = () => {
    * Creates a 'CanvasContext' containing all necessary state and methods for the tool modules.
    */
   const startAction = useCallback((clientX: number, clientY: number, e: React.MouseEvent | React.TouchEvent) => {
+    effectiveLayerIdRef.current = null;
     const rawCoords = getCoordinates(clientX, clientY);
     // For artboard tool, allow starting drag even outside canvas bounds
     if (!rawCoords && activeTool !== 'artboard') return;
@@ -374,7 +413,20 @@ const Canvas: React.FC = () => {
       }
     }
 
-    const activeCanvas = activeLayerId ? canvasRefs.current[activeLayerId] : null;
+    // Auto-create a raster layer when a modifying tool is used on a non-raster layer
+    const rasterTypes = new Set(['paint', 'image']);
+    const modifyingTools = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'smudge', 'clone', 'patch', 'pattern_stamp', 'mixer_brush', 'color_replacement', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush', 'paint_bucket', 'gradient'];
+    const layer = activeLayerId ? findLayerById(layers, activeLayerId) : undefined;
+    let targetLayerId = activeLayerId;
+    if (activeLayerId && layer && modifyingTools.includes(activeTool as string) && !rasterTypes.has(layer.type || 'paint')) {
+      store.addLayer({ name: 'Layer', type: 'paint', width: store.documentSize.w, height: store.documentSize.h });
+      targetLayerId = store.activeLayerId;
+    }
+    if (targetLayerId !== activeLayerId) {
+      effectiveLayerIdRef.current = targetLayerId;
+    }
+
+    const activeCanvas = targetLayerId ? canvasRefs.current[targetLayerId] : null;
     const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
     if (activeCtx && activeLayer?.lockTransparent) {
       activeCtx.globalCompositeOperation = 'source-atop';
@@ -394,7 +446,7 @@ const Canvas: React.FC = () => {
       isAlt: (e as any).altKey || false,
       isCtrl: (e as any).ctrlKey || (e as any).metaKey || false,
       activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
-      activeLayerId, layers,
+      activeLayerId: targetLayerId, layers,
       setLightingEnabled: store.setLightingEnabled,
       isLightingEnabled,
       selectionMode: store.selectionMode,
@@ -520,9 +572,10 @@ const Canvas: React.FC = () => {
     const resolvedMoveCoords = rawCoords ?? { x: 0, y: 0 };
     const coords = isMoveVectorTool ? getSnappedCoords(resolvedMoveCoords) : resolvedMoveCoords;
 
-    const activeCanvas = activeLayerId ? canvasRefs.current[activeLayerId] : null;
+    const effectiveId = effectiveLayerIdRef.current ?? activeLayerId;
+    const activeCanvas = effectiveId ? canvasRefs.current[effectiveId] : null;
     const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
-    const activeLayer = layers.find(l => l.id === activeLayerId);
+    const activeLayer = layers.find(l => l.id === effectiveId);
     if (activeCtx && activeLayer?.lockTransparent) {
       activeCtx.globalCompositeOperation = 'source-atop';
     }
@@ -534,7 +587,7 @@ const Canvas: React.FC = () => {
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
       activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
-      activeLayerId, layers,
+      activeLayerId: effectiveId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
       selectionContiguous: store.selectionContiguous,
@@ -576,7 +629,8 @@ const Canvas: React.FC = () => {
    * Commits changes to the history and cleans up temporary interaction state.
    */
   const endAction = useCallback(() => {
-    const activeCanvas = activeLayerId ? canvasRefs.current[activeLayerId] : null;
+    const effectiveId = effectiveLayerIdRef.current ?? activeLayerId;
+    const activeCanvas = effectiveId ? canvasRefs.current[effectiveId] : null;
     const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
 
     const context: any = {
@@ -586,7 +640,7 @@ const Canvas: React.FC = () => {
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
       activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
-      activeLayerId, layers,
+      activeLayerId: effectiveId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
       selectionContiguous: store.selectionContiguous,
@@ -980,12 +1034,17 @@ const Canvas: React.FC = () => {
       className="canvas-container"
       style={{ cursor: getCursor() }}
       onMouseMove={(e) => {
-        setMouseClientPos({ x: e.clientX, y: e.clientY });
-        const rawCoords = getCoordinates(e.clientX, e.clientY);
-        if (rawCoords) {
-          const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
-          const snapped = isVectorTool ? getSnappedCoords(rawCoords) : rawCoords;
-          setCurrentMousePos(snapped);
+        if (BRUSH_TOOLS.includes(activeTool as string)) {
+          setMouseClientPos({ x: e.clientX, y: e.clientY });
+        }
+        const toolsNeedingMousePos = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select', 'lasso', 'polygonal_lasso', 'magnetic_lasso', 'gradient'];
+        if (toolsNeedingMousePos.includes(activeTool as string)) {
+          const rawCoords = getCoordinates(e.clientX, e.clientY);
+          if (rawCoords) {
+            const isVectorTool = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select'].includes(activeTool as string);
+            const snapped = isVectorTool ? getSnappedCoords(rawCoords) : rawCoords;
+            setCurrentMousePos(snapped);
+          }
         }
       }}
       onMouseDown={(e) => {
@@ -1052,6 +1111,8 @@ const Canvas: React.FC = () => {
             layerIndex={index}
           />
         ))}
+
+        <GridOverlay />
 
         {isLightingEnabled && activeLayerId && litLayerData[activeLayerId] && (
           <div
@@ -1191,7 +1252,7 @@ const Canvas: React.FC = () => {
       {activeLayerId && activeTool === 'move' && (isInteracting || moveShowTransform) && (() => {
         const rect = findLayerAbsoluteRect(activeLayerId, layers);
         if (rect) {
-          const activeLayer = layers.find(l => l.id === activeLayerId);
+          const activeLayer = findLayerById(layers, activeLayerId);
           const isWarped = activeLayer && activeLayer.type === 'text' && activeLayer.textWarp && activeLayer.textWarp.style !== 'None';
           
           let w = rect.w || documentSize.w;

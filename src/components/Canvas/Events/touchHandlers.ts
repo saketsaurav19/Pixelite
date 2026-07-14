@@ -62,8 +62,8 @@ export const handleTouchMove = (
     const dx = midpoint.x - initialTouchMidpoint.x;
     const dy = midpoint.y - initialTouchMidpoint.y;
     handlers.setCanvasOffset({
-      x: initialTouchOffset.x + (dx * 2) / zoom,
-      y: initialTouchOffset.y + (dy * 2) / zoom
+      x: initialTouchOffset.x + dx / zoom,
+      y: initialTouchOffset.y + dy / zoom
     });
   } else if (e.touches.length === 1) {
     handlers.moveAction(e.touches[0].clientX, e.touches[0].clientY);

@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
 import { mapBlendModeToCss } from '../../../utils/blendModes';
-import { FontRegistry } from '../../../pdf/worker/engines/FontRegistry';
 import { getHomography, drawTrianglesWarp, loadGoogleFont } from '../../../utils/canvasUtils';
 import { toolState } from '../../../tools/toolState';
 
@@ -34,46 +33,19 @@ interface VectorTextLayerProps {
 // ───────────────────────────────────────────────────────────────────────────────────
 
 const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
-  const text = layer.textContent || '';
-  const fontSize = layer.fontSize || 16;
-  const textColor = layer.color || '#000000';
+  const zoom = useStore(state => state.zoom || 1);
+  const textEditor = useStore(state => state.textEditor);
+  const isBeingEdited = !!textEditor && textEditor.layerId === layer.id;
+  // During active editing, show live text from textEditor. After commit, show layer content.
+  const text = isBeingEdited ? textEditor!.value : (layer.textContent || '');
+  const fontSize = (layer.fontSize || 16) * zoom;
+  // importedFromPdf layers are normally transparent (background PDF renders the text).
+  // While actively editing, make the HTML text visible so user sees their edits.
+  const isTransparent = layer.importedFromPdf && !layer.isModified && !isBeingEdited;
+  const textColor = isTransparent ? 'transparent' : (layer.color || '#000000');
   const fontWeight = layer.fontWeight || 'normal';
 
-  // Dynamically load the font face in the browser so the HTML canvas & text editor can use it
-  useEffect(() => {
-    if (layer.fontChecksum) {
-      const regFont = FontRegistry.get(layer.fontChecksum);
-      if (regFont && regFont.data) {
-        const fontKey = `pdf-font-${layer.fontChecksum}`;
-        const cleanFamily = regFont.name.replace(/^[A-Z]{6}\+/, '');
 
-        const registerBrowserFont = async () => {
-          try {
-            // Check if already registered
-            const loadedFonts = Array.from(document.fonts as any) as any[];
-            const isKeyLoaded = loadedFonts.some(f => f.family === fontKey);
-            if (!isKeyLoaded) {
-              const fontFace1 = new FontFace(fontKey, regFont.data.buffer as ArrayBuffer);
-              await fontFace1.load();
-              (document.fonts as any).add(fontFace1);
-              console.log(`[CanvasLayer] Registered FontFace: ${fontKey}`);
-            }
-
-            const isFamilyLoaded = loadedFonts.some(f => f.family === cleanFamily);
-            if (!isFamilyLoaded) {
-              const fontFace2 = new FontFace(cleanFamily, regFont.data.buffer as ArrayBuffer);
-              await fontFace2.load();
-              (document.fonts as any).add(fontFace2);
-              console.log(`[CanvasLayer] Registered FontFace family: ${cleanFamily}`);
-            }
-          } catch (err) {
-            console.error('[CanvasLayer] Dynamic browser FontFace registration failed:', err);
-          }
-        };
-        registerBrowserFont();
-      }
-    }
-  }, [layer.fontChecksum, layer.fontName]);
 
   // Load Google Font dynamically if not a custom embedded PDF font
   useEffect(() => {
@@ -87,57 +59,127 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
   const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
 
   const fontFamily = hasCustomFont
-    ? `"${customFontKey}", "${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+    ? `"${customFontKey}", "${layer.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
     : isGeneric
-      ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
-      : `"${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
+      ? `"Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+      : `"${layer.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
 
-  // ── Priority 1: HarfBuzz cluster spans (complex scripts / bidi) ─────────────
-  // HarfBuzz is used ONLY to determine cluster boundaries — which Unicode
-  // codepoints form one visual unit (conjunct, matra, ligature, etc.).
-  // Clusters are rendered as inline <span>s in normal flow so the browser's
-  // own text engine handles advance widths. This avoids the x-drift that occurs
-  // when HarfBuzz (using a fallback font) and the browser (using the PDF font)
-  // compute different advance widths for the same text.
-  if (layer.shapedPositions && layer.shapedPositions.length > 0) {
-    return (
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          whiteSpace: 'nowrap',
-          fontFamily,
-          fontWeight,
-          fontStyle: layer.fontStyle || 'normal',
-          fontSize: `${fontSize}px`,
-          color: textColor,
-          lineHeight: 1,
-          fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
-          userSelect: 'none',
-          pointerEvents: 'none',
-        }}
-      >
-        {layer.shapedPositions.map((cluster, i) => (
-          <span
-            key={i}
-            style={{
-              direction: cluster.direction,
-              unicodeBidi: cluster.direction === 'rtl' ? 'bidi-override' : 'normal',
-            }}
-          >
-            {cluster.text}
-          </span>
-        ))}
-      </div>
-    );
-  }
+  const renderContent = () => {
+    // ── Priority 1: HarfBuzz cluster spans (complex scripts / bidi) ─────────────
+    if (layer.shapedPositions && layer.shapedPositions.length > 0) {
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            whiteSpace: 'nowrap',
+            fontFamily,
+            fontWeight,
+            fontStyle: layer.fontStyle || 'normal',
+            fontSize: `${fontSize}px`,
+            color: textColor,
+            lineHeight: 1,
+            fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
+            userSelect: 'none',
+            pointerEvents: 'none',
+          }}
+        >
+          {layer.shapedPositions.map((cluster, i) => (
+            <span
+              key={i}
+              style={{
+                direction: cluster.direction,
+                unicodeBidi: cluster.direction === 'rtl' ? 'bidi-override' : 'normal',
+              }}
+            >
+              {cluster.text}
+            </span>
+          ))}
+        </div>
+      );
+    }
 
-  // ── Priority 2: PDF-run spans ──────────────────────────────────────────────
-  if (layer.runs && layer.runs.length > 0) {
-    const theta = ((layer.rotation || 0) * Math.PI) / 180;
-    const cosT = Math.cos(theta);
-    const sinT = Math.sin(theta);
+    // ── Priority 2: PDF-run spans ──────────────────────────────────────────────
+    if (layer.runs && layer.runs.length > 0) {
+      const theta = ((layer.rotation || 0) * Math.PI) / 180;
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            userSelect: 'none',
+            pointerEvents: 'none',
+            fontStyle: layer.fontStyle || 'normal',
+          }}
+        >
+          {layer.runs.map((run, i) => {
+            const runIsGeneric = !run.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(run.fontFamily.toLowerCase());
+            const runFontFamily = hasCustomFont
+              ? `"${customFontKey}", "${run.fontFamily || layer.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
+              : runIsGeneric
+                ? `"Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
+                : `"${run.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`;
+
+            const runFontSize = run.fontSize * zoom;
+            const runColor = isTransparent ? 'transparent' : (run.color || textColor);
+            const runFontWeight = run.fontWeight || fontWeight;
+
+            const rx = run.x;
+            const ry = run.y;
+            const dx = (rx * cosT + ry * sinT) * zoom;
+            const dy = (-rx * sinT + ry * cosT) * zoom;
+
+            const relativeRotation = (run.rotation ?? 0) - (layer.rotation ?? 0);
+            const runTransform = Math.abs(relativeRotation) > 0.01 ? `rotate(${relativeRotation}deg)` : undefined;
+
+            return (
+              <span
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: `${dx}px`,
+                  top: `${dy}px`,
+                  fontFamily: runFontFamily,
+                  fontWeight: runFontWeight,
+                  fontSize: `${runFontSize}px`,
+                  color: runColor,
+                  opacity: run.opacity ?? 1,
+                  lineHeight: 1,
+                  whiteSpace: 'nowrap',
+                  fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
+                  direction: 'ltr',
+                  unicodeBidi: 'plaintext',
+                  transform: runTransform,
+                  transformOrigin: '0 0',
+                }}
+              >
+                {run.str}
+              </span>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (layer.isVertical) {
+      const lines = text.split('\n');
+      return (
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
+          {lines.map((line, i) => (
+            <div key={i} style={{ writingMode: 'vertical-rl', fontFamily, fontWeight, fontStyle: layer.fontStyle || 'normal', fontSize: `${fontSize}px`, color: textColor, whiteSpace: 'pre', lineHeight: 1 }}>
+              {line}
+            </div>
+          ))}
+        </div>
+      );
+    }
 
     return (
       <div
@@ -146,99 +188,55 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
           top: 0,
           left: 0,
           width: '100%',
-          height: '100%',
+          textAlign: layer.textAlign || 'left',
+          fontFamily,
+          fontWeight,
+          fontStyle: layer.fontStyle || 'normal',
+          fontSize: `${fontSize}px`,
+          color: textColor,
+          lineHeight: 1,
+          whiteSpace: 'pre',
+          fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
+          direction: 'ltr',
+          unicodeBidi: 'plaintext',
           userSelect: 'none',
           pointerEvents: 'none',
-          fontStyle: layer.fontStyle || 'normal',
         }}
       >
-        {layer.runs.map((run, i) => {
-          const runIsGeneric = !run.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(run.fontFamily.toLowerCase());
-          const runFontFamily = hasCustomFont
-            ? `"${customFontKey}", "${run.fontFamily || layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
-            : runIsGeneric
-              ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
-              : `"${run.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
-
-          const runFontSize = run.fontSize;
-          const runColor = run.color || textColor;
-          const runFontWeight = run.fontWeight || fontWeight;
-
-          const rx = run.x;
-          const ry = run.y;
-          const dx = rx * cosT + ry * sinT;
-          const dy = -rx * sinT + ry * cosT;
-
-          const relativeRotation = (run.rotation ?? 0) - (layer.rotation ?? 0);
-          const runTransform = Math.abs(relativeRotation) > 0.01 ? `rotate(${relativeRotation}deg)` : undefined;
-
-          return (
-            <span
-              key={i}
-              style={{
-                position: 'absolute',
-                left: `${dx}px`,
-                top: `${dy}px`,
-                fontFamily: runFontFamily,
-                fontWeight: runFontWeight,
-                fontSize: `${runFontSize}px`,
-                color: runColor,
-                opacity: run.opacity ?? 1,
-                lineHeight: 1,
-                whiteSpace: 'nowrap',
-                fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
-                direction: 'ltr',
-                unicodeBidi: 'plaintext',
-                transform: runTransform,
-                transformOrigin: '0 0',
-              }}
-            >
-              {run.str}
-            </span>
-          );
-        })}
+        {text}
       </div>
     );
-  }
-
-  if (layer.isVertical) {
-    const lines = text.split('\n');
-    return (
-      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
-        {lines.map((line, i) => (
-          <div key={i} style={{ writingMode: 'vertical-rl', fontFamily, fontWeight, fontStyle: layer.fontStyle || 'normal', fontSize: `${fontSize}px`, color: textColor, whiteSpace: 'pre', lineHeight: 1 }}>
-            {line}
-          </div>
-        ))}
-      </div>
-    );
-  }
+  };
 
   return (
     <div
+      className="vector-text-zoom-wrapper"
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
-        width: '100%',
-        textAlign: layer.textAlign || 'left',
-        fontFamily,
-        fontWeight,
-        fontStyle: layer.fontStyle || 'normal',
-        fontSize: `${fontSize}px`,
-        color: textColor,
-        lineHeight: 1,
-        whiteSpace: 'pre',
-        // OpenType features for correct ligature, kern, conjunct shaping
-        fontFeatureSettings: '"kern" 1, "liga" 1, "calt" 1',
-        // Ensure left-to-right base direction for mixed scripts
-        direction: 'ltr',
-        unicodeBidi: 'plaintext',
-        userSelect: 'none',
+        width: `${100 * zoom}%`,
+        height: `${100 * zoom}%`,
+        transform: `scale(${1 / zoom})`,
+        transformOrigin: '0 0',
         pointerEvents: 'none',
       }}
     >
-      {text}
+      {/* White eraser mask: covers the PDF-rendered text below when editing to eliminate double text */}
+      {isBeingEdited && layer.importedFromPdf && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: `${(layer.width || 100) * zoom}px`,
+            height: `${(layer.height || 30) * zoom}px`,
+            background: 'white',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+      {renderContent()}
     </div>
   );
 };
@@ -346,13 +344,14 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
 }) => {
   const textEditor = useStore(state => state.textEditor);
   const updateLayer = useStore(state => state.updateLayer);
+  const zoom = useStore(state => state.zoom || 1);
   const isEditingThisLayer = textEditor?.layerId === layer.id;
   const hasCustomFont = !!layer.fontChecksum;
   const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
 
   const ditherMaskUrl = React.useMemo(() => {
     if (layer.blendMode !== 'dissolve') return null;
-    
+
     const size = 128;
     const canvas = document.createElement('canvas');
     canvas.width = size;
@@ -361,7 +360,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
     const imgData = ctx.createImageData(size, size);
     const pixels = imgData.data;
     const opacity = layer.opacity !== undefined ? layer.opacity : 1;
-    
+
     for (let i = 0; i < pixels.length; i += 4) {
       const rand = Math.random();
       if (rand < opacity) {
@@ -635,8 +634,16 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   }, [activeTool, transformMode, layer.warpGrid, layer.id, canvasRefs]);
 
   // Regular layer — use native dimensions if available (e.g. PDF bitmap pages)
-  let canvasW = layer.width || documentSize.w;
-  let canvasH = layer.height || documentSize.h;
+  let canvasW = layer.isPdfBackground ? (layer.width || 1000) : (layer.width || documentSize.w);
+  let canvasH = layer.isPdfBackground ? (layer.height || 1000) : (layer.height || documentSize.h);
+
+  if (layer.isPdfBackground) {
+    const originalW = canvasW;
+    const originalH = canvasH;
+    canvasW = Math.round(canvasW * zoom);
+    canvasH = Math.round(canvasH * zoom);
+    console.log(`[CanvasLayer] PDF Layer "${layer.name}" dimensions calculated: zoom=${zoom}, originalDocSize=${originalW}x${originalH}, targetCanvasSize=${canvasW}x${canvasH}`);
+  }
 
   const isWarped = layer.type === 'text' && layer.textWarp && layer.textWarp.style !== 'None';
   let padX = 0;
@@ -705,7 +712,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
 
   return (
     <div
-      className={`layer-wrapper ${(layer.visible && !isEditingThisLayer) ? 'visible' : 'hidden'}`}
+      className={`layer-wrapper ${layer.visible ? 'visible' : 'hidden'}`}
       style={{
         position: 'absolute',
         top: 0, left: 0,
@@ -724,6 +731,20 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
       }}
     >
       <div style={{ opacity: layer.fill ?? 1, width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+        {isEditingThisLayer && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundColor: '#ffffff', // Cover text on background canvas during edit
+              zIndex: 1,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         <canvas
           ref={(el) => { if (canvasRefs && canvasRefs.current) canvasRefs.current[layer.id] = el; }}
           data-layer-id={layer.id}
@@ -733,10 +754,13 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
           style={{
             width: '100%',
             height: '100%',
-            opacity: isVector ? 0 : 1,
+            opacity: (layer.importedFromPdf && !layer.isPdfBackground && !layer.isModified) ? 0 : (isVector ? 0 : 1),
+            // PDF background (Skia-rendered): GPU bilinear scaling for smooth zoom
+            // Paint layers: nearest-neighbour for sharp pixel-art / brush strokes
+            imageRendering: layer.isPdfBackground ? 'auto' : 'pixelated',
           }}
         />
-        {layer.type === 'text' && (!layer.textWarp || layer.textWarp.style === 'None') && <VectorTextLayer layer={layer} />}
+        {layer.type === 'text' && (!layer.textWarp || layer.textWarp.style === 'None') && !isEditingThisLayer && <VectorTextLayer layer={layer} />}
         {layer.type === 'table' && layer.tableData && (
           // PDF table rendered as a proper HTML table
           <div
@@ -813,6 +837,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
               width: '100%',
               height: '100%',
               overflow: 'visible',
+              display: (layer.importedFromPdf && !layer.isModified) ? 'none' : 'block',
             }}
           >
             {renderVectorShape(layer)}
