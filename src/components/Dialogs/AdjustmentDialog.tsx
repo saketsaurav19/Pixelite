@@ -193,6 +193,8 @@ export const AdjustmentDialog: React.FC = () => {
   });
   const [activePointIdx, setActivePointIdx] = useState<number | null>(null);
 
+
+
   // Histogram references
   const [histogramData, setHistogramData] = useState<{
     rHist: Uint32Array;

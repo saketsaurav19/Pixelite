@@ -78,6 +78,18 @@ export interface AdjustmentSettings {
   colorBalance?: ColorBalanceSettings;
   levels?: LevelsSettings;
   curves?: CurvesSettings;
+  channelMixer?: {
+    red: { red: number; green: number; blue: number; constant: number };
+    green: { red: number; green: number; blue: number; constant: number };
+    blue: { red: number; green: number; blue: number; constant: number };
+    monochrome: boolean;
+  };
+  colorLookup?: {
+    preset: string;
+    lutUrl?: string;
+    size?: number;
+    fileName?: string;
+  };
 }
 
 /**
@@ -478,6 +490,260 @@ export class CurvesFilter extends Filter {
   }
 }
 
+// ----------------------------------------------------
+// Channel Mixer and Color Lookup WebGL Filters
+// ----------------------------------------------------
+
+const channelMixerFragment = `
+  in vec2 vTextureCoord;
+  uniform sampler2D uTexture;
+  uniform vec4 uRedCoeffs;    // x: r, y: g, z: b, w: constant
+  uniform vec4 uGreenCoeffs;  // x: r, y: g, z: b, w: constant
+  uniform vec4 uBlueCoeffs;   // x: r, y: g, z: b, w: constant
+  uniform float uMonochrome;  // 1.0 if true, else 0.0
+  out vec4 finalColor;
+
+  void main(void) {
+      vec4 color = texture(uTexture, vTextureCoord);
+      vec3 rgb = color.rgb;
+
+      float rOut = dot(rgb, uRedCoeffs.xyz) + uRedCoeffs.w;
+      float gOut = dot(rgb, uGreenCoeffs.xyz) + uGreenCoeffs.w;
+      float bOut = dot(rgb, uBlueCoeffs.xyz) + uBlueCoeffs.w;
+
+      vec3 mixed = vec3(rOut, gOut, bOut);
+      if (uMonochrome > 0.5) {
+          mixed = vec3(rOut);
+      }
+
+      finalColor = vec4(clamp(mixed, 0.0, 1.0), color.a);
+  }
+`;
+
+export class ChannelMixerFilter extends Filter {
+  constructor(settings: any) {
+    const red = [
+      (settings.red?.red ?? 100) / 100,
+      (settings.red?.green ?? 0) / 100,
+      (settings.red?.blue ?? 0) / 100,
+      (settings.red?.constant ?? 0) / 100,
+    ];
+    const green = [
+      (settings.green?.red ?? 0) / 100,
+      (settings.green?.green ?? 100) / 100,
+      (settings.green?.blue ?? 0) / 100,
+      (settings.green?.constant ?? 0) / 100,
+    ];
+    const blue = [
+      (settings.blue?.red ?? 0) / 100,
+      (settings.blue?.green ?? 0) / 100,
+      (settings.blue?.blue ?? 100) / 100,
+      (settings.blue?.constant ?? 0) / 100,
+    ];
+    const monochrome = settings.monochrome ? 1.0 : 0.0;
+
+    super({
+      glProgram: GlProgram.from({
+        fragment: channelMixerFragment,
+        vertex: defaultFilterVert,
+      }),
+      resources: {
+        cmUniforms: new UniformGroup({
+          uRedCoeffs: { value: red, type: 'vec4<f32>' },
+          uGreenCoeffs: { value: green, type: 'vec4<f32>' },
+          uBlueCoeffs: { value: blue, type: 'vec4<f32>' },
+          uMonochrome: { value: monochrome, type: 'f32' },
+        })
+      }
+    });
+  }
+}
+
+const colorLookupFragment = `
+  in vec2 vTextureCoord;
+  uniform sampler2D uTexture;
+  uniform sampler2D uLut;
+  uniform float uLutSize;
+  out vec4 finalColor;
+
+  void main(void) {
+      vec4 color = texture(uTexture, vTextureCoord);
+      vec3 rgb = clamp(color.rgb, 0.0, 1.0);
+      
+      float size = uLutSize;
+      
+      // Blue channel selects the slice
+      float blueVal = rgb.b * (size - 1.0);
+      float slice1 = floor(blueVal);
+      float slice2 = ceil(blueVal);
+      
+      // Calculate X slice offsets (arranged horizontally)
+      float xOffset1 = slice1 * size;
+      float xOffset2 = slice2 * size;
+      
+      // Red maps to X inside slice, Green maps to Y inside slice
+      // Width is size * size, Height is size
+      vec2 uv1 = vec2((xOffset1 + rgb.r * (size - 1.0) + 0.5) / (size * size), (rgb.g * (size - 1.0) + 0.5) / size);
+      vec2 uv2 = vec2((xOffset2 + rgb.r * (size - 1.0) + 0.5) / (size * size), (rgb.g * (size - 1.0) + 0.5) / size);
+      
+      vec3 color1 = texture(uLut, uv1).rgb;
+      vec3 color2 = texture(uLut, uv2).rgb;
+      
+      vec3 lutColor = mix(color1, color2, fract(blueVal));
+      finalColor = vec4(lutColor, color.a);
+  }
+`;
+
+export class ColorLookupFilter extends Filter {
+  constructor(lutTexture: Texture, size = 16) {
+    super({
+      glProgram: GlProgram.from({
+        fragment: colorLookupFragment,
+        vertex: defaultFilterVert,
+      }),
+      resources: {
+        clUniforms: new UniformGroup({
+          uLutSize: { value: size, type: 'f32' },
+        }),
+        uLut: lutTexture.source,
+      }
+    });
+  }
+}
+
+export function generatePresetLut(preset: string, size = 16): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = size * size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+  for (let b = 0; b < size; b++) {
+    const blueVal = b / (size - 1 || 1);
+    for (let g = 0; g < size; g++) {
+      const greenVal = g / (size - 1 || 1);
+      for (let r = 0; r < size; r++) {
+        const redVal = r / (size - 1 || 1);
+
+        let outR = redVal;
+        let outG = greenVal;
+        let outB = blueVal;
+
+        if (preset === 'cinematic_warm') {
+          outR = redVal * 1.1 + 0.03;
+          outG = greenVal * 1.01;
+          outB = blueVal * 0.9 - 0.02;
+        } else if (preset === 'teal_orange') {
+          const lum = 0.299 * redVal + 0.587 * greenVal + 0.114 * blueVal;
+          outR = Math.min(1.0, lum + (lum - 0.5) * 0.2 + 0.08 * (1.0 - lum));
+          outG = Math.min(1.0, lum + (lum - 0.5) * 0.05);
+          outB = Math.max(0.0, lum - (lum - 0.5) * 0.2 - 0.08 * (1.0 - lum));
+        } else if (preset === 'vintage_polaroid') {
+          outR = redVal * 0.88 + 0.06;
+          outG = greenVal * 0.9 + 0.04;
+          outB = blueVal * 0.8 + 0.1;
+        } else if (preset === 'bw_contrast') {
+          let gray = 0.299 * redVal + 0.587 * greenVal + 0.114 * blueVal;
+          gray = 3.0 * gray * gray - 2.0 * gray * gray * gray;
+          outR = outG = outB = gray;
+        }
+
+        const canvasX = b * size + r;
+        const canvasY = g;
+        const canvasIndex = (canvasY * canvas.width + canvasX) * 4;
+
+        imgData.data[canvasIndex] = Math.max(0, Math.min(255, Math.round(outR * 255)));
+        imgData.data[canvasIndex + 1] = Math.max(0, Math.min(255, Math.round(outG * 255)));
+        imgData.data[canvasIndex + 2] = Math.max(0, Math.min(255, Math.round(outB * 255)));
+        imgData.data[canvasIndex + 3] = 255;
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
+export function parseCubeFile(text: string): { size: number; data: Float32Array } {
+  const lines = text.split('\n');
+  let size = 0;
+  const rgbList: number[] = [];
+
+  for (let line of lines) {
+    line = line.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    if (line.startsWith('LUT_3D_SIZE')) {
+      const parts = line.split(/\s+/);
+      size = parseInt(parts[1], 10);
+      continue;
+    }
+    if (line.startsWith('DOMAIN_MIN') || line.startsWith('DOMAIN_MAX') || line.startsWith('TITLE') || line.startsWith('LUT_1D_SIZE')) {
+      continue;
+    }
+
+    const parts = line.split(/\s+/);
+    if (parts.length === 3) {
+      const r = parseFloat(parts[0]);
+      const g = parseFloat(parts[1]);
+      const b = parseFloat(parts[2]);
+      if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+        rgbList.push(r, g, b);
+      }
+    }
+  }
+
+  if (size === 0) {
+    throw new Error('Invalid .cube file: LUT_3D_SIZE not found');
+  }
+
+  const expectedLength = size * size * size * 3;
+  if (rgbList.length < expectedLength) {
+    throw new Error(`Invalid .cube file: Expected ${expectedLength} values, found ${rgbList.length}`);
+  }
+
+  return {
+    size,
+    data: new Float32Array(rgbList)
+  };
+}
+
+export function generateLutFromCubeData(size: number, rgbList: Float32Array): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = size * size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+  for (let b = 0; b < size; b++) {
+    for (let g = 0; g < size; g++) {
+      for (let r = 0; r < size; r++) {
+        const cubeIndex = ((b * size + g) * size + r) * 3;
+        
+        const outR = Math.max(0, Math.min(255, Math.round(rgbList[cubeIndex] * 255)));
+        const outG = Math.max(0, Math.min(255, Math.round(rgbList[cubeIndex + 1] * 255)));
+        const outB = Math.max(0, Math.min(255, Math.round(rgbList[cubeIndex + 2] * 255)));
+        
+        const canvasX = b * size + r;
+        const canvasY = g;
+        const canvasIndex = (canvasY * canvas.width + canvasX) * 4;
+        
+        imgData.data[canvasIndex] = outR;
+        imgData.data[canvasIndex + 1] = outG;
+        imgData.data[canvasIndex + 2] = outB;
+        imgData.data[canvasIndex + 3] = 255;
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
 /**
  * Applies WebGL-based filters to an image element and returns a base64 png data URL.
  */
@@ -520,6 +786,7 @@ export async function applyPixiAdjustments(
   // Custom filters list to apply
   const customFilters: Filter[] = [];
   let curvesLutTexture: Texture | null = null;
+  let colorLookupLutTexture: Texture | null = null;
 
   // Instantiate specific adjustments
   if (settings.exposure) {
@@ -537,6 +804,19 @@ export async function applyPixiAdjustments(
   if (settings.curves) {
     curvesLutTexture = createCurvesLutTexture(settings.curves);
     customFilters.push(new CurvesFilter(curvesLutTexture));
+  }
+  if (settings.channelMixer) {
+    customFilters.push(new ChannelMixerFilter(settings.channelMixer));
+  }
+  if (settings.colorLookup) {
+    const cl = settings.colorLookup;
+    if (cl.preset === 'custom' && cl.lutUrl) {
+      colorLookupLutTexture = Texture.from(cl.lutUrl);
+    } else {
+      const presetCanvas = generatePresetLut(cl.preset || 'identity', cl.size || 16);
+      colorLookupLutTexture = Texture.from(presetCanvas);
+    }
+    customFilters.push(new ColorLookupFilter(colorLookupLutTexture, cl.size || 16));
   }
 
   // Chain filters
@@ -630,6 +910,9 @@ export async function applyPixiAdjustments(
       customFilters.forEach((f) => f.destroy());
       if (curvesLutTexture) {
         curvesLutTexture.destroy(true);
+      }
+      if (colorLookupLutTexture) {
+        colorLookupLutTexture.destroy(true);
       }
     } catch (cleanupError) {
       console.warn('PIXI resource cleanup warning:', cleanupError);

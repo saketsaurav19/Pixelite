@@ -79,6 +79,8 @@ export const createHistorySlice: StateCreator<EditorState, [], [], HistorySlice>
         ambientColor: state.ambientColor,
         showLightSource: state.showLightSource,
         workflow: JSON.parse(JSON.stringify(state.workflow)),
+        colorMode: state.colorMode,
+        bitDepth: state.bitDepth,
       },
     };
     const newHistory = state.history.slice(0, state.historyIndex + 1);

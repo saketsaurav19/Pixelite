@@ -79,7 +79,7 @@ export type Layer = BaseLayer & {
   /** For PDF background layers in vector mode: raw SVG markup string */
   svgMarkup?: string;
   adjustmentData?: {
-    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance';
+    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup';
     settings: {
       brightness?: number;
       contrast?: number;
@@ -111,6 +111,18 @@ export type Layer = BaseLayer & {
         red: { x: number; y: number }[];
         green: { x: number; y: number }[];
         blue: { x: number; y: number }[];
+      };
+      channelMixer?: {
+        red: { red: number; green: number; blue: number; constant: number };
+        green: { red: number; green: number; blue: number; constant: number };
+        blue: { red: number; green: number; blue: number; constant: number };
+        monochrome: boolean;
+      };
+      colorLookup?: {
+        preset: string;
+        lutUrl?: string;
+        size?: number;
+        fileName?: string;
       };
     };
   };
@@ -241,7 +253,7 @@ export interface DocumentSpecificState {
   gridGapY: number;
   gridSubdivision: number;
   interpolation: 'nearest-neighbor' | 'bilinear' | 'bicubic';
-  colorMode: 'rgb' | 'grayscale';
+  colorMode: 'rgb' | 'grayscale' | 'cmyk' | 'indexed';
   bitDepth: 8 | 16 | 32;
   lights: Light[];
   isLightingEnabled: boolean;
@@ -315,6 +327,7 @@ export interface EditorState extends DocumentSpecificState {
 
   // UI State
   isNewDocumentDialogOpen: boolean;
+  isCanvasSizeDialogOpen: boolean;
   isExportDialogOpen: boolean;
   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
@@ -336,13 +349,14 @@ export interface EditorState extends DocumentSpecificState {
   isSignatureDialogOpen: boolean;
   mobileCapturedImage: string | null;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null) => void;
   adjustmentSourceLayerId: string | null;
   setAdjustmentSourceLayerId: (id: string | null) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
   setShowRulers: (show: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
+  setIsCanvasSizeDialogOpen: (isOpen: boolean) => void;
   activeMobileSubmenu: string | null;
   setActiveMobileSubmenu: (menu: string | null) => void;
   screenMode: 'standard' | 'full-menu' | 'full';

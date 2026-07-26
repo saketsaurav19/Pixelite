@@ -69,6 +69,10 @@ interface MenuBarProps {
   onCloseMobile?: () => void;
   onSaveToStorage?: (provider: string) => void;
   onSaveToPublic?: (service: string) => void;
+  onGrayscale?: () => void;
+  onConvertToRGB?: () => void;
+  onConvertToCMYK?: () => void;
+  onConvertToIndexed?: () => void;
 }
 
 const MenuBar: React.FC<MenuBarProps> = ({
@@ -119,7 +123,11 @@ const MenuBar: React.FC<MenuBarProps> = ({
   isMobileOpen,
   onCloseMobile,
   onSaveToStorage,
-  onSaveToPublic
+  onSaveToPublic,
+  onGrayscale,
+  onConvertToRGB,
+  onConvertToCMYK,
+  onConvertToIndexed,
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [activeSubmenus, setActiveSubmenus] = useState<Record<string, boolean>>({});
@@ -131,7 +139,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const activeLayerId = useStore((s) => s.activeLayerId);
   const autoAlignLayers = useStore((s) => s.autoAlignLayers);
   const autoBlendLayers = useStore((s) => s.autoBlendLayers);
-  
+  const colorMode = useStore((s) => s.colorMode);
+
   const activeLayer = layers.find(l => l.id === activeLayerId);
   const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
 
@@ -167,13 +176,13 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Open and Place...', action: onPlaceFile },
         { label: 'Open Recent', disabled: true },
         { divider: true },
-          {
-            label: 'Share',
-            subItems: [
-              { label: 'PNG', action: () => onOpenExportDialog?.('png') },
-              { label: 'JPG', action: () => onOpenExportDialog?.('jpg') },
-            ]
-          },
+        {
+          label: 'Share',
+          subItems: [
+            { label: 'PNG', action: () => onOpenExportDialog?.('png') },
+            { label: 'JPG', action: () => onOpenExportDialog?.('jpg') },
+          ]
+        },
         { divider: true },
         { label: 'Save', shortcut: 'Ctrl+S', action: () => onSave?.(false) },
         { label: 'Save as PSD', action: () => onExport?.('psd') },
@@ -310,9 +319,10 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Mode',
           subItems: [
-            { label: 'Grayscale' },
-            { label: 'RGB' },
-            { label: 'Indexed' },
+            { label: 'RGB Color', checked: colorMode === 'rgb', action: onConvertToRGB, disabled: colorMode === 'rgb' },
+            { label: 'Grayscale', checked: colorMode === 'grayscale', action: onGrayscale, disabled: colorMode === 'grayscale' },
+            { label: 'CMYK Color', checked: colorMode === 'cmyk', action: onConvertToCMYK, disabled: colorMode === 'cmyk' },
+            { label: 'Indexed Color', checked: colorMode === 'indexed', action: onConvertToIndexed, disabled: colorMode === 'indexed' },
             { divider: true },
             { label: '8 Bits/Channel' },
             { label: '16 Bits/Channel' },
@@ -332,8 +342,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Color Balance...', shortcut: 'Ctrl+B', action: () => addAdjustmentLayer('color_balance') },
             { label: 'Black & White...', shortcut: 'Alt+Shift+Ctrl+B', action: () => addAdjustmentLayer('black_white') },
             { label: 'Photo Filter...', action: () => addAdjustmentLayer('photo_effects') },
-            { label: 'Channel Mixer...' },
-            { label: 'Color Lookup...' },
+            { label: 'Channel Mixer...', action: () => addAdjustmentLayer('channel_mixer') },
+            { label: 'Color Lookup...', action: () => addAdjustmentLayer('color_lookup') },
             { divider: true },
             { label: 'Invert', shortcut: 'Ctrl+I', action: onInvert },
             { label: 'Posterize...' },
@@ -420,18 +430,18 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'New Adjustment Layer',
           subItems: [
-            { label: 'Brightness/Contrast...' },
-            { label: 'Levels...' },
-            { label: 'Curves...' },
-            { label: 'Exposure...' },
-            { label: 'Vibrance...' },
-            { label: 'Hue/Saturation...' },
-            { label: 'Color Balance...' },
-            { label: 'Black & White...' },
-            { label: 'Photo Filter...' },
-            { label: 'Channel Mixer...' },
-            { label: 'Color Lookup...' },
-            { label: 'Invert' },
+            { label: 'Brightness/Contrast...', action: () => addAdjustmentLayer('brightness_contrast') },
+            { label: 'Levels...', action: () => addAdjustmentLayer('levels') },
+            { label: 'Curves...', action: () => addAdjustmentLayer('curves') },
+            { label: 'Exposure...', action: () => addAdjustmentLayer('exposure') },
+            { label: 'Vibrance...', action: () => addAdjustmentLayer('vibrance') },
+            { label: 'Hue/Saturation...', action: () => addAdjustmentLayer('hue_saturation') },
+            { label: 'Color Balance...', action: () => addAdjustmentLayer('color_balance') },
+            { label: 'Black & White...', action: () => addAdjustmentLayer('black_white') },
+            { label: 'Photo Filter...', action: () => addAdjustmentLayer('photo_effects') },
+            { label: 'Channel Mixer...', action: () => addAdjustmentLayer('channel_mixer') },
+            { label: 'Color Lookup...', action: () => addAdjustmentLayer('color_lookup') },
+            { label: 'Invert', action: onInvert },
             { label: 'Posterize...' },
             { label: 'Threshold...' },
             { label: 'Gradient Map...' },

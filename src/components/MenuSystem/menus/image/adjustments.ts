@@ -11,6 +11,8 @@ export const imageAdjustmentMenu: MenuItem[] = [
     { label: 'Black & White', action: (store) => store.addAdjustmentLayer('black_white') },
     { label: 'Photo Effects', action: (store) => store.addAdjustmentLayer('photo_effects') },
     { label: 'Color Balance', action: (store) => store.addAdjustmentLayer('color_balance') },
+    { label: 'Channel Mixer', action: (store) => store.addAdjustmentLayer('channel_mixer') },
+    { label: 'Color Lookup', action: (store) => store.addAdjustmentLayer('color_lookup') },
   ] },
   { label: 'Auto Tone', action: (_s) => console.log('Apply Auto Tone') },
   { label: 'Auto Contrast', action: (_s) => console.log('Apply Auto Contrast') },

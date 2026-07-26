@@ -6,6 +6,7 @@ export interface UISlice {
   addAlert: (alert: Omit<Alert, 'id'>) => void;
   removeAlert: (id: string) => void;
   isNewDocumentDialogOpen: boolean;
+  isCanvasSizeDialogOpen: boolean;
   isExportDialogOpen: boolean;
   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
@@ -28,8 +29,8 @@ export interface UISlice {
   isMobileMenuOpen: boolean;
   showRulers: boolean;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null) => void;
   adjustmentSourceLayerId: string | null;
   setAdjustmentSourceLayerId: (id: string | null) => void;
   activeMobileSubmenu: string | null;
@@ -73,6 +74,7 @@ export interface UISlice {
   setMobileActivePanel: (panel: 'layers' | 'adjustments' | 'history') => void;
 
   setIsNewDocumentDialogOpen: (isOpen: boolean) => void;
+  setIsCanvasSizeDialogOpen: (isOpen: boolean) => void;
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setExportFormat: (format: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf') => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
@@ -105,6 +107,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   alerts: [],
   exportFormat: 'image/png',
   isNewDocumentDialogOpen: false,
+  isCanvasSizeDialogOpen: false,
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
   isWarpDialogOpen: false,
@@ -159,6 +162,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   mobileActivePanel: 'layers',
 
   setIsNewDocumentDialogOpen: (isOpen) => set({ isNewDocumentDialogOpen: isOpen }),
+  setIsCanvasSizeDialogOpen: (isOpen) => set({ isCanvasSizeDialogOpen: isOpen }),
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
   setExportFormat: (format) => set({ exportFormat: format }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),

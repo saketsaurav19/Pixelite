@@ -118,6 +118,8 @@ const initialState = {
         ambientIntensity: 0.1,
         ambientColor: '#ffffff',
         showLightSource: true,
+        colorMode: 'rgb' as const,
+        bitDepth: 8 as const,
         workflow: {
           step: 'image' as const,
           status: {
@@ -160,7 +162,7 @@ const initialState = {
   gridGapX: 105,
   gridGapY: 105,
   gridSubdivision: 4,
-        interpolation: 'bilinear' as const,
+  interpolation: 'bilinear' as const,
   lights: [],
   isLightingEnabled: false,
   lightingQuality: 'medium' as const,
@@ -168,6 +170,8 @@ const initialState = {
   ambientIntensity: 0.1,
   ambientColor: '#ffffff',
   showLightSource: true,
+  colorMode: 'rgb' as const,
+  bitDepth: 8 as const,
   workflow: {
     step: 'image' as const,
     status: {

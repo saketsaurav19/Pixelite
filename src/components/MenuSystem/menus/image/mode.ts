@@ -1,6 +1,6 @@
 import type { MenuItem, MenuLeafItem } from '../types';
-import type { EditorState } from '../../../store/types';
-import { flattenTree } from '../../../utils/layerUtils';
+import type { EditorState } from '../../../../store/types';
+import { flattenTree } from '../../../../utils/layerUtils';
 
 export const imageModeMenu: MenuItem[] = [
   { label: 'Mode', submenu: [

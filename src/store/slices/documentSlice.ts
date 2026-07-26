@@ -33,8 +33,8 @@ export interface DocumentSlice {
   gridGapY: number;
   gridSubdivision: number;
   interpolation: 'nearest-neighbor' | 'bilinear' | 'bicubic';
-  colorMode: 'rgb' | 'grayscale';
-  setColorMode: (mode: 'rgb' | 'grayscale') => void;
+  colorMode: 'rgb' | 'grayscale' | 'cmyk' | 'indexed';
+  setColorMode: (mode: 'rgb' | 'grayscale' | 'cmyk' | 'indexed') => void;
   bitDepth: 8 | 16 | 32;
   setBitDepth: (depth: 8 | 16 | 32) => void;
   exifData: any;

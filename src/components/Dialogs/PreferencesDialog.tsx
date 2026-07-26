@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore } from '../../store/useStore';
 import * as LucideIcons from 'lucide-react';
-import { resetPreferences, loadPreferences } from '../../utils/preferenceStorage';
+import { resetPreferences } from '../../utils/preferenceStorage';
 import './Dialogs.css';
 
 const GRID_TYPES = ['square', 'horizontal', 'vertical', 'cross'] as const;

@@ -10,7 +10,7 @@ import Canvas from './components/Canvas/Canvas';
 import { GlobalRulers } from './components/Canvas/UI/GlobalRulers';
 import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
-import ColorPicker from './components/shared/ColorPicker';
+
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
 
 import MenuBar from './components/MenuBar/MenuBar';
@@ -36,6 +36,7 @@ const WarpDialog = React.lazy(() => import('./components/Dialogs/WarpDialog').th
 const OpenRecentDialog = React.lazy(() => import('./components/Dialogs/OpenRecentDialog').then(m => ({ default: m.OpenRecentDialog })));
 const PreferencesDialog = React.lazy(() => import('./components/Dialogs/PreferencesDialog').then(m => ({ default: m.PreferencesDialog })));
 const FillLayerDialog = React.lazy(() => import('./components/Dialogs/FillLayerDialog').then(m => ({ default: m.FillLayerDialog })));
+const CanvasSizeDialog = React.lazy(() => import('./components/Dialogs/CanvasSizeDialog').then(m => ({ default: m.CanvasSizeDialog })));
 
 const BACKGROUND_REMOVAL_REMOTE_PUBLIC_PATH =
   'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
@@ -361,6 +362,7 @@ const App: React.FC = () => {
     // activeLightId,
     isMobileMenuOpen,
     setIsMobileMenuOpen,
+    setIsCanvasSizeDialogOpen,
     setDocumentSize,
     setActiveTool,
     setToolVariant,
@@ -1221,6 +1223,236 @@ const App: React.FC = () => {
     ctx.restore();
     updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
     recordHistory('Invert Colors');
+  };
+
+  const handleGrayscale = () => {
+    const state = useStore.getState();
+    if (state.colorMode === 'grayscale') return;
+    const allLayers = flattenTree(state.layers);
+    const rasterLayers = allLayers.filter(l => l.type === 'paint' || l.type === 'image');
+
+    if (rasterLayers.length === 0) {
+      state.setColorMode('grayscale');
+      state.recordHistory('Convert to Grayscale');
+      return;
+    }
+
+    let completed = 0;
+    for (const layer of rasterLayers) {
+      const srcUrl = layer.dataUrl;
+      if (srcUrl) {
+        const img = new window.Image();
+        img.onload = () => {
+          const offscreen = document.createElement('canvas');
+          offscreen.width = img.width;
+          offscreen.height = img.height;
+          const octx = offscreen.getContext('2d')!;
+          octx.drawImage(img, 0, 0);
+          const imageData = octx.getImageData(0, 0, offscreen.width, offscreen.height);
+          const data = imageData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+            data[i] = data[i + 1] = data[i + 2] = gray;
+          }
+          octx.putImageData(imageData, 0, 0);
+          state.updateLayer(layer.id, { dataUrl: offscreen.toDataURL() });
+          completed++;
+          if (completed === rasterLayers.length) {
+            state.setColorMode('grayscale');
+            state.recordHistory('Convert to Grayscale');
+          }
+        };
+        img.onerror = () => {
+          completed++;
+          if (completed === rasterLayers.length) {
+            state.setColorMode('grayscale');
+            state.recordHistory('Convert to Grayscale');
+          }
+        };
+        img.src = srcUrl;
+      } else {
+        completed++;
+        if (completed === rasterLayers.length) {
+          state.setColorMode('grayscale');
+          state.recordHistory('Convert to Grayscale');
+        }
+      }
+    }
+  };
+
+  const handleConvertToRGB = () => {
+    const state = useStore.getState();
+    if (state.colorMode === 'rgb') return;
+    state.setColorMode('rgb');
+    state.recordHistory('Convert to RGB');
+  };
+
+  /** Convert all raster layers through CMYK (8-bit per channel) and back to RGB.
+   *  This simulates the colour-gamut compression that occurs in real CMYK printing. */
+  const handleConvertToCMYK = () => {
+    const state = useStore.getState();
+    if (state.colorMode === 'cmyk') return;
+
+    const allLayers = flattenTree(state.layers);
+    const rasterLayers = allLayers.filter(l => l.type === 'paint' || l.type === 'image');
+
+    if (rasterLayers.length === 0) {
+      state.setColorMode('cmyk');
+      state.recordHistory('Convert to CMYK');
+      return;
+    }
+
+    let completed = 0;
+    const total = rasterLayers.length;
+
+    for (const layer of rasterLayers) {
+      const srcUrl = layer.dataUrl;
+      if (srcUrl) {
+        const img = new window.Image();
+        img.onload = () => {
+          const offscreen = document.createElement('canvas');
+          offscreen.width = img.width;
+          offscreen.height = img.height;
+          const octx = offscreen.getContext('2d')!;
+          octx.drawImage(img, 0, 0);
+          const imageData = octx.getImageData(0, 0, offscreen.width, offscreen.height);
+          const data = imageData.data;
+
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i] / 255;
+            const g = data[i + 1] / 255;
+            const b = data[i + 2] / 255;
+            const k = 1 - Math.max(r, g, b);
+            let c = 0, m = 0, y = 0;
+            if (k < 1) {
+              c = (1 - r - k) / (1 - k);
+              m = (1 - g - k) / (1 - k);
+              y = (1 - b - k) / (1 - k);
+            }
+            // Quantise CMYK to 8-bit (0-255 per channel) and back
+            const c8 = Math.round(c * 255) / 255;
+            const m8 = Math.round(m * 255) / 255;
+            const y8 = Math.round(y * 255) / 255;
+            const k8 = Math.round(k * 255) / 255;
+            data[i]     = Math.round(255 * (1 - c8) * (1 - k8));
+            data[i + 1] = Math.round(255 * (1 - m8) * (1 - k8));
+            data[i + 2] = Math.round(255 * (1 - y8) * (1 - k8));
+          }
+
+          octx.putImageData(imageData, 0, 0);
+          state.updateLayer(layer.id, { dataUrl: offscreen.toDataURL() });
+          completed++;
+          if (completed === total) {
+            state.setColorMode('cmyk');
+            state.recordHistory('Convert to CMYK');
+            state.addAlert({ type: 'info', message: 'CMYK conversion applied. Colors are browser-simulated; CMYK channel quantisation has been applied.' });
+          }
+        };
+        img.onerror = () => { completed++; if (completed === total) { state.setColorMode('cmyk'); state.recordHistory('Convert to CMYK'); } };
+        img.src = srcUrl;
+      } else {
+        completed++; if (completed === total) { state.setColorMode('cmyk'); state.recordHistory('Convert to CMYK'); }
+      }
+    }
+  };
+
+  /** Reduce all raster layers to an N-colour indexed palette using median-cut quantisation. */
+  const handleConvertToIndexed = () => {
+    const state = useStore.getState();
+    if (state.colorMode === 'indexed') return;
+
+    const input = prompt('Number of colors for indexed palette (2\u201a256):', '256');
+    if (!input) return;
+    const numColors = Math.max(2, Math.min(256, parseInt(input, 10) || 256));
+
+    const allLayers = flattenTree(state.layers);
+    const rasterLayers = allLayers.filter(l => l.type === 'paint' || l.type === 'image');
+
+    if (rasterLayers.length === 0) {
+      state.setColorMode('indexed');
+      state.recordHistory(`Convert to Indexed (${numColors} colors)`);
+      return;
+    }
+
+    const quantisePixels = (data: Uint8ClampedArray, nColors: number): Uint8ClampedArray => {
+      type Box = { pixels: number[][] };
+      const pixels: number[][] = [];
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) pixels.push([data[i], data[i + 1], data[i + 2]]);
+      }
+      if (pixels.length === 0) return data;
+
+      let boxes: Box[] = [{ pixels }];
+      while (boxes.length < nColors) {
+        let maxRange = -1, splitIdx = 0, splitChannel = 0;
+        for (let b = 0; b < boxes.length; b++) {
+          const px = boxes[b].pixels;
+          const rMin = px.reduce((m, p) => Math.min(m, p[0]), 255), rMax = px.reduce((m, p) => Math.max(m, p[0]), 0);
+          const gMin = px.reduce((m, p) => Math.min(m, p[1]), 255), gMax = px.reduce((m, p) => Math.max(m, p[1]), 0);
+          const bMin = px.reduce((m, p) => Math.min(m, p[2]), 255), bMax = px.reduce((m, p) => Math.max(m, p[2]), 0);
+          const ranges = [rMax - rMin, gMax - gMin, bMax - bMin];
+          const maxR = Math.max(...ranges);
+          if (maxR > maxRange) { maxRange = maxR; splitIdx = b; splitChannel = ranges.indexOf(maxR); }
+        }
+        if (maxRange === 0) break;
+        const box = boxes[splitIdx];
+        box.pixels.sort((a, b_) => a[splitChannel] - b_[splitChannel]);
+        const mid = Math.floor(box.pixels.length / 2);
+        boxes.splice(splitIdx, 1, { pixels: box.pixels.slice(0, mid) }, { pixels: box.pixels.slice(mid) });
+      }
+
+      const palette = boxes.map(box => {
+        const n = box.pixels.length;
+        return [
+          Math.round(box.pixels.reduce((s, p) => s + p[0], 0) / n),
+          Math.round(box.pixels.reduce((s, p) => s + p[1], 0) / n),
+          Math.round(box.pixels.reduce((s, p) => s + p[2], 0) / n),
+        ];
+      });
+
+      const result = new Uint8ClampedArray(data.length);
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) { result[i + 3] = 0; continue; }
+        let minDist = Infinity, best = palette[0];
+        for (const pal of palette) {
+          const dr = data[i] - pal[0], dg = data[i+1] - pal[1], db = data[i+2] - pal[2];
+          const dist = dr*dr + dg*dg + db*db;
+          if (dist < minDist) { minDist = dist; best = pal; }
+        }
+        result[i] = best[0]; result[i+1] = best[1]; result[i+2] = best[2]; result[i+3] = data[i+3];
+      }
+      return result;
+    };
+
+    let completed = 0;
+    const total = rasterLayers.length;
+
+    for (const layer of rasterLayers) {
+      const srcUrl = layer.dataUrl;
+      if (srcUrl) {
+        const img = new window.Image();
+        img.onload = () => {
+          const offscreen = document.createElement('canvas');
+          offscreen.width = img.width;
+          offscreen.height = img.height;
+          const octx = offscreen.getContext('2d')!;
+          octx.drawImage(img, 0, 0);
+          const imageData = octx.getImageData(0, 0, offscreen.width, offscreen.height);
+          const quantised = quantisePixels(imageData.data, numColors);
+          octx.putImageData(new ImageData(new Uint8ClampedArray(quantised.buffer as ArrayBuffer), offscreen.width, offscreen.height), 0, 0);
+          state.updateLayer(layer.id, { dataUrl: offscreen.toDataURL() });
+          completed++;
+          if (completed === total) {
+            state.setColorMode('indexed');
+            state.recordHistory(`Convert to Indexed (${numColors} colors)`);
+          }
+        };
+        img.onerror = () => { completed++; if (completed === total) { state.setColorMode('indexed'); state.recordHistory(`Convert to Indexed (${numColors} colors)`); } };
+        img.src = srcUrl;
+      } else {
+        completed++; if (completed === total) { state.setColorMode('indexed'); state.recordHistory(`Convert to Indexed (${numColors} colors)`); }
+      }
+    }
   };
 
   const handleSelectSubject = () => {
@@ -2345,6 +2577,7 @@ const App: React.FC = () => {
           <MobileCameraDialog />
           <AdjustmentDialog />
           <WarpDialog />
+          <CanvasSizeDialog />
         <OpenRecentDialog />
         <PreferencesDialog />
       </React.Suspense>
@@ -2422,9 +2655,7 @@ const App: React.FC = () => {
             useStore.getState().setTransformMode(mode);
           }}
           onCanvasSize={() => {
-            const w = prompt('New Canvas Width:', documentSize.w.toString());
-            const h = prompt('New Canvas Height:', documentSize.h.toString());
-            if (w && h) setDocumentSize({ w: parseInt(w), h: parseInt(h) });
+            setIsCanvasSizeDialogOpen(true);
           }}
           onImageSize={() => {
             const w = prompt('New Image Width:', documentSize.w.toString());
@@ -2512,6 +2743,10 @@ const App: React.FC = () => {
           onConvertToProfile={(profile) => useStore.getState().setIccProfile(profile)}
           onSaveToStorage={(provider) => setSaveModal({ type: 'cloud', provider })}
           onSaveToPublic={(service) => setSaveModal({ type: 'public', provider: service })}
+          onGrayscale={handleGrayscale}
+          onConvertToRGB={handleConvertToRGB}
+          onConvertToCMYK={handleConvertToCMYK}
+          onConvertToIndexed={handleConvertToIndexed}
         />
 
 
@@ -2723,8 +2958,8 @@ const App: React.FC = () => {
                       { icon: <LucideIcons.Scale size={16} />, label: 'Color Bal', action: 'color_balance' },
                       { icon: <LucideIcons.Contrast size={16} />, label: 'B&W', action: 'black_white' },
                       { icon: <LucideIcons.Camera size={16} />, label: 'Photo Flt', action: 'photo_effects' },
-                      { icon: <LucideIcons.Sliders size={16} />, label: 'Ch. Mixer' },
-                      { icon: <LucideIcons.Layers size={16} />, label: 'Color Lkp' },
+                      { icon: <LucideIcons.Sliders size={16} />, label: 'Ch. Mixer', action: 'channel_mixer' },
+                      { icon: <LucideIcons.Layers size={16} />, label: 'Color Lkp', action: 'color_lookup' },
                       { icon: <LucideIcons.RefreshCw size={16} />, label: 'Invert' },
                       { icon: <LucideIcons.BarChart2 size={16} />, label: 'Posterize' },
                       { icon: <LucideIcons.Triangle size={16} />, label: 'Threshold' },
@@ -3430,6 +3665,7 @@ const App: React.FC = () => {
         <MobileCameraDialog />
         <AdjustmentDialog />
         <WarpDialog />
+        <CanvasSizeDialog />
           <OpenRecentDialog />
           <PreferencesDialog />
         </React.Suspense>

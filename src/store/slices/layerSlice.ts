@@ -23,7 +23,7 @@ export interface LayerSlice {
   mergeLayers: (ids: string[]) => void;
   flattenImage: () => void;
   rasterizeLayer: (id: string) => void;
-  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance') => void;
+  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup') => void;
   autoAlignLayers: () => Promise<void>;
   autoBlendLayers: () => Promise<void>;
 }
@@ -233,6 +233,23 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
           red: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
           green: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
           blue: [{ x: 0, y: 0 }, { x: 255, y: 255 }]
+        }
+      };
+    } else if (type === 'channel_mixer') {
+      name = 'Channel Mixer';
+      defaultSettings = {
+        channelMixer: {
+          red: { red: 100, green: 0, blue: 0, constant: 0 },
+          green: { red: 0, green: 100, blue: 0, constant: 0 },
+          blue: { red: 0, green: 0, blue: 100, constant: 0 },
+          monochrome: false
+        }
+      };
+    } else if (type === 'color_lookup') {
+      name = 'Color Lookup';
+      defaultSettings = {
+        colorLookup: {
+          preset: 'identity'
         }
       };
     }
