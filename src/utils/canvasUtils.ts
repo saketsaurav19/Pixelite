@@ -408,3 +408,22 @@ export const loadGoogleFont = (family: string) => {
   link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600;1,700&display=swap`;
   document.head.appendChild(link);
 };
+
+export const getFontFamilyString = (
+  fontFamily: string | undefined,
+  fontChecksum: string | undefined
+): string => {
+  const hasCustomFont = !!fontChecksum;
+  const customFontKey = hasCustomFont ? `pdf-font-${fontChecksum}` : '';
+  const genericFallback = `"Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
+
+  if (hasCustomFont) {
+    return `"${customFontKey}", "${fontFamily || ''}", ${genericFallback}`;
+  }
+
+  const baseFont = fontFamily && !['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(fontFamily.toLowerCase())
+    ? `"${fontFamily}", `
+    : '';
+
+  return `${baseFont}${genericFallback}`;
+};

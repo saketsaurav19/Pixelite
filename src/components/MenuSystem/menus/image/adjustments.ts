@@ -14,7 +14,7 @@ export const imageAdjustmentMenu: MenuItem[] = [
     { label: 'Channel Mixer', action: (store) => store.addAdjustmentLayer('channel_mixer') },
     { label: 'Color Lookup', action: (store) => store.addAdjustmentLayer('color_lookup') },
   ] },
-  { label: 'Auto Tone', action: (_s) => console.log('Apply Auto Tone') },
-  { label: 'Auto Contrast', action: (_s) => console.log('Apply Auto Contrast') },
-  { label: 'Auto Color', action: (_s) => console.log('Apply Auto Color') },
+  { label: 'Auto Tone', action: (store) => store.autoTone() },
+  { label: 'Auto Contrast', action: (store) => store.autoContrast() },
+  { label: 'Auto Color', action: (store) => store.autoColor() },
 ];

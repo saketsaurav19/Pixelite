@@ -2,285 +2,209 @@ import { useEffect, useRef } from 'react';
 import type { Layer } from '../../../store/useStore';
 import type { CanvasRefs } from '../types';
 
+const MAX_THUMB = 48;
+
+/**
+ * Build a compact cache key for a layer.
+ * Excludes `thumbnail` (we generate it) and avoids stringifying the full dataUrl
+ * (huge base64 string) — instead tracks just the first 200 chars as a signature.
+ */
+function cacheKey(layer: Layer, docW: number, docH: number): string {
+  const dataUrlSig = (layer as any).dataUrl
+    ? ((layer as any).dataUrl as string).slice(0, 200)
+    : '';
+  return [
+    layer.id,
+    layer.type,
+    layer.width ?? 0,
+    layer.height ?? 0,
+    layer.position?.x ?? 0,
+    layer.position?.y ?? 0,
+    layer.opacity ?? 1,
+    layer.visible ? 1 : 0,
+    (layer as any).textContent ?? '',
+    (layer as any).color ?? '',
+    (layer as any).shapeData?.fill ?? '',
+    docW, docH,
+    dataUrlSig,
+  ].join('|');
+}
+
+function thumbSize(srcW: number, srcH: number) {
+  const aspect = srcW / srcH;
+  return aspect > 1
+    ? { w: MAX_THUMB, h: Math.max(1, Math.round(MAX_THUMB / aspect)) }
+    : { w: Math.max(1, Math.round(MAX_THUMB * aspect)), h: MAX_THUMB };
+}
+
 const generateThumbnail = (
   layer: Layer,
   documentSize: { w: number; h: number },
   canvasRefs: CanvasRefs,
   updateLayer: (id: string, updates: Partial<Layer>) => void,
-  lastContentRef: React.MutableRefObject<{ [key: string]: string }>,
+  lastKeyRef: React.MutableRefObject<{ [key: string]: string }>,
+  pendingRef: React.MutableRefObject<{ [key: string]: boolean }>,
   parentArtboard?: Layer
 ): void => {
-  // If it's a group or artboard, recursively generate thumbnails for children
-  if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
-    layer.children.forEach(child => {
-      generateThumbnail(
-        child,
-        documentSize,
-        canvasRefs,
-        updateLayer,
-        lastContentRef,
-        layer.type === 'artboard' ? layer : parentArtboard
-      );
-    });
 
-    // Also composite children onto the group/artboard's own thumbnail
+  // ── Groups / Artboards ─────────────────────────────────────────────────
+  if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
+    layer.children.forEach(child =>
+      generateThumbnail(child, documentSize, canvasRefs, updateLayer, lastKeyRef, pendingRef,
+        layer.type === 'artboard' ? layer : parentArtboard)
+    );
+
+    const key = cacheKey(layer, documentSize.w, documentSize.h);
+    if (lastKeyRef.current[layer.id] === key) return;
+    lastKeyRef.current[layer.id] = key;
+
     const refW = layer.width || documentSize.w;
     const refH = layer.height || documentSize.h;
-    const aspect = refW / refH;
-    const maxSize = 48;
-    let thumbW, thumbH;
-    if (aspect > 1) {
-      thumbW = maxSize;
-      thumbH = maxSize / aspect;
-    } else {
-      thumbH = maxSize;
-      thumbW = maxSize * aspect;
+    const { w: thumbW, h: thumbH } = thumbSize(refW, refH);
+    const tc = document.createElement('canvas');
+    tc.width = thumbW; tc.height = thumbH;
+    const ctx = tc.getContext('2d');
+    if (!ctx) return;
+
+    if (layer.type === 'artboard') {
+      ctx.fillStyle = layer.backgroundTransparent ? 'transparent' : (layer.backgroundColor || '#ffffff');
+      ctx.fillRect(0, 0, thumbW, thumbH);
     }
 
-    const { thumbnail, ...content } = layer;
-    const contentStr = JSON.stringify(content);
-    if (lastContentRef.current[layer.id] !== contentStr) {
-      const thumbCanvas = document.createElement('canvas');
-      thumbCanvas.width = thumbW;
-      thumbCanvas.height = thumbH;
-      const thumbCtx = thumbCanvas.getContext('2d');
-      if (thumbCtx) {
-        if (layer.type === 'artboard') {
-          thumbCtx.fillStyle = layer.backgroundTransparent ? 'transparent' : (layer.backgroundColor || '#ffffff');
-          thumbCtx.fillRect(0, 0, thumbW, thumbH);
-        }
-
-        const scaleX = thumbW / refW;
-        const scaleY = thumbH / refH;
-
-        const drawChildOntoThumb = (node: Layer) => {
-          if (!node.visible) return;
-          if (node.type === 'group' || node.type === 'artboard') {
-            if (node.children) {
-              [...node.children].reverse().forEach(drawChildOntoThumb);
-            }
-          } else {
-            const canvas = canvasRefs.current[node.id];
-            if (canvas) {
-              const nodeX = node.position?.x || 0;
-              const nodeY = node.position?.y || 0;
-              const nodeW = node.width || (canvas.width / (window.devicePixelRatio || 1));
-              const nodeH = node.height || (canvas.height / (window.devicePixelRatio || 1));
-
-              thumbCtx.drawImage(
-                canvas,
-                0, 0, canvas.width, canvas.height,
-                nodeX * scaleX, nodeY * scaleY,
-                nodeW * scaleX, nodeH * scaleY
-              );
-            }
-          }
-        };
-
-        // Render children bottom-to-top (reverse the list order since index 0 is top)
-        const childrenCopy = [...layer.children].reverse();
-        childrenCopy.forEach(drawChildOntoThumb);
-
-        updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
-        lastContentRef.current[layer.id] = contentStr;
+    const scaleX = thumbW / refW;
+    const scaleY = thumbH / refH;
+    const drawChild = (node: Layer) => {
+      if (!node.visible) return;
+      if (node.type === 'group' || node.type === 'artboard') {
+        node.children?.forEach(drawChild);
+        return;
       }
-    }
+      const c = canvasRefs.current[node.id];
+      if (c) {
+        ctx.drawImage(c, 0, 0, c.width, c.height,
+          (node.position?.x || 0) * scaleX, (node.position?.y || 0) * scaleY,
+          (node.width || c.width) * scaleX, (node.height || c.height) * scaleY);
+      }
+    };
+    [...layer.children].reverse().forEach(drawChild);
+    updateLayer(layer.id, { thumbnail: tc.toDataURL() });
     return;
   }
 
-  const { thumbnail, ...content } = layer;
-  const contentStr = JSON.stringify(content);
-  if (lastContentRef.current[layer.id] !== contentStr) {
-    const thumbCanvas = document.createElement('canvas');
-    const maxSize = 48;
+  const key = cacheKey(layer, documentSize.w, documentSize.h);
+  if (lastKeyRef.current[layer.id] === key) return;
 
-    if (layer.type === 'text') {
-      thumbCanvas.width = maxSize;
-      thumbCanvas.height = maxSize;
-      const thumbCtx = thumbCanvas.getContext('2d');
-      if (thumbCtx) {
-        const colorStr = (layer.color || '#000000').toLowerCase();
-        let isNearWhite = false;
-        
-        if (colorStr.includes('rgb')) {
-          const match = colorStr.match(/\d+/g);
-          if (match && match.length >= 3) {
-            const r = parseInt(match[0]);
-            const g = parseInt(match[1]);
-            const b = parseInt(match[2]);
-            if (r > 220 && g > 220 && b > 220) {
-              isNearWhite = true;
-            }
-          }
-        } else if (colorStr.startsWith('#')) {
-          const hex = colorStr.slice(1);
-          if (hex.length === 3) {
-            const r = parseInt(hex[0], 16) * 17;
-            const g = parseInt(hex[1], 16) * 17;
-            const b = parseInt(hex[2], 16) * 17;
-            if (r > 220 && g > 220 && b > 220) isNearWhite = true;
-          } else if (hex.length >= 6) {
-            const r = parseInt(hex.slice(0, 2), 16);
-            const g = parseInt(hex.slice(2, 4), 16);
-            const b = parseInt(hex.slice(4, 6), 16);
-            if (r > 220 && g > 220 && b > 220) isNearWhite = true;
-          }
-        } else if (colorStr === 'white' || colorStr === '#fff' || colorStr === '#ffffff') {
-          isNearWhite = true;
-        }
-
-        // Background
-        thumbCtx.fillStyle = isNearWhite ? '#000000' : '#ffffff';
-        thumbCtx.fillRect(0, 0, maxSize, maxSize);
-
-        // Text rendering
-        thumbCtx.fillStyle = layer.color || '#000000';
-        thumbCtx.font = 'bold 11px sans-serif';
-        thumbCtx.textAlign = 'center';
-        thumbCtx.textBaseline = 'middle';
-        
-        let dispText = layer.textContent || 'T';
-        if (dispText.length > 5) {
-          dispText = dispText.substring(0, 4) + '..';
-        }
-        thumbCtx.fillText(dispText, maxSize / 2, maxSize / 2);
-
-        updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
-        lastContentRef.current[layer.id] = contentStr;
-      }
-    } else if (layer.type === 'shape') {
-      thumbCanvas.width = maxSize;
-      thumbCanvas.height = maxSize;
-      const thumbCtx = thumbCanvas.getContext('2d');
-      if (thumbCtx) {
-        const fillStr = (layer.shapeData?.fill || '#000000').toLowerCase();
-        let isLight = false;
-
-        const getBrightness = (r: number, g: number, b: number) => {
-          return 0.299 * r + 0.587 * g + 0.114 * b;
-        };
-
-        if (fillStr.includes('rgb')) {
-          const match = fillStr.match(/\d+/g);
-          if (match && match.length >= 3) {
-            const r = parseInt(match[0]);
-            const g = parseInt(match[1]);
-            const b = parseInt(match[2]);
-            const brightness = getBrightness(r, g, b);
-            if (brightness > 128) isLight = true;
-          }
-        } else if (fillStr.startsWith('#')) {
-          const hex = fillStr.slice(1);
-          if (hex.length === 3) {
-            const r = parseInt(hex[0], 16) * 17;
-            const g = parseInt(hex[1], 16) * 17;
-            const b = parseInt(hex[2], 16) * 17;
-            const brightness = getBrightness(r, g, b);
-            if (brightness > 128) isLight = true;
-          } else if (hex.length >= 6) {
-            const r = parseInt(hex.slice(0, 2), 16);
-            const g = parseInt(hex.slice(2, 4), 16);
-            const b = parseInt(hex.slice(4, 6), 16);
-            const brightness = getBrightness(r, g, b);
-            if (brightness > 128) isLight = true;
-          }
-        } else if (fillStr === 'white' || fillStr === '#fff' || fillStr === '#ffffff' || fillStr === 'yellow' || fillStr === 'cyan' || fillStr === 'magenta') {
-          isLight = true;
-        } else if (fillStr === 'transparent' || fillStr === 'none' || fillStr === '') {
-          const strokeStr = (layer.shapeData?.stroke || '#000000').toLowerCase();
-          if (strokeStr.includes('rgb')) {
-            const match = strokeStr.match(/\d+/g);
-            if (match && match.length >= 3) {
-              const r = parseInt(match[0]);
-              const g = parseInt(match[1]);
-              const b = parseInt(match[2]);
-              const brightness = getBrightness(r, g, b);
-              if (brightness > 128) isLight = true;
-            }
-          } else if (strokeStr.startsWith('#')) {
-            const hex = strokeStr.slice(1);
-            if (hex.length === 3) {
-              const r = parseInt(hex[0], 16) * 17;
-              const g = parseInt(hex[1], 16) * 17;
-              const b = parseInt(hex[2], 16) * 17;
-              const brightness = getBrightness(r, g, b);
-              if (brightness > 128) isLight = true;
-            } else if (hex.length >= 6) {
-              const r = parseInt(hex.slice(0, 2), 16);
-              const g = parseInt(hex.slice(2, 4), 16);
-              const b = parseInt(hex.slice(4, 6), 16);
-              const brightness = getBrightness(r, g, b);
-              if (brightness > 128) isLight = true;
-            }
-          } else if (strokeStr === 'white' || strokeStr === '#fff' || strokeStr === '#ffffff') {
-            isLight = true;
-          }
-        }
-
-        thumbCtx.fillStyle = isLight ? '#000000' : '#ffffff';
-        thumbCtx.fillRect(0, 0, maxSize, maxSize);
-
-        const canvas = canvasRefs.current[layer.id];
-        if (canvas) {
-          const aspect = canvas.width / canvas.height;
-          let drawW, drawH;
-          if (aspect > 1) {
-            drawW = maxSize;
-            drawH = maxSize / aspect;
-          } else {
-            drawH = maxSize;
-            drawW = maxSize * aspect;
-          }
-          const drawX = (maxSize - drawW) / 2;
-          const drawY = (maxSize - drawH) / 2;
-
-          thumbCtx.drawImage(
-            canvas,
-            0, 0, canvas.width, canvas.height,
-            drawX, drawY, drawW, drawH
-          );
-        }
-
-        updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
-        lastContentRef.current[layer.id] = contentStr;
-      }
-    } else {
-      const canvas = canvasRefs.current[layer.id];
-      if (canvas) {
-        const refW = parentArtboard ? (parentArtboard.width || documentSize.w) : documentSize.w;
-        const refH = parentArtboard ? (parentArtboard.height || documentSize.h) : documentSize.h;
-        const aspect = refW / refH;
-
-        let thumbW, thumbH;
-        if (aspect > 1) {
-          thumbW = maxSize;
-          thumbH = maxSize / aspect;
-        } else {
-          thumbH = maxSize;
-          thumbW = maxSize * aspect;
-        }
-
-        thumbCanvas.width = thumbW;
-        thumbCanvas.height = thumbH;
-        const thumbCtx = thumbCanvas.getContext('2d');
-        if (thumbCtx) {
-          const scaleX = thumbW / refW;
-          const scaleY = thumbH / refH;
-          const layerW = layer.width || (canvas.width / (window.devicePixelRatio || 1));
-          const layerH = layer.height || (canvas.height / (window.devicePixelRatio || 1));
-
-          thumbCtx.drawImage(
-            canvas,
-            0, 0, canvas.width, canvas.height,
-            layer.position.x * scaleX, layer.position.y * scaleY,
-            layerW * scaleX, layerH * scaleY
-          );
-          updateLayer(layer.id, { thumbnail: thumbCanvas.toDataURL() });
-          lastContentRef.current[layer.id] = contentStr;
-        }
-      }
-    }
+  // ── Text layers ────────────────────────────────────────────────────────
+  if (layer.type === 'text') {
+    lastKeyRef.current[layer.id] = key;
+    const tc = document.createElement('canvas');
+    tc.width = MAX_THUMB; tc.height = MAX_THUMB;
+    const ctx = tc.getContext('2d');
+    if (!ctx) return;
+    const colorStr = (layer.color || '#000000').toLowerCase();
+    const toFullHex = (h: string) =>
+      h.length === 4
+        ? `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}`
+        : h;
+    const bright = (hex: string) => {
+      const full = toFullHex(hex);
+      const r = parseInt(full.slice(1, 3), 16);
+      const g = parseInt(full.slice(3, 5), 16);
+      const b = parseInt(full.slice(5, 7), 16);
+      return 0.299 * r + 0.587 * g + 0.114 * b;
+    };
+    const isLight = colorStr.startsWith('#') && bright(colorStr) > 220;
+    ctx.fillStyle = isLight ? '#000000' : '#ffffff';
+    ctx.fillRect(0, 0, MAX_THUMB, MAX_THUMB);
+    ctx.fillStyle = layer.color || '#000000';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    let txt = layer.textContent || 'T';
+    if (txt.length > 5) txt = txt.slice(0, 4) + '..';
+    ctx.fillText(txt, MAX_THUMB / 2, MAX_THUMB / 2);
+    updateLayer(layer.id, { thumbnail: tc.toDataURL() });
+    return;
   }
+
+  // ── Shape layers ───────────────────────────────────────────────────────
+  if (layer.type === 'shape') {
+    lastKeyRef.current[layer.id] = key;
+    const tc = document.createElement('canvas');
+    tc.width = MAX_THUMB; tc.height = MAX_THUMB;
+    const ctx = tc.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = (layer as any).shapeData?.fill || '#888888';
+    ctx.fillRect(0, 0, MAX_THUMB, MAX_THUMB);
+    const c = canvasRefs.current[layer.id];
+    if (c) {
+      const { w: dw, h: dh } = thumbSize(c.width, c.height);
+      ctx.drawImage(c, 0, 0, c.width, c.height,
+        (MAX_THUMB - dw) / 2, (MAX_THUMB - dh) / 2, dw, dh);
+    }
+    updateLayer(layer.id, { thumbnail: tc.toDataURL() });
+    return;
+  }
+
+  // ── Image layers (type='image', has dataUrl) ───────────────────────────
+  if ((layer as any).dataUrl) {
+    // Prevent concurrent loads for the same layer
+    if (pendingRef.current[layer.id]) return;
+
+    const refW = parentArtboard ? (parentArtboard.width || documentSize.w) : documentSize.w;
+    const refH = parentArtboard ? (parentArtboard.height || documentSize.h) : documentSize.h;
+    const { w: thumbW, h: thumbH } = thumbSize(refW, refH);
+    const capturedKey = key;
+
+    pendingRef.current[layer.id] = true;
+    const img = new Image();
+    img.onload = () => {
+      pendingRef.current[layer.id] = false;
+      // If layer state has changed while we were loading, abort — a new load will be scheduled
+      if (lastKeyRef.current[layer.id] === capturedKey) return;
+      lastKeyRef.current[layer.id] = capturedKey;
+
+      const tc = document.createElement('canvas');
+      tc.width = thumbW; tc.height = thumbH;
+      const ctx = tc.getContext('2d');
+      if (!ctx) return;
+
+      const scaleX = thumbW / refW;
+      const scaleY = thumbH / refH;
+      const lw = layer.width || img.naturalWidth;
+      const lh = layer.height || img.naturalHeight;
+      const px = (layer.position?.x || 0) * scaleX;
+      const py = (layer.position?.y || 0) * scaleY;
+      ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight,
+        px, py, lw * scaleX, lh * scaleY);
+      updateLayer(layer.id, { thumbnail: tc.toDataURL() });
+    };
+    img.onerror = () => { pendingRef.current[layer.id] = false; };
+    img.src = (layer as any).dataUrl;
+    return;
+  }
+
+  // ── Paint / other canvas-backed layers ─────────────────────────────────
+  const canvas = canvasRefs.current[layer.id];
+  if (!canvas) return;
+
+  lastKeyRef.current[layer.id] = key;
+  const refW = parentArtboard ? (parentArtboard.width || documentSize.w) : documentSize.w;
+  const refH = parentArtboard ? (parentArtboard.height || documentSize.h) : documentSize.h;
+  const { w: thumbW, h: thumbH } = thumbSize(refW, refH);
+  const tc = document.createElement('canvas');
+  tc.width = thumbW; tc.height = thumbH;
+  const ctx = tc.getContext('2d');
+  if (!ctx) return;
+
+  const scaleX = thumbW / refW;
+  const scaleY = thumbH / refH;
+  const lw = layer.width || (canvas.width / (window.devicePixelRatio || 1));
+  const lh = layer.height || (canvas.height / (window.devicePixelRatio || 1));
+  ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height,
+    (layer.position?.x || 0) * scaleX, (layer.position?.y || 0) * scaleY,
+    lw * scaleX, lh * scaleY);
+  updateLayer(layer.id, { thumbnail: tc.toDataURL() });
 };
 
 export const useThumbnailGeneration = (
@@ -289,14 +213,15 @@ export const useThumbnailGeneration = (
   canvasRefs: CanvasRefs,
   updateLayer: (id: string, updates: Partial<Layer>) => void
 ) => {
-  const lastContentRef = useRef<{ [key: string]: string }>({});
+  const lastKeyRef = useRef<{ [key: string]: string }>({});
+  const pendingRef = useRef<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     const timer = setTimeout(() => {
       layers.forEach(layer => {
-        generateThumbnail(layer, documentSize, canvasRefs, updateLayer, lastContentRef);
+        generateThumbnail(layer, documentSize, canvasRefs, updateLayer, lastKeyRef, pendingRef);
       });
-    }, 1000);
+    }, 500);
     return () => clearTimeout(timer);
   }, [layers, updateLayer, documentSize]);
 };

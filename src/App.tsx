@@ -19,11 +19,15 @@ import { nanoid } from 'nanoid';
 import { uploadToImgur, uploadToImageBB, saveToGoogleDrive } from './utils/cloudServices';
 import { cutSelection, pasteFromClipboard } from './utils/clipboardUtils';
 import { AlertContainer } from './components/UI/AlertContainer';
+import { CollabPermissionPopup } from './components/Modals/CollabPermissionPopup';
+import { initCollaborationSync } from './services/collaboration/collaborationSync';
+import { initUrlStateLoader } from './utils/shareUtils';
 import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
 
 const CloudStorageModal = React.lazy(() => import('./components/Modals/CloudStorageModal').then(m => ({ default: m.CloudStorageModal })));
 const PublicShareModal = React.lazy(() => import('./components/Modals/PublicShareModal').then(m => ({ default: m.PublicShareModal })));
+const ServerlessShareModal = React.lazy(() => import('./components/Modals/ServerlessShareModal').then(m => ({ default: m.ServerlessShareModal })));
 const OpenFromCloudDialog = React.lazy(() => import('./components/Dialogs/OpenFromCloudDialog').then(m => ({ default: m.OpenFromCloudDialog })));
 const NewDocumentDialog = React.lazy(() => import('./components/Dialogs/NewDocumentDialog').then(m => ({ default: m.NewDocumentDialog })));
 const ExportAsDialog = React.lazy(() => import('./components/Dialogs/ExportAsDialog').then(m => ({ default: m.ExportAsDialog })));
@@ -35,8 +39,16 @@ const AdjustmentDialog = React.lazy(() => import('./components/Dialogs/Adjustmen
 const WarpDialog = React.lazy(() => import('./components/Dialogs/WarpDialog').then(m => ({ default: m.WarpDialog })));
 const OpenRecentDialog = React.lazy(() => import('./components/Dialogs/OpenRecentDialog').then(m => ({ default: m.OpenRecentDialog })));
 const PreferencesDialog = React.lazy(() => import('./components/Dialogs/PreferencesDialog').then(m => ({ default: m.PreferencesDialog })));
+const KeyboardShortcutsDialog = React.lazy(() => import('./components/Dialogs/KeyboardShortcutsDialog').then(m => ({ default: m.KeyboardShortcutsDialog })));
 const FillLayerDialog = React.lazy(() => import('./components/Dialogs/FillLayerDialog').then(m => ({ default: m.FillLayerDialog })));
 const CanvasSizeDialog = React.lazy(() => import('./components/Dialogs/CanvasSizeDialog').then(m => ({ default: m.CanvasSizeDialog })));
+const ImageSizeDialog = React.lazy(() => import('./components/Dialogs/ImageSizeDialog').then(m => ({ default: m.ImageSizeDialog })));
+const ContentAwareScaleDialog = React.lazy(() => import('./components/Dialogs/ContentAwareScaleDialog').then(m => ({ default: m.ContentAwareScaleDialog })));
+const FilterGalleryDialog = React.lazy(() => import('./components/Dialogs/FilterGalleryDialog').then(m => ({ default: m.FilterGalleryDialog })));
+const LayerStyleDialog = React.lazy(() => import('./components/Dialogs/LayerStyleDialog').then(m => ({ default: m.LayerStyleDialog })));
+const ColorRangeDialog = React.lazy(() => import('./components/Dialogs/ColorRangeDialog').then(m => ({ default: m.ColorRangeDialog })));
+const TransformSelectionDialog = React.lazy(() => import('./components/Dialogs/TransformSelectionDialog').then(m => ({ default: m.TransformSelectionDialog })));
+const PrecisionFillDialog = React.lazy(() => import('./components/Dialogs/PrecisionFillDialog').then(m => ({ default: m.PrecisionFillDialog })));
 
 const BACKGROUND_REMOVAL_REMOTE_PUBLIC_PATH =
   'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
@@ -64,7 +76,38 @@ const CheckerboardIcon = () => (
 );
 
 
+const matchShortcut = (e: KeyboardEvent, shortcut: string): boolean => {
+  if (!shortcut) return false;
+  const parts = shortcut.split('+').map(p => p.trim().toLowerCase());
+  const needsCtrl = parts.includes('ctrl') || parts.includes('cmd') || parts.includes('control');
+  const needsShift = parts.includes('shift');
+  const needsAlt = parts.includes('alt') || parts.includes('option');
+
+  const keyPart = parts.find(p => p !== 'ctrl' && p !== 'cmd' && p !== 'control' && p !== 'shift' && p !== 'alt' && p !== 'option');
+  if (!keyPart) return false;
+
+  const isCtrl = e.ctrlKey || e.metaKey;
+  const isShift = e.shiftKey;
+  const isAlt = e.altKey;
+
+  if (needsCtrl !== isCtrl) return false;
+  if (needsShift !== isShift) return false;
+  if (needsAlt !== isAlt) return false;
+
+  let eventKey = e.key.toLowerCase();
+  let targetKey = keyPart;
+
+  if (targetKey === 'add' || targetKey === '=') targetKey = '+';
+  if (targetKey === 'subtract') targetKey = '-';
+
+  if (eventKey === 'add' || eventKey === '=') eventKey = '+';
+  if (eventKey === 'subtract') eventKey = '-';
+
+  return eventKey === targetKey;
+};
+
 const App: React.FC = () => {
+  const previousToolRef = React.useRef<string | null>(null);
   const [layerContextMenu, setLayerContextMenu] = React.useState<{ layerId: string; x: number; y: number } | null>(null);
   const [renamingLayerId, setRenamingLayerId] = React.useState<string | null>(null);
   const [newLayerName, setNewLayerName] = React.useState<string>('');
@@ -311,6 +354,7 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     (window as any).app = new Application();
+    initUrlStateLoader();
 
     const handleGlobalDragEnd = () => {
       document.querySelectorAll('.layer-node').forEach(el => {
@@ -363,6 +407,7 @@ const App: React.FC = () => {
     isMobileMenuOpen,
     setIsMobileMenuOpen,
     setIsCanvasSizeDialogOpen,
+    setIsImageSizeDialogOpen,
     setDocumentSize,
     setActiveTool,
     setToolVariant,
@@ -595,6 +640,10 @@ const App: React.FC = () => {
   const [saveModal, setSaveModal] = React.useState<{ type: 'cloud' | 'public' | null; provider?: string }>({ type: null });
   const [isLightingProcessing, setIsLightingProcessing] = React.useState(false);
 
+  React.useEffect(() => {
+    initCollaborationSync();
+  }, []);
+
   const topDockTab = useStore(s => s.topDockTab);
   const bottomDockTab = useStore(s => s.bottomDockTab);
   const mobileActivePanel = useStore(s => s.mobileActivePanel);
@@ -633,6 +682,23 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Space key for Hand tool
+      if (e.code === 'Space') {
+        const isTyping = document.activeElement?.tagName === 'INPUT' || 
+                         document.activeElement?.tagName === 'TEXTAREA' || 
+                         (document.activeElement as HTMLElement)?.contentEditable === 'true' ||
+                         useStore.getState().isTyping;
+        if (!isTyping) {
+          e.preventDefault();
+          const currentTool = useStore.getState().activeTool;
+          if (currentTool !== 'hand' && !previousToolRef.current) {
+            previousToolRef.current = currentTool;
+            useStore.getState().setActiveTool('hand');
+          }
+          return;
+        }
+      }
+
       const isCtrl = e.ctrlKey || e.metaKey;
 
       // Zoom operations (Ctrl + / Ctrl -)
@@ -654,96 +720,276 @@ const App: React.FC = () => {
         return;
       }
 
+      // Get current customizable shortcuts map from store
+      const shortcuts = useStore.getState().shortcuts || {};
+
       // File operations
-      // New Document
-      if (isCtrl && !e.altKey && e.key.toLowerCase() === 'n') {
+      if (matchShortcut(e, shortcuts.file_new || 'Ctrl+N')) {
         e.preventDefault();
         handleNewDocument();
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 'o') {
+      if (matchShortcut(e, shortcuts.file_open || 'Ctrl+O')) {
         e.preventDefault();
         document.getElementById('global-file-input')?.click();
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 's') {
+      if (matchShortcut(e, shortcuts.file_open_url)) {
+        e.preventDefault();
+        handleOpenURL();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.file_take_snapshot)) {
+        e.preventDefault();
+        handleTakeSnapshot();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.file_place)) {
+        e.preventDefault();
+        document.getElementById('place-file-input')?.click();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.file_save || 'Ctrl+S')) {
         e.preventDefault();
         handleSave(false);
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 'p') {
+      if (matchShortcut(e, shortcuts.file_save_psd)) {
+        e.preventDefault();
+        handleExport('psd');
+        return;
+      }
+      if (matchShortcut(e, shortcuts.file_export_dialog)) {
+        e.preventDefault();
+        useStore.getState().setIsExportDialogOpen(true);
+        return;
+      }
+      if (matchShortcut(e, shortcuts.file_print || 'Ctrl+P')) {
         e.preventDefault();
         handlePrint();
+        return;
       }
 
       // Undo/Redo
-      if (isCtrl && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      if (matchShortcut(e, shortcuts.edit_undo || 'Ctrl+Z')) {
         e.preventDefault();
         undo();
+        return;
       }
-      if ((isCtrl && e.key.toLowerCase() === 'y') || (isCtrl && e.shiftKey && e.key.toLowerCase() === 'z')) {
+      if (matchShortcut(e, shortcuts.edit_redo || 'Shift+Ctrl+Z')) {
         e.preventDefault();
         redo();
+        return;
       }
 
       // Edit operations
-      if (isCtrl && !e.shiftKey && e.key.toLowerCase() === 'c') {
+      if (matchShortcut(e, shortcuts.edit_copy || 'Ctrl+C')) {
         e.preventDefault();
         handleCopy();
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 'x') {
+      if (matchShortcut(e, shortcuts.edit_cut || 'Ctrl+X')) {
         e.preventDefault();
         handleCut();
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 'v') {
+      if (matchShortcut(e, shortcuts.edit_paste || 'Ctrl+V')) {
         e.preventDefault();
         handlePaste();
+        return;
       }
-      if (isCtrl && e.shiftKey && e.key === 'f') {
+      if (matchShortcut(e, shortcuts.edit_fill)) {
         e.preventDefault();
         setIsFillPickerOpen(true);
+        return;
       }
-      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
+      if (matchShortcut(e, shortcuts.edit_fade)) {
         e.preventDefault();
         handleFade();
+        return;
       }
-      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'c') {
+      if (matchShortcut(e, shortcuts.edit_copy_merged)) {
         e.preventDefault();
         handleCopyMerged();
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 't') {
+      if (matchShortcut(e, shortcuts.edit_free_transform || 'Ctrl+T')) {
         e.preventDefault();
         handleFreeTransform();
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 'k') {
+      if (matchShortcut(e, shortcuts.edit_preferences || 'Ctrl+K')) {
         e.preventDefault();
         handlePreferences();
+        return;
+      }
+
+      // Image adjustments & auto commands
+      if (matchShortcut(e, shortcuts.adjust_levels || 'Ctrl+L')) {
+        e.preventDefault();
+        useStore.getState().addAdjustmentLayer('levels');
+        return;
+      }
+      if (matchShortcut(e, shortcuts.adjust_curves || 'Ctrl+M')) {
+        e.preventDefault();
+        useStore.getState().addAdjustmentLayer('curves');
+        return;
+      }
+      if (matchShortcut(e, shortcuts.adjust_hue_saturation || 'Ctrl+U')) {
+        e.preventDefault();
+        useStore.getState().addAdjustmentLayer('hue_saturation');
+        return;
+      }
+      if (matchShortcut(e, shortcuts.adjust_color_balance || 'Ctrl+B')) {
+        e.preventDefault();
+        useStore.getState().addAdjustmentLayer('color_balance');
+        return;
+      }
+      if (matchShortcut(e, shortcuts.adjust_invert || 'Ctrl+I')) {
+        e.preventDefault();
+        handleInvert();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.image_auto_tone)) {
+        e.preventDefault();
+        useStore.getState().autoTone();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.image_auto_contrast)) {
+        e.preventDefault();
+        useStore.getState().autoContrast();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.image_auto_color)) {
+        e.preventDefault();
+        useStore.getState().autoColor();
+        return;
+      }
+
+      // Dialog shortcuts
+      if (matchShortcut(e, shortcuts.dialog_image_size || 'Alt+Ctrl+I')) {
+        e.preventDefault();
+        setIsImageSizeDialogOpen(true);
+        return;
+      }
+      if (matchShortcut(e, shortcuts.dialog_canvas_size || 'Alt+Ctrl+C')) {
+        e.preventDefault();
+        setIsCanvasSizeDialogOpen(true);
+        return;
+      }
+
+      // View operations
+      if (matchShortcut(e, shortcuts.view_zoom_fit || 'Ctrl+0')) {
+        e.preventDefault();
+        const viewportW = window.innerWidth - 240 - 44 - 60;
+        const viewportH = window.innerHeight - 38 - 32 - 24 - 40;
+        const zoomW = viewportW / useStore.getState().documentSize.w;
+        const zoomH = viewportH / useStore.getState().documentSize.h;
+        setZoom(Math.min(zoomW, zoomH));
+        return;
+      }
+      if (matchShortcut(e, shortcuts.view_zoom_100 || 'Ctrl+1')) {
+        e.preventDefault();
+        setZoom(1.0);
+        return;
+      }
+      if (matchShortcut(e, shortcuts.view_rulers || 'Ctrl+R')) {
+        e.preventDefault();
+        setShowRulers(!useStore.getState().showRulers);
+        return;
+      }
+      if (matchShortcut(e, shortcuts.view_grid)) {
+        e.preventDefault();
+        useStore.getState().setShowGrid(!useStore.getState().showGrid);
+        return;
+      }
+      if (matchShortcut(e, shortcuts.view_guides)) {
+        e.preventDefault();
+        useStore.getState().setShowGuides(!useStore.getState().showGuides);
+        return;
       }
 
       // Layer operations
-      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'n') {
+      if (matchShortcut(e, shortcuts.layer_new || 'Shift+Ctrl+N')) {
         e.preventDefault();
         addLayer({ name: `Layer ${useStore.getState().layers.length + 1}` });
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 'j') {
+      if (matchShortcut(e, shortcuts.layer_duplicate || 'Ctrl+J')) {
         e.preventDefault();
         if (useStore.getState().activeLayerId) {
           duplicateLayer(useStore.getState().activeLayerId!);
         }
+        return;
+      }
+      if (matchShortcut(e, shortcuts.layer_delete || 'Del')) {
+        e.preventDefault();
+        if (useStore.getState().activeLayerId) {
+          removeLayer(useStore.getState().activeLayerId);
+        }
+        return;
+      }
+      if (matchShortcut(e, shortcuts.layer_merge || 'Ctrl+E')) {
+        e.preventDefault();
+        const selected = useStore.getState().selectedLayerIds.length > 0
+          ? useStore.getState().selectedLayerIds
+          : [useStore.getState().activeLayerId].filter(Boolean) as string[];
+        useStore.getState().mergeLayers?.(selected);
+        return;
+      }
+      if (matchShortcut(e, shortcuts.layer_flatten)) {
+        e.preventDefault();
+        useStore.getState().flattenImage?.();
+        return;
       }
 
       // Selection operations
-      if (isCtrl && e.key.toLowerCase() === 'a') {
+      if (matchShortcut(e, shortcuts.select_all || 'Ctrl+A')) {
         e.preventDefault();
         setSelectionRect({ x: 0, y: 0, w: useStore.getState().documentSize.w, h: useStore.getState().documentSize.h });
+        return;
       }
-      if (isCtrl && e.key.toLowerCase() === 'd') {
+      if (matchShortcut(e, shortcuts.select_deselect || 'Ctrl+D')) {
         e.preventDefault();
         setSelectionRect(null);
         setLassoPaths([]);
         setCropRect(null);
+        return;
       }
-      if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'i') {
+      if (matchShortcut(e, shortcuts.select_inverse || 'Shift+Ctrl+I')) {
         e.preventDefault();
         setIsInverseSelection(!useStore.getState().isInverseSelection);
+        return;
       }
+      if (matchShortcut(e, shortcuts.select_subject)) {
+        e.preventDefault();
+        useStore.getState().selectSubject?.();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.select_remove_bg)) {
+        e.preventDefault();
+        useStore.getState().removeBackground?.();
+        return;
+      }
+
+      // Tools quick selection
+      if (matchShortcut(e, shortcuts.tool_move || 'V')) { e.preventDefault(); useStore.getState().setActiveTool('move'); return; }
+      if (matchShortcut(e, shortcuts.tool_marquee || 'M')) { e.preventDefault(); useStore.getState().setActiveTool('marquee'); return; }
+      if (matchShortcut(e, shortcuts.tool_lasso || 'L')) { e.preventDefault(); useStore.getState().setActiveTool('lasso'); return; }
+      if (matchShortcut(e, shortcuts.tool_quick_selection || 'W')) { e.preventDefault(); useStore.getState().setActiveTool('quick_selection'); return; }
+      if (matchShortcut(e, shortcuts.tool_crop || 'C')) { e.preventDefault(); useStore.getState().setActiveTool('crop'); return; }
+      if (matchShortcut(e, shortcuts.tool_eyedropper || 'I')) { e.preventDefault(); useStore.getState().setActiveTool('eyedropper'); return; }
+      if (matchShortcut(e, shortcuts.tool_healing || 'J')) { e.preventDefault(); useStore.getState().setActiveTool('healing'); return; }
+      if (matchShortcut(e, shortcuts.tool_brush || 'B')) { e.preventDefault(); useStore.getState().setActiveTool('brush'); return; }
+      if (matchShortcut(e, shortcuts.tool_clone || 'S')) { e.preventDefault(); useStore.getState().setActiveTool('clone'); return; }
+      if (matchShortcut(e, shortcuts.tool_eraser || 'E')) { e.preventDefault(); useStore.getState().setActiveTool('eraser'); return; }
+      if (matchShortcut(e, shortcuts.tool_gradient || 'G')) { e.preventDefault(); useStore.getState().setActiveTool('gradient'); return; }
+      if (matchShortcut(e, shortcuts.tool_dodge || 'O')) { e.preventDefault(); useStore.getState().setActiveTool('dodge'); return; }
+      if (matchShortcut(e, shortcuts.tool_pen || 'P')) { e.preventDefault(); useStore.getState().setActiveTool('pen'); return; }
+      if (matchShortcut(e, shortcuts.tool_text || 'T')) { e.preventDefault(); useStore.getState().setActiveTool('text'); return; }
+      if (matchShortcut(e, shortcuts.tool_shape || 'U')) { e.preventDefault(); useStore.getState().setActiveTool('shape'); return; }
+      if (matchShortcut(e, shortcuts.tool_hand || 'H')) { e.preventDefault(); useStore.getState().setActiveTool('hand'); return; }
+      if (matchShortcut(e, shortcuts.tool_zoom || 'Z')) { e.preventDefault(); useStore.getState().setActiveTool('zoom_tool'); return; }
 
       // Tools shortcut groups cycling
       const shortcutGroups: Record<string, string[]> = {
@@ -824,8 +1070,21 @@ const App: React.FC = () => {
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        if (previousToolRef.current) {
+          useStore.getState().setActiveTool(previousToolRef.current as any);
+          previousToolRef.current = null;
+        }
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [activeLayerId, layers]);
 
   React.useEffect(() => {
@@ -1053,23 +1312,29 @@ const App: React.FC = () => {
             setDocumentSize({ w: result.width, h: result.height });
           }
 
+          // When placing (skipResize=true), scale image to fit inside canvas without stretching
           let targetW = result.width;
           let targetH = result.height;
           if (skipResize) {
-            const scale = Math.min(documentSize.w / result.width, documentSize.h / result.height);
-            targetW = result.width * scale;
-            targetH = result.height * scale;
+            const scaleX = documentSize.w / result.width;
+            const scaleY = documentSize.h / result.height;
+            const scale = Math.min(1, Math.min(scaleX, scaleY)); // never upscale
+            targetW = Math.round(result.width * scale);
+            targetH = Math.round(result.height * scale);
           }
+
+          // Center the layer on the canvas using whole-pixel coordinates
+          const isFirstLayer = !skipResize && (layers.length === 0 || isDefaultBackground);
+          const posX = isFirstLayer ? 0 : Math.round((documentSize.w - targetW) / 2);
+          const posY = isFirstLayer ? 0 : Math.round((documentSize.h - targetH) / 2);
 
           addLayer({
             name: fileToImport.name || 'Pasted Image',
             type: 'image',
             dataUrl: result.dataUrl,
-            width: Math.round(targetW),
-            height: Math.round(targetH),
-            position: (!skipResize && (layers.length === 0 || isDefaultBackground)) 
-              ? { x: 0, y: 0 } 
-              : { x: (documentSize.w - targetW) / 2, y: (documentSize.h - targetH) / 2 }
+            width: targetW,
+            height: targetH,
+            position: { x: posX, y: posY }
           });
           recordHistory(`Import ${fileToImport.name}`);
         }
@@ -1107,7 +1372,10 @@ const App: React.FC = () => {
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile();
-          if (blob) handleFile(blob, 'Pasted Image');
+          if (blob) {
+            const hasActiveDoc = useStore.getState().layers.length > 0;
+            handleFile(blob, 'Pasted Image', hasActiveDoc);
+          }
         }
       }
     };
@@ -1497,9 +1765,61 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSelectSky = () => {
+    if (!activeLayerId) return;
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+    let found = false;
+
+    // Scan top 60% of image for sky color signatures
+    for (let y = 0; y < canvas.height * 0.6; y += 2) {
+      for (let x = 0; x < canvas.width; x += 2) {
+        const idx = (y * canvas.width + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+
+        if (a > 50) {
+          const isBlueSky = b > r && b > g - 15 && b > 100;
+          const isOvercastSky = r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 15 && Math.abs(r - b) < 15;
+          if (isBlueSky || isOvercastSky) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+            found = true;
+          }
+        }
+      }
+    }
+
+    if (found) {
+      setSelectionRect({
+        x: Math.max(0, minX),
+        y: Math.max(0, minY),
+        w: Math.min(canvas.width - minX, maxX - minX + 1),
+        h: Math.min(canvas.height - minY, maxY - minY + 1)
+      });
+      setIsInverseSelection(false);
+      setLassoPaths([]);
+      recordHistory('Select Sky');
+      addAlert({ type: 'success', message: 'Sky selected based on color and position heuristics.' });
+    } else {
+      addAlert({ type: 'warning', message: 'Could not detect sky regions on this layer.' });
+    }
+  };
+
   React.useEffect(() => {
     const onInvert = () => handleInvert();
     const onSelectSubject = () => handleSelectSubject();
+    const onSelectSky = () => handleSelectSky();
     const onCropFitDoc = () => {
       setCropRect({ x: 0, y: 0, w: documentSize.w, h: documentSize.h });
     };
@@ -1513,11 +1833,13 @@ const App: React.FC = () => {
 
     window.addEventListener('invert-layer', onInvert);
     window.addEventListener('select-subject', onSelectSubject);
+    window.addEventListener('select-sky', onSelectSky);
     window.addEventListener('crop-fit-doc', onCropFitDoc);
     window.addEventListener('crop-fit-layer', onCropFitLayer);
     return () => {
       window.removeEventListener('invert-layer', onInvert);
       window.removeEventListener('select-subject', onSelectSubject);
+      window.removeEventListener('select-sky', onSelectSky);
       window.removeEventListener('crop-fit-doc', onCropFitDoc);
       window.removeEventListener('crop-fit-layer', onCropFitLayer);
     };
@@ -2017,59 +2339,75 @@ const App: React.FC = () => {
     input.click();
   };
 
-  const [clipboard, setClipboard] = React.useState<any>(null);
+  React.useEffect(() => {
+    const handleFocus = () => {
+      useStore.getState().setIsInternalCopy(false);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   const handleCopy = async () => {
-    if (!activeLayerId) return;
-    const activeLayer = findLayerById(layers, activeLayerId);
-    if (!activeLayer) return;
+    const state = useStore.getState();
+    // Determine which layer IDs to copy: all selected, falling back to active
+    const targetIds: string[] = (state.selectedLayerIds && state.selectedLayerIds.length > 0)
+      ? state.selectedLayerIds
+      : (state.activeLayerId ? [state.activeLayerId] : []);
 
-    setClipboard({ ...activeLayer, id: undefined, name: `${activeLayer.name} Copy` });
+    if (targetIds.length === 0) return;
 
-    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
-    if (canvas) {
-      const selectionRect = useStore.getState().selectionRect;
-      let finalCanvas = canvas;
+    // Collect full layer objects for each ID (including shapes, text, effects, paths)
+    const targetLayers = targetIds.map(id => findLayerById(layers, id)).filter(Boolean);
+    if (targetLayers.length === 0) return;
 
-      if (selectionRect) {
-        const croppedCanvas = document.createElement('canvas');
-        croppedCanvas.width = selectionRect.w;
-        croppedCanvas.height = selectionRect.h;
-        const croppedCtx = croppedCanvas.getContext('2d');
-        if (croppedCtx) {
-          croppedCtx.drawImage(
-            canvas,
-            selectionRect.x - (activeLayer.position?.x || 0),
-            selectionRect.y - (activeLayer.position?.y || 0),
-            selectionRect.w, selectionRect.h,
-            0, 0, selectionRect.w, selectionRect.h
-          );
-          finalCanvas = croppedCanvas;
+    // Always store the full layer objects for faithful cross-workspace paste
+    state.setClipboardLayers(targetLayers as any[]);
+    state.setClipboardLayer(targetLayers[0] as any);  // legacy single-layer compat
+    state.setIsInternalCopy(true);
+
+    // Also write a flat rasterised PNG to the system clipboard (for external apps)
+    // Only do this for paint/image layers that have a dataUrl canvas element
+    if (targetLayers.length === 1) {
+      const activeLayer = targetLayers[0]!;
+      const canvas = document.querySelector(`canvas[data-layer-id="${activeLayer.id}"]`) as HTMLCanvasElement;
+      if (canvas) {
+        const selectionRect = state.selectionRect;
+        let finalCanvas: HTMLCanvasElement = canvas;
+
+        if (selectionRect) {
+          const croppedCanvas = document.createElement('canvas');
+          croppedCanvas.width = selectionRect.w;
+          croppedCanvas.height = selectionRect.h;
+          const croppedCtx = croppedCanvas.getContext('2d');
+          if (croppedCtx) {
+            croppedCtx.drawImage(
+              canvas,
+              selectionRect.x - (activeLayer.position?.x || 0),
+              selectionRect.y - (activeLayer.position?.y || 0),
+              selectionRect.w, selectionRect.h,
+              0, 0, selectionRect.w, selectionRect.h
+            );
+            finalCanvas = croppedCanvas;
+          }
         }
-      }
 
-      const blobPromise = new Promise<Blob>((resolve) => {
-        finalCanvas.toBlob((b) => {
-          resolve(b || new Blob());
-        }, 'image/png');
-      });
+        const blobPromise = new Promise<Blob>((resolve) => {
+          finalCanvas.toBlob((b) => resolve(b || new Blob()), 'image/png');
+        });
 
-      try {
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            'image/png': blobPromise
-          })
-        ]);
-        useStore.getState().setClipboardDataUrl(finalCanvas.toDataURL('image/png'));
-        useStore.getState().setClipboardDataRect(selectionRect || { x: 0, y: 0, w: documentSize.w, h: documentSize.h });
-      } catch (err) {
-        console.error('Failed to copy image to system clipboard:', err);
-      }
-    } else if (activeLayer.type === 'text' && activeLayer.textContent) {
-      try {
-        await navigator.clipboard.writeText(activeLayer.textContent);
-      } catch (err) {
-        console.error('Failed to copy text to system clipboard:', err);
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })]);
+          state.setClipboardDataUrl(finalCanvas.toDataURL('image/png'));
+          state.setClipboardDataRect(selectionRect || { x: 0, y: 0, w: documentSize.w, h: documentSize.h });
+        } catch (err) {
+          console.warn('Could not write image to system clipboard:', err);
+        }
+      } else if (activeLayer.type === 'text' && (activeLayer as any).textContent) {
+        try {
+          await navigator.clipboard.writeText((activeLayer as any).textContent);
+        } catch (err) {
+          console.warn('Could not write text to system clipboard:', err);
+        }
       }
     }
   };
@@ -2092,6 +2430,35 @@ const App: React.FC = () => {
   };
 
   const handlePaste = async () => {
+    const state = useStore.getState();
+
+    // 1. Internal copy → restore full layer structure for ALL copied layers
+    if (state.isInternalCopy && state.clipboardLayers && state.clipboardLayers.length > 0) {
+      const clayers = state.clipboardLayers;
+      clayers.forEach((layer: any, idx: number) => {
+        // First layer: exact same position. Additional layers: stagger by 15px each
+        const offset = idx * 15;
+        const { id, ...rest } = layer;
+        addLayer({
+          ...rest,
+          position: {
+            x: Math.round((layer.position?.x ?? 0) + offset),
+            y: Math.round((layer.position?.y ?? 0) + offset),
+          },
+          name: clayers.length === 1 ? `${layer.name} Copy` : `${layer.name} (Pasted)`,
+        });
+      });
+      recordHistory('Paste Layers');
+      return;
+    }
+
+    // 2. Legacy single internal layer (backward compat)
+    if (state.isInternalCopy && state.clipboardLayer) {
+      await pasteFromClipboard(state, 'center');
+      return;
+    }
+
+    // 3. System clipboard (images / text from external apps)
     try {
       const clipboardItems = await navigator.clipboard.read();
       for (const item of clipboardItems) {
@@ -2105,13 +2472,15 @@ const App: React.FC = () => {
             });
             const img = new Image();
             img.onload = () => {
+              const x = Math.round((documentSize.w - img.width) / 2);
+              const y = Math.round((documentSize.h - img.height) / 2);
               addLayer({
                 name: 'Pasted Image',
                 type: 'image',
                 dataUrl: dataUrl,
                 width: img.width,
                 height: img.height,
-                position: { x: 20, y: 20 }
+                position: { x, y }
               });
               recordHistory('Paste System Clipboard');
             };
@@ -2131,16 +2500,19 @@ const App: React.FC = () => {
                 if (w > maxW) maxW = w;
               });
               const height = Math.max(10, lines.length * fontSize * 1.2);
+              const targetW = maxW + 16;
+              const x = Math.round((documentSize.w - targetW) / 2);
+              const y = Math.round((documentSize.h - height) / 2);
 
               addLayer({
                 name: 'Pasted Text',
                 type: 'text',
                 textContent: text,
-                width: maxW + 16,
+                width: targetW,
                 height: height,
                 fontSize: fontSize,
                 color: '#000000',
-                position: { x: 20, y: 20 }
+                position: { x, y }
               });
               recordHistory('Paste System Clipboard Text');
               return;
@@ -2152,12 +2524,11 @@ const App: React.FC = () => {
       console.warn('System clipboard read failed, falling back to internal clipboard:', err);
     }
 
-    const state = useStore.getState();
+    // 4. Final fallback — internal dataUrl
     if (state.clipboardDataUrl) {
       await pasteFromClipboard(state, 'center');
-    } else if (clipboard) {
-      addLayer({ ...clipboard, position: { x: (clipboard.position?.x || 0) + 20, y: (clipboard.position?.y || 0) + 20 } });
-      recordHistory('Paste Layer');
+    } else if (state.clipboardLayer) {
+      await pasteFromClipboard(state, 'center');
     }
   };
 
@@ -2561,48 +2932,8 @@ const App: React.FC = () => {
     recordHistory('Deselect');
   };
 
-  if (layers.length === 0) {
+  const renderHeader = () => {
     return (
-      <div className="app-layout welcome-only">
-        <input type="file" id="global-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handleImageUpload} />
-        <input type="file" id="place-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handlePlaceUpload} />
-        <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
-        <React.Suspense fallback={null}>
-          <OpenFromCloudDialog />
-          <NewDocumentDialog />
-          <ExportAsDialog />
-          <FileInfoDialog />
-          <SignatureDialog />
-          <CameraDialog />
-          <MobileCameraDialog />
-          <AdjustmentDialog />
-          <WarpDialog />
-          <CanvasSizeDialog />
-        <OpenRecentDialog />
-        <PreferencesDialog />
-      </React.Suspense>
-        <AlertContainer />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''} ${isMobileMenuOpen ? 'menu-active' : ''} ${isToolsOpen ? 'tools-active' : ''} ${isPanelsOpen ? 'panels-active' : ''}`}>
-      <input type="file" id="global-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handleImageUpload} />
-      <input type="file" id="place-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handlePlaceUpload} />
-
-      {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
-        <div
-          className="mobile-backdrop"
-          onClick={() => {
-            setIsMobileMenuOpen(false);
-            setIsToolsOpen(false);
-            setIsPanelsOpen(false);
-
-          }}
-        />
-      )}
-
       <header className="app-header">
         <div className="header-left">
           <button className="mobile-menu-btn" onClick={() => {
@@ -2658,9 +2989,7 @@ const App: React.FC = () => {
             setIsCanvasSizeDialogOpen(true);
           }}
           onImageSize={() => {
-            const w = prompt('New Image Width:', documentSize.w.toString());
-            const h = prompt('New Image Height:', documentSize.h.toString());
-            if (w && h) setDocumentSize({ w: parseInt(w), h: parseInt(h) });
+            setIsImageSizeDialogOpen(true);
           }}
           onAddEmptyLayer={() => addLayer({ name: `Layer ${layers.length + 1}` })}
           onSelectAll={handleSelectAll}
@@ -2749,10 +3078,7 @@ const App: React.FC = () => {
           onConvertToIndexed={handleConvertToIndexed}
         />
 
-
-
         <div className="header-right">
-          {/* Mobile toggle buttons */}
           <button
             className={`mobile-panel-toggle ${isToolsOpen ? 'active' : ''}`}
             onClick={() => { setIsToolsOpen(!isToolsOpen); setIsPanelsOpen(false); }}
@@ -2767,6 +3093,72 @@ const App: React.FC = () => {
           </button>
         </div>
       </header>
+    );
+  };
+
+  if (layers.length === 0) {
+    return (
+      <div className={`app-layout welcome-only ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''} ${isMobileMenuOpen ? 'menu-active' : ''} ${isToolsOpen ? 'tools-active' : ''} ${isPanelsOpen ? 'panels-active' : ''}`}>
+        <input type="file" id="global-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handleImageUpload} />
+        <input type="file" id="place-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handlePlaceUpload} />
+
+        {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
+          <div
+            className="mobile-backdrop"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setIsToolsOpen(false);
+              setIsPanelsOpen(false);
+            }}
+          />
+        )}
+        {renderHeader()}
+        <WelcomeOverlay onOpenImage={() => document.getElementById('global-file-input')?.click()} />
+        <React.Suspense fallback={null}>
+          <OpenFromCloudDialog />
+          <NewDocumentDialog />
+          <ExportAsDialog />
+          <FileInfoDialog />
+          <SignatureDialog />
+          <CameraDialog />
+          <MobileCameraDialog />
+          <AdjustmentDialog />
+          <WarpDialog />
+          <CanvasSizeDialog />
+          <ImageSizeDialog />
+          <ContentAwareScaleDialog />
+          <FilterGalleryDialog />
+          <LayerStyleDialog />
+          <ColorRangeDialog />
+          <TransformSelectionDialog />
+          <OpenRecentDialog />
+          <PreferencesDialog />
+          <KeyboardShortcutsDialog />
+          <ServerlessShareModal />
+        </React.Suspense>
+        <AlertContainer />
+        <CollabPermissionPopup />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`app-layout ${isMobileMenuOpen || isToolsOpen || isPanelsOpen ? 'mobile-panel-active' : ''} ${isMobileMenuOpen ? 'menu-active' : ''} ${isToolsOpen ? 'tools-active' : ''} ${isPanelsOpen ? 'panels-active' : ''}`}>
+      <input type="file" id="global-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handleImageUpload} />
+      <input type="file" id="place-file-input" accept="image/*,image/svg+xml,application/pdf,.psd" hidden onChange={handlePlaceUpload} />
+
+      {(isMobileMenuOpen || isToolsOpen || isPanelsOpen) && (
+        <div
+          className="mobile-backdrop"
+          onClick={() => {
+            setIsMobileMenuOpen(false);
+            setIsToolsOpen(false);
+            setIsPanelsOpen(false);
+
+          }}
+        />
+      )}
+      {renderHeader()}
 
       <OptionsBar />
       <TabBar />
@@ -3632,6 +4024,8 @@ const App: React.FC = () => {
             }}
           />
         )}
+
+        <ServerlessShareModal />
       </React.Suspense>
 
       {layerContextMenu && (
@@ -3652,6 +4046,50 @@ const App: React.FC = () => {
             useStore.getState().recordHistory('Delete Layer');
             setLayerContextMenu(null);
           }}
+          onDuplicate={(id) => {
+            useStore.getState().duplicateLayer(id);
+          }}
+          onMergeDown={(id) => {
+            useStore.getState().mergeLayers?.([id]);
+          }}
+          onSetAsCanvas={(id) => {
+            const st = useStore.getState();
+            const layer = st.layers.find(l => l.id === id) as any;
+            if (!layer) return;
+
+            const applySize = (w: number, h: number) => {
+              if (w <= 0 || h <= 0) return;
+              // 1. Resize the canvas
+              st.setDocumentSize({ w, h });
+              // 2. Reset the layer to (0,0) so it perfectly fills the new canvas
+              //    Also clear the thumbnail cache so it regenerates on next cycle
+              st.updateLayer(id, {
+                position: { x: 0, y: 0 },
+                width: w,
+                height: h,
+                thumbnail: '',   // ← invalidate cached thumbnail
+              });
+              st.recordHistory('Set Canvas to Image Size');
+              st.addAlert({ type: 'success', message: `Canvas resized to ${w} × ${h} px` });
+            };
+
+            // Prefer explicit width/height already stored on the layer
+            if (layer.width && layer.height) {
+              applySize(layer.width, layer.height);
+              return;
+            }
+
+            // Fall back: load dataUrl to read intrinsic pixel dimensions
+            if (layer.dataUrl) {
+              const img = new Image();
+              img.onload = () => applySize(img.naturalWidth, img.naturalHeight);
+              img.onerror = () => st.addAlert({ type: 'error', message: 'Could not read image dimensions.' });
+              img.src = layer.dataUrl;
+              return;
+            }
+
+            st.addAlert({ type: 'warning', message: 'This layer type has no image dimensions.' });
+          }}
         />
       )}
 
@@ -3666,12 +4104,21 @@ const App: React.FC = () => {
         <AdjustmentDialog />
         <WarpDialog />
         <CanvasSizeDialog />
-          <OpenRecentDialog />
-          <PreferencesDialog />
-        </React.Suspense>
-        <AlertContainer />
-      </div>
-    );
-  };
+        <ImageSizeDialog />
+        <ContentAwareScaleDialog />
+        <FilterGalleryDialog />
+        <LayerStyleDialog />
+        <ColorRangeDialog />
+        <TransformSelectionDialog />
+        <OpenRecentDialog />
+        <PreferencesDialog />
+        <KeyboardShortcutsDialog />
+        <PrecisionFillDialog />
+      </React.Suspense>
+      <AlertContainer />
+      <CollabPermissionPopup />
+    </div>
+  );
+};
 
 export default App;

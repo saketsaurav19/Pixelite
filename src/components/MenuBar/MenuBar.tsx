@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import './MenuBar.css';
 import { useStore } from '../../store/useStore';
+import { pasteFromClipboard } from '../../utils/clipboardUtils';
 
 interface MenuItem {
   label?: string;
@@ -139,7 +140,17 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const activeLayerId = useStore((s) => s.activeLayerId);
   const autoAlignLayers = useStore((s) => s.autoAlignLayers);
   const autoBlendLayers = useStore((s) => s.autoBlendLayers);
+  const autoTone = useStore((s) => s.autoTone);
+  const autoContrast = useStore((s) => s.autoContrast);
+  const autoColor = useStore((s) => s.autoColor);
   const colorMode = useStore((s) => s.colorMode);
+  const clipboardDataUrl = useStore((s) => s.clipboardDataUrl);
+  const clipboardLayer = useStore((s) => s.clipboardLayer);
+  const selectionRect = useStore((s) => s.selectionRect);
+  const addAlert = useStore((s) => s.addAlert);
+  const setIsContentAwareScaleDialogOpen = useStore((s) => s.setIsContentAwareScaleDialogOpen);
+  const applyFilterAction = useStore((s) => s.applyFilterAction);
+  const shortcuts = useStore((s) => s.shortcuts || {});
 
   const activeLayer = layers.find(l => l.id === activeLayerId);
   const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
@@ -159,8 +170,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
     {
       label: 'File',
       items: [
-        { label: 'New...', shortcut: 'Ctrl+N', action: onNewDocument },
-        { label: 'Open...', shortcut: 'Ctrl+O', action: onFileOpen },
+        { label: 'New...', shortcut: shortcuts.file_new || 'Ctrl+N', action: onNewDocument },
+        { label: 'Open...', shortcut: shortcuts.file_open || 'Ctrl+O', action: onFileOpen },
         {
           label: 'Open More',
           subItems: [
@@ -179,12 +190,16 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Share',
           subItems: [
-            { label: 'PNG', action: () => onOpenExportDialog?.('png') },
-            { label: 'JPG', action: () => onOpenExportDialog?.('jpg') },
+            { label: 'Share Canvas Link (URL)...', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'url') },
+            { label: 'Live Collaboration (P2P WebRTC)...', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'webrtc') },
+            { label: 'Public Host / OS Share...', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'public') },
+            { divider: true },
+            { label: 'Export PNG', action: () => onOpenExportDialog?.('png') },
+            { label: 'Export JPG', action: () => onOpenExportDialog?.('jpg') },
           ]
         },
         { divider: true },
-        { label: 'Save', shortcut: 'Ctrl+S', action: () => onSave?.(false) },
+        { label: 'Save', shortcut: shortcuts.file_save || 'Ctrl+S', action: () => onSave?.(false) },
         { label: 'Save as PSD', action: () => onExport?.('psd') },
         {
           label: 'Save More',
@@ -224,7 +239,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
           ]
         },
         { divider: true },
-        { label: 'Print...', shortcut: 'Ctrl+P', action: onPrint },
+        { label: 'Print...', shortcut: shortcuts.file_print || 'Ctrl+P', action: onPrint },
         { label: 'Export Layers...' },
         { label: 'Export Color Lookup...' },
         { label: 'File Info...' },
@@ -242,19 +257,29 @@ const MenuBar: React.FC<MenuBarProps> = ({
     {
       label: 'Edit',
       items: [
-        { label: 'Undo', shortcut: 'Ctrl+Z', action: undo, disabled: !canUndo },
-        { label: 'Redo', shortcut: 'Ctrl+Y', action: redo, disabled: !canRedo },
+        { label: 'Undo', shortcut: shortcuts.edit_undo || 'Ctrl+Z', action: undo, disabled: !canUndo },
+        { label: 'Redo', shortcut: shortcuts.edit_redo || 'Shift+Ctrl+Z', action: redo, disabled: !canRedo },
         { divider: true },
         { label: 'Fade...', shortcut: 'Shift+Ctrl+F' },
         { divider: true },
-        { label: 'Cut', shortcut: 'Ctrl+X', action: onCut },
-        { label: 'Copy', shortcut: 'Ctrl+C', action: onCopy },
-        { label: 'Paste', shortcut: 'Ctrl+V', action: onPaste },
+        { label: 'Cut', shortcut: shortcuts.edit_cut || 'Ctrl+X', action: onCut },
+        { label: 'Copy', shortcut: shortcuts.edit_copy || 'Ctrl+C', action: onCopy },
+        { label: 'Paste', shortcut: shortcuts.edit_paste || 'Ctrl+V', action: onPaste },
+        {
+          label: 'Paste Special',
+          subItems: [
+            { label: 'Paste in Place', action: () => pasteFromClipboard(useStore.getState(), 'in_place'), disabled: !clipboardDataUrl && !clipboardLayer },
+            { label: 'Paste Into', action: () => pasteFromClipboard(useStore.getState(), 'into'), disabled: (!clipboardDataUrl && !clipboardLayer) || !selectionRect },
+            { label: 'Paste Outside', action: () => pasteFromClipboard(useStore.getState(), 'outside'), disabled: (!clipboardDataUrl && !clipboardLayer) || !selectionRect },
+          ]
+        },
         { divider: true },
         { label: 'Fill...', action: onFillLayer },
         { label: 'Stroke...' },
         { divider: true },
-        { label: 'Free Transform', shortcut: 'Alt+Ctrl+T', action: () => onTransformMode?.('free') },
+        { label: 'Free Transform', shortcut: shortcuts.edit_free_transform || 'Ctrl+T', action: () => onTransformMode?.('free') },
+        { label: 'Content-Aware Scale', action: () => setIsContentAwareScaleDialogOpen(true) },
+        { label: 'Puppet Warp', action: () => addAlert({ type: 'info', message: 'Puppet Warp is not implemented.' }) },
         {
           label: 'Transform',
           subItems: [
@@ -310,7 +335,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
           ]
         },
         { divider: true },
-        { label: 'Preferences...', shortcut: 'Ctrl+K', action: onPreferences },
+        { label: 'Preferences...', shortcut: shortcuts.edit_preferences || 'Ctrl+K', action: onPreferences },
       ]
     },
     {
@@ -333,19 +358,19 @@ const MenuBar: React.FC<MenuBarProps> = ({
           label: 'Adjustments',
           subItems: [
             { label: 'Brightness/Contrast...', action: () => addAdjustmentLayer('brightness_contrast') },
-            { label: 'Levels...', shortcut: 'Ctrl+L', action: () => addAdjustmentLayer('levels') },
-            { label: 'Curves...', shortcut: 'Ctrl+M', action: () => addAdjustmentLayer('curves') },
+            { label: 'Levels...', shortcut: shortcuts.adjust_levels || 'Ctrl+L', action: () => addAdjustmentLayer('levels') },
+            { label: 'Curves...', shortcut: shortcuts.adjust_curves || 'Ctrl+M', action: () => addAdjustmentLayer('curves') },
             { label: 'Exposure...', action: () => addAdjustmentLayer('exposure') },
             { divider: true },
             { label: 'Vibrance...', action: () => addAdjustmentLayer('vibrance') },
-            { label: 'Hue/Saturation...', shortcut: 'Ctrl+U', action: () => addAdjustmentLayer('hue_saturation') },
-            { label: 'Color Balance...', shortcut: 'Ctrl+B', action: () => addAdjustmentLayer('color_balance') },
+            { label: 'Hue/Saturation...', shortcut: shortcuts.adjust_hue_saturation || 'Ctrl+U', action: () => addAdjustmentLayer('hue_saturation') },
+            { label: 'Color Balance...', shortcut: shortcuts.adjust_color_balance || 'Ctrl+B', action: () => addAdjustmentLayer('color_balance') },
             { label: 'Black & White...', shortcut: 'Alt+Shift+Ctrl+B', action: () => addAdjustmentLayer('black_white') },
             { label: 'Photo Filter...', action: () => addAdjustmentLayer('photo_effects') },
             { label: 'Channel Mixer...', action: () => addAdjustmentLayer('channel_mixer') },
             { label: 'Color Lookup...', action: () => addAdjustmentLayer('color_lookup') },
             { divider: true },
-            { label: 'Invert', shortcut: 'Ctrl+I', action: onInvert },
+            { label: 'Invert', shortcut: shortcuts.adjust_invert || 'Ctrl+I', action: onInvert },
             { label: 'Posterize...' },
             { label: 'Threshold...' },
             { label: 'Gradient Map...' },
@@ -356,12 +381,12 @@ const MenuBar: React.FC<MenuBarProps> = ({
           ]
         },
         { divider: true },
-        { label: 'Auto Tone' },
-        { label: 'Auto Contrast' },
-        { label: 'Auto Color' },
+        { label: 'Auto Tone', action: autoTone },
+        { label: 'Auto Contrast', action: autoContrast },
+        { label: 'Auto Color', action: autoColor },
         { divider: true },
-        { label: 'Canvas Size...', action: onCanvasSize },
-        { label: 'Image Size...', action: onImageSize },
+        { label: 'Canvas Size...', shortcut: shortcuts.dialog_canvas_size || 'Alt+Ctrl+C', action: onCanvasSize },
+        { label: 'Image Size...', shortcut: shortcuts.dialog_image_size || 'Alt+Ctrl+I', action: onImageSize },
         { divider: true },
         {
           label: 'Transform',
@@ -524,8 +549,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
       items: [
         { label: 'Last Filter', shortcut: 'Alt+Ctrl+F' },
         { divider: true },
-        { label: 'Filter Gallery...' },
-        { label: 'Camera Raw...', shortcut: 'Shift+Ctrl+A' },
+        { label: 'Filter Gallery...', action: () => applyFilterAction('filter_gallery') },
+        { label: 'Camera Raw...', shortcut: 'Shift+Ctrl+A', action: () => applyFilterAction('camera_raw') },
         { label: 'Lens Correction...', shortcut: 'Shift+Ctrl+R' },
         { label: 'Liquify...', shortcut: 'Shift+Ctrl+X' },
         { label: 'Vanishing Point...', shortcut: 'Alt+Ctrl+V' },
@@ -533,13 +558,13 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Blur',
           subItems: [
-            { label: 'Average' },
-            { label: 'Blur' },
-            { label: 'Blur More' },
-            { label: 'Box Blur...' },
-            { label: 'Gaussian Blur...' },
+            { label: 'Average', action: () => applyFilterAction('average') },
+            { label: 'Blur', action: () => applyFilterAction('blur') },
+            { label: 'Blur More', action: () => applyFilterAction('blur_more') },
+            { label: 'Box Blur...', action: () => applyFilterAction('gaussian_blur') },
+            { label: 'Gaussian Blur...', action: () => applyFilterAction('gaussian_blur') },
             { label: 'Lens Blur...' },
-            { label: 'Motion Blur...' },
+            { label: 'Motion Blur...', action: () => applyFilterAction('motion_blur') },
             { label: 'Radial Blur...' },
             { label: 'Surface Blur...' },
           ]
@@ -548,26 +573,26 @@ const MenuBar: React.FC<MenuBarProps> = ({
           label: 'Distort',
           subItems: [
             { label: 'Diffuse Glow...' },
-            { label: 'Displace...' },
+            { label: 'Displace...', action: () => applyFilterAction('displace') },
             { label: 'Glass...' },
             { label: 'Ocean Ripple...' },
-            { label: 'Pinch...' },
+            { label: 'Pinch...', action: () => applyFilterAction('pinch') },
             { label: 'Polar Coordinates...' },
-            { label: 'Ripple...' },
+            { label: 'Ripple...', action: () => applyFilterAction('ripple') },
             { label: 'Shear...' },
             { label: 'Spherize...' },
             { label: 'Twirl...' },
-            { label: 'Wave...' },
+            { label: 'Wave...', action: () => applyFilterAction('wave') },
             { label: 'ZigZag...' },
           ]
         },
         {
           label: 'Noise',
           subItems: [
-            { label: 'Add Noise...' },
+            { label: 'Add Noise...', action: () => applyFilterAction('add_noise') },
             { label: 'Despeckle' },
-            { label: 'Dust & Scratches...' },
-            { label: 'Median...' },
+            { label: 'Dust & Scratches...', action: () => applyFilterAction('dust_scratches') },
+            { label: 'Median...', action: () => applyFilterAction('median') },
             { label: 'Reduce Noise...' },
           ]
         },
@@ -596,25 +621,112 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Sharpen',
           subItems: [
-            { label: 'Sharpen' },
+            { label: 'Sharpen', action: () => applyFilterAction('sharpen') },
             { label: 'Sharpen Edges' },
-            { label: 'Sharpen More' },
+            { label: 'Sharpen More', action: () => applyFilterAction('sharpen_more') },
             { label: 'Smart Sharpen...' },
-            { label: 'Unsharp Mask...' },
+            { label: 'Unsharp Mask...', action: () => applyFilterAction('unsharp_mask') },
           ]
         },
         {
           label: 'Stylize',
           subItems: [
             { label: 'Diffuse...' },
-            { label: 'Emboss...' },
+            { label: 'Emboss...', action: () => applyFilterAction('emboss') },
             { label: 'Extrude...' },
-            { label: 'Find Edges' },
+            { label: 'Find Edges', action: () => applyFilterAction('find_edges') },
             { label: 'Glowing Edges...' },
             { label: 'Solarize' },
             { label: 'Tiles...' },
             { label: 'Trace Contour...' },
             { label: 'Wind...' },
+          ]
+        },
+        {
+          label: 'Other',
+          subItems: [
+            { label: 'High Pass...', action: () => applyFilterAction('high_pass') },
+            { label: 'Maximum...', action: () => applyFilterAction('maximum') },
+            { label: 'Minimum...', action: () => applyFilterAction('minimum') },
+          ]
+        },
+      ]
+    },
+    {
+      label: '⚗ Experimental',
+      items: [
+        {
+          label: 'Precision Fill...',
+          action: () => useStore.getState().setIsPrecisionFillDialogOpen(true),
+        },
+        { divider: true },
+        {
+          label: 'AI & Generative',
+          subItems: [
+            { label: 'Generative Fill...', action: () => addAlert({ type: 'info', message: '🧪 Generative Fill — coming soon!' }) },
+            { label: 'Remove Background (AI)', action: () => addAlert({ type: 'info', message: '🧪 AI Background Removal — coming soon!' }) },
+            { label: 'Upscale Image (AI)', action: () => addAlert({ type: 'info', message: '🧪 AI Upscaling — coming soon!' }) },
+            { label: 'Denoise (AI)', action: () => addAlert({ type: 'info', message: '🧪 AI Denoising — coming soon!' }) },
+          ]
+        },
+        { divider: true },
+        {
+          label: 'Advanced Filters',
+          subItems: [
+            { label: 'Halftone Effect', action: () => addAlert({ type: 'info', message: '🧪 Halftone Effect — coming soon!' }) },
+            { label: 'Duotone...', action: () => addAlert({ type: 'info', message: '🧪 Duotone — coming soon!' }) },
+            { label: 'Glitch Effect', action: () => addAlert({ type: 'info', message: '🧪 Glitch Effect — coming soon!' }) },
+          ]
+        },
+        {
+          label: 'Smart Objects',
+          subItems: [
+            { label: 'Convert to Smart Object', action: () => addAlert({ type: 'info', message: '🧪 Smart Objects — coming soon!' }) },
+            { label: 'Edit Contents', action: () => addAlert({ type: 'info', message: '🧪 Smart Object editing — coming soon!' }) },
+            { label: 'Rasterize Smart Object', action: () => addAlert({ type: 'info', message: '🧪 Rasterize — coming soon!' }) },
+          ]
+        },
+        { divider: true },
+        {
+          label: 'Collaboration',
+          subItems: [
+            { label: 'Share Canvas (Live)', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'webrtc') },
+            { label: 'Comment on Layer', action: () => addAlert({ type: 'info', message: '🧪 Layer Comments — coming soon!' }) },
+          ]
+        },
+        { divider: true },
+        {
+          label: 'Developer Tools',
+          subItems: [
+            {
+              label: 'Log Store State',
+              action: () => {
+                const s = useStore.getState();
+                console.group('[Pixelite] Store Snapshot');
+                console.log('documentSize:', s.documentSize);
+                console.log('zoom:', s.zoom);
+                console.log('activeLayerId:', s.activeLayerId);
+                console.log('layers:', s.layers);
+                console.groupEnd();
+                addAlert({ type: 'success', message: 'Store state logged to console (F12)' });
+              }
+            },
+            {
+              label: 'Clear Thumbnail Cache',
+              action: () => {
+                useStore.getState().layers.forEach((l: any) => useStore.getState().updateLayer(l.id, { thumbnail: '' }));
+                addAlert({ type: 'success', message: 'Thumbnail cache cleared — regenerating…' });
+              }
+            },
+            {
+              label: 'Performance Info',
+              action: () => {
+                const s = useStore.getState();
+                const mem = (performance as any).memory;
+                const heap = mem ? `${(mem.usedJSHeapSize / 1_048_576).toFixed(1)} MB` : 'N/A';
+                addAlert({ type: 'info', message: `Layers: ${s.layers.length} · JS Heap: ${heap}` });
+              }
+            },
           ]
         },
       ]
@@ -624,8 +736,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
       items: [
         { label: 'Zoom In', shortcut: 'Ctrl++', action: onZoomIn },
         { label: 'Zoom Out', shortcut: 'Ctrl+-', action: onZoomOut },
-        { label: 'Fit Area', shortcut: 'Ctrl+0', action: onZoomFit },
-        { label: 'Pixel to Pixel', shortcut: 'Ctrl+1' },
+        { label: 'Fit Area', shortcut: shortcuts.view_zoom_fit || 'Ctrl+0', action: onZoomFit },
+        { label: 'Pixel to Pixel', shortcut: shortcuts.view_zoom_100 || 'Ctrl+1', action: () => useStore.getState().setZoom(1.0) },
         { divider: true },
         {
           label: 'Screen Mode',
@@ -644,7 +756,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
           ]
         },
         { divider: true },
-        { label: 'Rulers', shortcut: 'Ctrl+R', action: onToggleRulers },
+        { label: 'Rulers', shortcut: shortcuts.view_rulers || 'Ctrl+R', action: onToggleRulers },
         { label: 'Snap', shortcut: 'Ctrl+;' },
       ]
     },
@@ -667,7 +779,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Language' },
         { label: 'Theme' },
         { divider: true },
-        { label: 'Keyboard Shortcuts' },
+        { label: 'Keyboard Shortcuts', action: () => useStore.getState().setIsKeyboardShortcutsDialogOpen(true) },
         { label: 'Search' },
         { label: 'Help' },
         { label: 'About' },
@@ -712,6 +824,14 @@ const MenuBar: React.FC<MenuBarProps> = ({
             setActiveSubmenus({ [submenuKey]: true });
           }
         }}
+        onMouseLeave={() => {
+          if (window.innerWidth > 768 && item.subItems) {
+            setActiveSubmenus((prev) => ({
+              ...prev,
+              [submenuKey]: false
+            }));
+          }
+        }}
       >
         <div className="menu-option-content">
           <span className="menu-option-check">{item.checked ? '✓' : ''}</span>
@@ -732,8 +852,46 @@ const MenuBar: React.FC<MenuBarProps> = ({
     );
   };
 
+  const hasDocument = layers.length > 0;
+
+  const processMenuItems = (items: MenuItem[], parentLabel?: string): MenuItem[] => {
+    return items.map(item => {
+      let shouldEnableOnWelcome = false;
+
+      if (!parentLabel) {
+        // Top level items
+      } else if (parentLabel === 'File') {
+        shouldEnableOnWelcome = ['New...', 'Open...', 'Open More', 'Open Recent', 'Share'].includes(item.label || '');
+      } else if (parentLabel === 'Open More' || parentLabel === 'Share' || parentLabel === 'Collaboration') {
+        shouldEnableOnWelcome = true;
+      } else if (parentLabel === 'Edit') {
+        shouldEnableOnWelcome = ['Preferences...'].includes(item.label || '');
+      } else if (parentLabel === 'Window' || parentLabel === 'More' || parentLabel === '⚗ Experimental' ||
+        parentLabel === 'AI & Generative' || parentLabel === 'Advanced Filters' ||
+        parentLabel === 'Smart Objects' || parentLabel === 'Collaboration' || parentLabel === 'Developer Tools') {
+        shouldEnableOnWelcome = true;
+      }
+
+      const newSubItems = item.subItems ? processMenuItems(item.subItems, item.label) : undefined;
+      const isDisabled = item.divider
+        ? false
+        : item.disabled || (!hasDocument && !shouldEnableOnWelcome);
+
+      return {
+        ...item,
+        subItems: newSubItems,
+        disabled: isDisabled
+      };
+    });
+  };
+
+  const processedMenuData = menuData.map(section => ({
+    ...section,
+    items: processMenuItems(section.items, section.label)
+  }));
+
   return (
-    <nav className={`menubar ${isMobileOpen ? 'mobile-open' : ''}`} ref={menuRef}>
+    <nav className={`menubar main-nav ${isMobileOpen ? 'mobile-open' : ''}`} ref={menuRef}>
       {isMobileOpen && (
         <div className="mobile-menu-header">
           <span>Menu</span>
@@ -741,7 +899,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
         </div>
       )}
       <div className="menu-items-wrapper">
-        {menuData.map((section) => (
+        {processedMenuData.map((section) => (
           <div
             key={section.label}
             className={`menu-item-container ${activeMenu === section.label ? 'active' : ''}`}
@@ -750,8 +908,14 @@ const MenuBar: React.FC<MenuBarProps> = ({
               setActiveSubmenus({});
             }}
             onMouseEnter={() => {
-              if (window.innerWidth > 768 && activeMenu) {
+              if (window.innerWidth > 768) {
                 setActiveMenu(section.label);
+                setActiveSubmenus({});
+              }
+            }}
+            onMouseLeave={() => {
+              if (window.innerWidth > 768) {
+                setActiveMenu(null);
                 setActiveSubmenus({});
               }
             }}

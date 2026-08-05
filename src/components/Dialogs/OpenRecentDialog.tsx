@@ -6,7 +6,7 @@ import type { RecentProject } from '../../services/storage/RecentProjectsStorage
 import './Dialogs.css';
 
 export const OpenRecentDialog: React.FC = () => {
-  const { isOpenRecentDialogOpen, setIsOpenRecentDialogOpen, setLayers, setDocumentSize, setActiveLayerId, setCurrentProjectId, setHistory } = useStore();
+  const { isOpenRecentDialogOpen, setIsOpenRecentDialogOpen, setLayers, setDocumentSize, setActiveLayer, setCurrentProjectId, setHistory } = useStore();
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -42,7 +42,7 @@ export const OpenRecentDialog: React.FC = () => {
         setLayers(project.stateSnapshot.layers);
       }
       if (project.stateSnapshot.activeLayerId !== undefined) {
-        setActiveLayerId(project.stateSnapshot.activeLayerId);
+        setActiveLayer(project.stateSnapshot.activeLayerId);
       }
       setCurrentProjectId(id);
       if (project.history && project.historyIndex !== undefined) {

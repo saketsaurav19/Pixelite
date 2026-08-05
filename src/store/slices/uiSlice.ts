@@ -1,12 +1,45 @@
 import type { StateCreator } from 'zustand';
 import type { EditorState, Alert } from '../types';
 
+const defaultShortcuts: Record<string, string> = {
+  file_new: 'Ctrl+N',
+  file_open: 'Ctrl+O',
+  file_save: 'Ctrl+S',
+  file_print: 'Ctrl+P',
+  edit_undo: 'Ctrl+Z',
+  edit_redo: 'Shift+Ctrl+Z',
+  edit_cut: 'Ctrl+X',
+  edit_copy: 'Ctrl+C',
+  edit_paste: 'Ctrl+V',
+  edit_free_transform: 'Ctrl+T',
+  edit_preferences: 'Ctrl+K',
+  adjust_levels: 'Ctrl+L',
+  adjust_curves: 'Ctrl+M',
+  adjust_hue_saturation: 'Ctrl+U',
+  adjust_color_balance: 'Ctrl+B',
+  adjust_invert: 'Ctrl+I',
+  dialog_image_size: 'Alt+Ctrl+I',
+  dialog_canvas_size: 'Alt+Ctrl+C',
+  view_zoom_fit: 'Ctrl+0',
+  view_zoom_100: 'Ctrl+1',
+  view_rulers: 'Ctrl+R',
+};
+
 export interface UISlice {
   alerts: Alert[];
   addAlert: (alert: Omit<Alert, 'id'>) => void;
   removeAlert: (id: string) => void;
   isNewDocumentDialogOpen: boolean;
   isCanvasSizeDialogOpen: boolean;
+  isImageSizeDialogOpen: boolean;
+  isContentAwareScaleDialogOpen: boolean;
+  isFilterGalleryDialogOpen: boolean;
+  filterGallerySelectedType: string;
+  isLayerStyleDialogOpen: boolean;
+  layerStyleActiveTab: 'blending' | 'shadow' | 'stroke';
+  isColorRangeDialogOpen: boolean;
+  isTransformSelectionDialogOpen: boolean;
+  documentLayout: 'tabs' | 'cascade' | 'tile' | 'float';
   isExportDialogOpen: boolean;
   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
@@ -22,6 +55,13 @@ export interface UISlice {
   isHelpDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
+  isPrecisionFillDialogOpen: boolean;
+  setIsPrecisionFillDialogOpen: (isOpen: boolean) => void;
+  isServerlessShareDialogOpen: boolean;
+  serverlessShareTab: 'url' | 'webrtc' | 'public';
+  setIsServerlessShareDialogOpen: (isOpen: boolean, tab?: 'url' | 'webrtc' | 'public') => void;
+  shortcuts: Record<string, string>;
+  setShortcut: (commandId: string, shortcutString: string) => void;
   isSystemInfoDialogOpen: boolean;
   isCameraDialogOpen: boolean;
   isSignatureDialogOpen: boolean;
@@ -75,6 +115,16 @@ export interface UISlice {
 
   setIsNewDocumentDialogOpen: (isOpen: boolean) => void;
   setIsCanvasSizeDialogOpen: (isOpen: boolean) => void;
+  setIsImageSizeDialogOpen: (isOpen: boolean) => void;
+  setIsContentAwareScaleDialogOpen: (isOpen: boolean) => void;
+  setIsFilterGalleryDialogOpen: (isOpen: boolean) => void;
+  setFilterGallerySelectedType: (type: string) => void;
+  setIsLayerStyleDialogOpen: (isOpen: boolean) => void;
+  setLayerStyleActiveTab: (tab: 'blending' | 'shadow' | 'stroke') => void;
+  setIsColorRangeDialogOpen: (isOpen: boolean) => void;
+  setIsTransformSelectionDialogOpen: (isOpen: boolean) => void;
+  setDocumentLayout: (layout: 'tabs' | 'cascade' | 'tile' | 'float') => void;
+  setWorkspace: (workspace: 'essentials' | 'photography' | 'graphic-web') => void;
   setIsExportDialogOpen: (isOpen: boolean) => void;
   setExportFormat: (format: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf') => void;
   setIsFileInfoDialogOpen: (isOpen: boolean) => void;
@@ -108,6 +158,15 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   exportFormat: 'image/png',
   isNewDocumentDialogOpen: false,
   isCanvasSizeDialogOpen: false,
+  isImageSizeDialogOpen: false,
+  isContentAwareScaleDialogOpen: false,
+  isFilterGalleryDialogOpen: false,
+  filterGallerySelectedType: 'gaussian_blur',
+  isLayerStyleDialogOpen: false,
+  layerStyleActiveTab: 'blending',
+  isColorRangeDialogOpen: false,
+  isTransformSelectionDialogOpen: false,
+  documentLayout: 'tabs',
   isExportDialogOpen: false,
   isFileInfoDialogOpen: false,
   isWarpDialogOpen: false,
@@ -122,6 +181,17 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isHelpDialogOpen: false,
   isAboutDialogOpen: false,
   isKeyboardShortcutsDialogOpen: false,
+  shortcuts: (() => {
+    try {
+      const saved = localStorage.getItem('pixelite_shortcuts');
+      if (saved) {
+        return { ...defaultShortcuts, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.error('Failed to load shortcuts', e);
+    }
+    return defaultShortcuts;
+  })(),
   isSystemInfoDialogOpen: false,
   isCameraDialogOpen: false,
   isSignatureDialogOpen: false,
@@ -163,6 +233,68 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
 
   setIsNewDocumentDialogOpen: (isOpen) => set({ isNewDocumentDialogOpen: isOpen }),
   setIsCanvasSizeDialogOpen: (isOpen) => set({ isCanvasSizeDialogOpen: isOpen }),
+  setIsImageSizeDialogOpen: (isOpen) => set({ isImageSizeDialogOpen: isOpen }),
+  setIsContentAwareScaleDialogOpen: (isOpen) => set({ isContentAwareScaleDialogOpen: isOpen }),
+  setIsFilterGalleryDialogOpen: (isOpen) => set({ isFilterGalleryDialogOpen: isOpen }),
+  setFilterGallerySelectedType: (type) => set({ filterGallerySelectedType: type }),
+  setIsLayerStyleDialogOpen: (isOpen) => set({ isLayerStyleDialogOpen: isOpen }),
+  setLayerStyleActiveTab: (tab) => set({ layerStyleActiveTab: tab }),
+  setIsColorRangeDialogOpen: (isOpen) => set({ isColorRangeDialogOpen: isOpen }),
+  setIsTransformSelectionDialogOpen: (isOpen) => set({ isTransformSelectionDialogOpen: isOpen }),
+  setDocumentLayout: (layout) => set({ documentLayout: layout }),
+  setWorkspace: (workspace) => set((state) => {
+    let visible = { ...state.visiblePanels };
+    if (workspace === 'essentials') {
+      visible = {
+        layers: true,
+        history: true,
+        properties: false,
+        adjustments: true,
+        navigator: true,
+        extras: false,
+        rulers: true,
+        guides: true,
+        swatches: true,
+        channels: false,
+        paths: false
+      };
+    } else if (workspace === 'photography') {
+      visible = {
+        layers: true,
+        history: false,
+        properties: true,
+        adjustments: true,
+        navigator: true,
+        extras: false,
+        rulers: false,
+        guides: false,
+        swatches: false,
+        channels: true,
+        paths: false
+      };
+    } else if (workspace === 'graphic-web') {
+      visible = {
+        layers: true,
+        history: true,
+        properties: true,
+        adjustments: false,
+        navigator: false,
+        extras: true,
+        rulers: true,
+        guides: true,
+        swatches: true,
+        channels: false,
+        paths: true
+      };
+    }
+    setTimeout(() => {
+      get().addAlert({
+        type: 'success',
+        message: `Workspace changed to ${workspace === 'graphic-web' ? 'Graphic and Web' : workspace.charAt(0).toUpperCase() + workspace.slice(1)}.`
+      });
+    }, 0);
+    return { visiblePanels: visible };
+  }),
   setIsExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
   setExportFormat: (format) => set({ exportFormat: format }),
   setIsFileInfoDialogOpen: (isOpen) => set({ isFileInfoDialogOpen: isOpen }),
@@ -178,6 +310,20 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsHelpDialogOpen: (isOpen) => set({ isHelpDialogOpen: isOpen }),
   setIsAboutDialogOpen: (isOpen) => set({ isAboutDialogOpen: isOpen }),
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
+  isPrecisionFillDialogOpen: false,
+  setIsPrecisionFillDialogOpen: (isOpen) => set({ isPrecisionFillDialogOpen: isOpen }),
+  isServerlessShareDialogOpen: false,
+  serverlessShareTab: 'url',
+  setIsServerlessShareDialogOpen: (isOpen, tab = 'url') => set({ isServerlessShareDialogOpen: isOpen, serverlessShareTab: tab }),
+  setShortcut: (commandId, shortcutString) => set((state) => {
+    const updated = { ...state.shortcuts, [commandId]: shortcutString };
+    try {
+      localStorage.setItem('pixelite_shortcuts', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to save shortcuts', e);
+    }
+    return { shortcuts: updated };
+  }),
   setIsSystemInfoDialogOpen: (isOpen) => set({ isSystemInfoDialogOpen: isOpen }),
   setIsCameraDialogOpen: (isOpen) => set({ isCameraDialogOpen: isOpen }),
   setIsSignatureDialogOpen: (isOpen) => set({ isSignatureDialogOpen: isOpen }),

@@ -4,6 +4,8 @@ import type { CanvasContext, Point, Rect, CanvasRefs } from '../types';
 import { getToolModule } from '../../../tools';
 import { useStore } from '../../../store/useStore';
 import { toolState } from '../../../tools/toolState';
+import { collaborationService } from '../../../services/collaboration/WebRTCCollaborationService';
+import { promptForEditPermission } from '../../../services/collaboration/collaborationSync';
 
 const getClickedTextLayer = (
   layers: any[],
@@ -59,6 +61,13 @@ export const startAction = (
 ) => {
   const { coords, activeTool, canvasOffset, lassoPaths, isLightingEnabled, setLightingEnabled, activeLayerId, layers } = context;
 
+  // Collaboration Edit Permission Check
+  const roomCode = collaborationService.getRoomCode();
+  if (roomCode && !collaborationService.getCanEdit()) {
+    promptForEditPermission();
+    return;
+  }
+
   if (activeTool === 'lighting') {
     if (!isLightingEnabled) {
       if (setLightingEnabled) setLightingEnabled(true);
@@ -66,11 +75,15 @@ export const startAction = (
     }
   }
 
-  // Check if tool requires active layer
+  // Check if tool requires active layer & auto-select if missing
   const toolsRequiringLayer = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'patch', 'smudge', 'clone', 'pattern_stamp', 'mixer_brush', 'color_replacement', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush', 'marquee', 'ellipse_marquee', 'lasso', 'polygonal_lasso', 'magnetic_lasso', 'quick_selection', 'magic_wand', 'object_selection', 'paint_bucket', 'gradient'];
-  if (toolsRequiringLayer.includes(activeTool) && !activeLayerId && layers.length > 0) {
-    useStore.getState().addAlert({ type: 'error', message: 'Please select a layer first.' });
-    return;
+  if (toolsRequiringLayer.includes(activeTool)) {
+    if (!activeLayerId && layers.length > 0) {
+      useStore.setState({ activeLayerId: layers[0].id });
+    } else if (!activeLayerId) {
+      useStore.getState().addAlert({ type: 'error', message: 'Please select a layer first.' });
+      return;
+    }
   }
 
   const isAltPressedLocal = (e as any).altKey || context.isAlt;

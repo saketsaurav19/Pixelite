@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore } from '../../../store/useStore';
 import { Z_INDEX } from '../../../constants/zIndex';
-import { loadGoogleFont } from '../../../utils/canvasUtils';
+import { loadGoogleFont, getFontFamilyString } from '../../../utils/canvasUtils';
 import { findLayerById } from '../../../utils/layerUtils';
 import { toolState } from '../../../tools/toolState';
 
@@ -50,12 +50,8 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
   if (!textEditor) return null;
 
   const isVertical = activeLayer?.isVertical || toolState._lastTextTool === 'vertical_text';
-  const customFontKey = hasCustomFont ? `pdf-font-${activeLayer.fontChecksum}` : '';
-  const cleanFamily = activeLayer?.fontFamily || '';
 
-  const editorFontFamily = hasCustomFont
-    ? `"${customFontKey}", "${cleanFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
-    : `"${editorFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`;
+  const editorFontFamily = getFontFamilyString(editorFamily, activeLayer?.fontChecksum);
 
   // Use the layer's actual font size (in screen pixels, scaled by zoom), or fall back to tool brush size.
   const fs = activeLayer ? (activeLayer.fontSize || 16) * zoom : brushSize * 2;
@@ -141,7 +137,7 @@ export const TextEditorOverlay: React.FC<TextEditorOverlayProps> = ({
         style={{
           position: 'absolute',
           left: textEditor.x - (isPdfRunLayer ? 0 : padding),
-          top: textEditor.y,
+          top: textEditor.y - (isPdfRunLayer ? 0 : padding),
           width: width,
           height: height,
           fontSize: `${fs}px`,

@@ -255,6 +255,7 @@ export interface DocumentSpecificState {
   interpolation: 'nearest-neighbor' | 'bilinear' | 'bicubic';
   colorMode: 'rgb' | 'grayscale' | 'cmyk' | 'indexed';
   bitDepth: 8 | 16 | 32;
+  resolution?: number;
   lights: Light[];
   isLightingEnabled: boolean;
   lightingQuality: 'low' | 'medium' | 'high';
@@ -322,12 +323,27 @@ export interface EditorState extends DocumentSpecificState {
   selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
 
   clipboardDataUrl: string | null;
+  clipboardLayer: any | null;
+  clipboardLayers: any[] | null;
+  isInternalCopy: boolean;
+  setClipboardLayer: (layer: any | null) => void;
+  setClipboardLayers: (layers: any[] | null) => void;
+  setIsInternalCopy: (val: boolean) => void;
   exifData: any;
   iccProfile: string;
 
   // UI State
   isNewDocumentDialogOpen: boolean;
   isCanvasSizeDialogOpen: boolean;
+  isImageSizeDialogOpen: boolean;
+  isContentAwareScaleDialogOpen: boolean;
+  isFilterGalleryDialogOpen: boolean;
+  filterGallerySelectedType: string;
+  isLayerStyleDialogOpen: boolean;
+  layerStyleActiveTab: 'blending' | 'shadow' | 'stroke';
+  isColorRangeDialogOpen: boolean;
+  isTransformSelectionDialogOpen: boolean;
+  documentLayout: 'tabs' | 'cascade' | 'tile' | 'float';
   isExportDialogOpen: boolean;
   exportFormat: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml' | 'image/gif' | 'application/pdf';
   isFileInfoDialogOpen: boolean;
@@ -343,6 +359,9 @@ export interface EditorState extends DocumentSpecificState {
   isHelpDialogOpen: boolean;
   isAboutDialogOpen: boolean;
   isKeyboardShortcutsDialogOpen: boolean;
+  setIsKeyboardShortcutsDialogOpen: (isOpen: boolean) => void;
+  shortcuts: Record<string, string>;
+  setShortcut: (commandId: string, shortcutString: string) => void;
   isSystemInfoDialogOpen: boolean;
   isMobileMenuOpen: boolean;
   isCameraDialogOpen: boolean;
@@ -357,6 +376,16 @@ export interface EditorState extends DocumentSpecificState {
   setShowRulers: (show: boolean) => void;
   setIsMobileMenuOpen: (isOpen: boolean) => void;
   setIsCanvasSizeDialogOpen: (isOpen: boolean) => void;
+  setIsImageSizeDialogOpen: (isOpen: boolean) => void;
+  setIsContentAwareScaleDialogOpen: (isOpen: boolean) => void;
+  setIsFilterGalleryDialogOpen: (isOpen: boolean) => void;
+  setFilterGallerySelectedType: (type: string) => void;
+  setIsLayerStyleDialogOpen: (isOpen: boolean) => void;
+  setLayerStyleActiveTab: (tab: 'blending' | 'shadow' | 'stroke') => void;
+  setIsColorRangeDialogOpen: (isOpen: boolean) => void;
+  setIsTransformSelectionDialogOpen: (isOpen: boolean) => void;
+  setDocumentLayout: (layout: 'tabs' | 'cascade' | 'tile' | 'float') => void;
+  setWorkspace: (workspace: 'essentials' | 'photography' | 'graphic-web') => void;
   activeMobileSubmenu: string | null;
   setActiveMobileSubmenu: (menu: string | null) => void;
   screenMode: 'standard' | 'full-menu' | 'full';

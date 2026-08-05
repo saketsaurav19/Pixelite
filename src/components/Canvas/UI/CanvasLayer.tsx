@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
 import { mapBlendModeToCss } from '../../../utils/blendModes';
-import { getHomography, drawTrianglesWarp, loadGoogleFont } from '../../../utils/canvasUtils';
+import { getHomography, drawTrianglesWarp, loadGoogleFont, getFontFamilyString } from '../../../utils/canvasUtils';
 import { toolState } from '../../../tools/toolState';
 
 interface CanvasLayerProps {
@@ -54,15 +54,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
     }
   }, [layer.fontFamily, layer.fontChecksum]);
 
-  const hasCustomFont = !!layer.fontChecksum;
-  const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
-  const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
-
-  const fontFamily = hasCustomFont
-    ? `"${customFontKey}", "${layer.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
-    : isGeneric
-      ? `"Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
-      : `"${layer.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`;
+  const fontFamily = getFontFamilyString(layer.fontFamily, layer.fontChecksum);
 
   const renderContent = () => {
     // ── Priority 1: HarfBuzz cluster spans (complex scripts / bidi) ─────────────
@@ -120,12 +112,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
           }}
         >
           {layer.runs.map((run, i) => {
-            const runIsGeneric = !run.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(run.fontFamily.toLowerCase());
-            const runFontFamily = hasCustomFont
-              ? `"${customFontKey}", "${run.fontFamily || layer.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
-              : runIsGeneric
-                ? `"Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`
-                : `"${run.fontFamily}", "Nirmala UI", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", sans-serif`;
+            const runFontFamily = getFontFamilyString(run.fontFamily || layer.fontFamily, layer.fontChecksum);
 
             const runFontSize = run.fontSize * zoom;
             const runColor = isTransparent ? 'transparent' : (run.color || textColor);

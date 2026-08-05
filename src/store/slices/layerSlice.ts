@@ -3,6 +3,7 @@ import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { EditorState, Layer } from '../types';
 import { findLayerById, findParentNode, removeNode, insertNode, updateNode, flattenTree, moveNode, reorderNodes } from '../../utils/layerUtils';
+import { FilterService } from '../../services/image/FilterService';
 
 export interface LayerSlice {
   layers: Layer[];
@@ -26,6 +27,13 @@ export interface LayerSlice {
   addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup') => void;
   autoAlignLayers: () => Promise<void>;
   autoBlendLayers: () => Promise<void>;
+  autoTone: () => void;
+  autoContrast: () => void;
+  autoColor: () => void;
+  applyFilterAction: (filterType: string) => void;
+  applyActualFilter: (filterType: string, options: any) => void;
+  flipCanvas: (direction: 'horizontal' | 'vertical') => Promise<void>;
+  trimCanvas: () => void;
 }
 
 export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set, get) => ({
@@ -114,20 +122,133 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     return { layers: newLayers };
   }),
 
-  duplicateLayer: (id) => set((state) => {
+  duplicateLayer: (id) => {
+    const state = get();
     const layerToDup = findLayerById(state.layers, id);
-    if (!layerToDup) return state;
-    const newLayer: Layer = {
-      ...layerToDup,
-      id: nanoid(),
-      name: `${layerToDup.name} Copy`,
-      position: layerToDup.position ? { x: layerToDup.position.x + 20, y: layerToDup.position.y + 20 } : {x:0, y:0}
-    };
-    return {
-      layers: insertNode(state.layers, newLayer), // Insert at top level for now
+    if (!layerToDup) return;
+
+    let bounds = state.selectionRect;
+    const lassoPaths = state.lassoPaths;
+
+    // Calculate bounding box for lasso/magnetic selection paths
+    if (!bounds && lassoPaths && lassoPaths.length > 0) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let hasPoints = false;
+      lassoPaths.forEach((path) => {
+        path.forEach((p) => {
+          if (p.x < minX) minX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y > maxY) maxY = p.y;
+          hasPoints = true;
+        });
+      });
+      if (hasPoints) {
+        bounds = {
+          x: Math.round(minX),
+          y: Math.round(minY),
+          w: Math.round(maxX - minX),
+          h: Math.round(maxY - minY),
+        };
+      }
+    }
+
+    let isSelectionDuplicate = false;
+    let newLayer: Layer | null = null;
+
+    if (bounds && bounds.w > 0 && bounds.h > 0) {
+      const canvas = document.querySelector(`canvas[data-layer-id="${id}"]`) as HTMLCanvasElement;
+      if (canvas) {
+        const layerPos = layerToDup.position || { x: 0, y: 0 };
+        const layerMinX = layerPos.x;
+        const layerMinY = layerPos.y;
+        const layerMaxX = layerPos.x + canvas.width;
+        const layerMaxY = layerPos.y + canvas.height;
+
+        const interMinX = Math.max(bounds.x, layerMinX);
+        const interMinY = Math.max(bounds.y, layerMinY);
+        const interMaxX = Math.min(bounds.x + bounds.w, layerMaxX);
+        const interMaxY = Math.min(bounds.y + bounds.h, layerMaxY);
+
+        const interW = interMaxX - interMinX;
+        const interH = interMaxY - interMinY;
+
+        if (interW > 0 && interH > 0) {
+          isSelectionDuplicate = true;
+          const srcX = interMinX - layerMinX;
+          const srcY = interMinY - layerMinY;
+
+          // Create selection mask
+          const maskCanvas = document.createElement('canvas');
+          maskCanvas.width = interW;
+          maskCanvas.height = interH;
+          const maskCtx = maskCanvas.getContext('2d')!;
+
+          maskCtx.fillStyle = 'black';
+          if (lassoPaths && lassoPaths.length > 0) {
+            maskCtx.beginPath();
+            lassoPaths.forEach((path) => {
+              if (path.length < 3) return;
+              maskCtx.moveTo(path[0].x - interMinX, path[0].y - interMinY);
+              path.forEach((p) => maskCtx.lineTo(p.x - interMinX, p.y - interMinY));
+              maskCtx.closePath();
+            });
+            maskCtx.fill();
+          } else {
+            maskCtx.fillRect(bounds.x - interMinX, bounds.y - interMinY, bounds.w, bounds.h);
+          }
+
+          // Crop and mask pixels
+          const resultCanvas = document.createElement('canvas');
+          resultCanvas.width = interW;
+          resultCanvas.height = interH;
+          const resultCtx = resultCanvas.getContext('2d')!;
+
+          resultCtx.drawImage(canvas, srcX, srcY, interW, interH, 0, 0, interW, interH);
+          resultCtx.globalCompositeOperation = 'destination-in';
+          resultCtx.drawImage(maskCanvas, 0, 0);
+
+          newLayer = {
+            id: nanoid(),
+            name: `${layerToDup.name} Selection Copy`,
+            visible: true,
+            locked: false,
+            lockPixels: false,
+            lockPosition: false,
+            lockTransparent: false,
+            opacity: 1,
+            fill: 1,
+            type: 'paint',
+            position: { x: interMinX, y: interMinY },
+            width: interW,
+            height: interH,
+            dataUrl: resultCanvas.toDataURL(),
+            blendMode: 'source-over',
+          };
+        }
+      }
+    }
+
+    if (!isSelectionDuplicate || !newLayer) {
+      const srcPos = layerToDup.position || { x: 0, y: 0 };
+      newLayer = {
+        ...layerToDup,
+        id: nanoid(),
+        name: `${layerToDup.name} Copy`,
+        position: { x: srcPos.x + 10, y: srcPos.y + 10 }
+      };
+    }
+
+    set({
+      layers: insertNode(state.layers, newLayer),
       activeLayerId: newLayer.id,
-    };
-  }),
+    });
+
+    state.recordHistory(isSelectionDuplicate ? 'Layer via Copy' : 'Duplicate Layer');
+  },
 
   toggleLayerVisibility: (id) => set((state) => {
     const layer = findLayerById(state.layers, id);
@@ -679,5 +800,653 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       console.error('[autoBlendLayers] Error:', err);
       addAlert({ type: 'error', message: 'Failed to auto-blend layers: ' + err.message });
     }
+  },
+
+  autoTone: () => {
+    const { layers, activeLayerId, updateLayer, recordHistory, selectionRect, lassoPaths, isInverseSelection } = get();
+    if (!activeLayerId) return;
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    ctx.save();
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    const rHist = new Int32Array(256);
+    const gHist = new Int32Array(256);
+    const bHist = new Int32Array(256);
+    let count = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 0) {
+        rHist[data[i]]++;
+        gHist[data[i + 1]]++;
+        bHist[data[i + 2]]++;
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      const clipCount = Math.floor(count * 0.002);
+      
+      let rMin = 0, rMax = 255;
+      let rSum = 0;
+      for (let v = 0; v < 256; v++) {
+        rSum += rHist[v];
+        if (rSum > clipCount) { rMin = v; break; }
+      }
+      rSum = 0;
+      for (let v = 255; v >= 0; v--) {
+        rSum += rHist[v];
+        if (rSum > clipCount) { rMax = v; break; }
+      }
+
+      let gMin = 0, gMax = 255;
+      let gSum = 0;
+      for (let v = 0; v < 256; v++) {
+        gSum += gHist[v];
+        if (gSum > clipCount) { gMin = v; break; }
+      }
+      gSum = 0;
+      for (let v = 255; v >= 0; v--) {
+        gSum += gHist[v];
+        if (gSum > clipCount) { gMax = v; break; }
+      }
+
+      let bMin = 0, bMax = 255;
+      let bSum = 0;
+      for (let v = 0; v < 256; v++) {
+        bSum += bHist[v];
+        if (bSum > clipCount) { bMin = v; break; }
+      }
+      bSum = 0;
+      for (let v = 255; v >= 0; v--) {
+        bSum += bHist[v];
+        if (bSum > clipCount) { bMax = v; break; }
+      }
+
+      const rRange = rMax - rMin || 1;
+      const gRange = gMax - gMin || 1;
+      const bRange = bMax - bMin || 1;
+
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          data[i] = Math.min(255, Math.max(0, ((data[i] - rMin) / rRange) * 255));
+          data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - gMin) / gRange) * 255));
+          data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - bMin) / bRange) * 255));
+        }
+      }
+    }
+
+    tempCtx.putImageData(imageData, 0, 0);
+
+    if (selectionRect) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      const offX = layer?.position.x || 0;
+      const offY = layer?.position.y || 0;
+      ctx.beginPath();
+      if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+      ctx.rect(selectionRect.x - offX, selectionRect.y - offY, selectionRect.w, selectionRect.h);
+      ctx.clip(isInverseSelection ? 'evenodd' : 'nonzero');
+    } else if (lassoPaths && lassoPaths.length > 0) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      const offX = layer?.position.x || 0;
+      const offY = layer?.position.y || 0;
+      ctx.beginPath();
+      if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+      lassoPaths.forEach(path => {
+        if (path.length < 3) return;
+        ctx.moveTo(path[0].x - offX, path[0].y - offY);
+        path.forEach(p => ctx.lineTo(p.x - offX, p.y - offY));
+        ctx.closePath();
+      });
+      ctx.clip('evenodd');
+    }
+
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.restore();
+
+    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+    recordHistory('Auto Tone');
+  },
+
+  autoContrast: () => {
+    const { layers, activeLayerId, updateLayer, recordHistory, selectionRect, lassoPaths, isInverseSelection } = get();
+    if (!activeLayerId) return;
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    ctx.save();
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    const hist = new Int32Array(256);
+    let count = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 0) {
+        hist[data[i]]++;
+        hist[data[i + 1]]++;
+        hist[data[i + 2]]++;
+        count += 3;
+      }
+    }
+
+    if (count > 0) {
+      const clipCount = Math.floor(count * 0.002);
+      
+      let minVal = 0, maxVal = 255;
+      let sum = 0;
+      for (let v = 0; v < 256; v++) {
+        sum += hist[v];
+        if (sum > clipCount) { minVal = v; break; }
+      }
+      sum = 0;
+      for (let v = 255; v >= 0; v--) {
+        sum += hist[v];
+        if (sum > clipCount) { maxVal = v; break; }
+      }
+
+      const range = maxVal - minVal || 1;
+
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          data[i] = Math.min(255, Math.max(0, ((data[i] - minVal) / range) * 255));
+          data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - minVal) / range) * 255));
+          data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - minVal) / range) * 255));
+        }
+      }
+    }
+
+    tempCtx.putImageData(imageData, 0, 0);
+
+    if (selectionRect) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      const offX = layer?.position.x || 0;
+      const offY = layer?.position.y || 0;
+      ctx.beginPath();
+      if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+      ctx.rect(selectionRect.x - offX, selectionRect.y - offY, selectionRect.w, selectionRect.h);
+      ctx.clip(isInverseSelection ? 'evenodd' : 'nonzero');
+    } else if (lassoPaths && lassoPaths.length > 0) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      const offX = layer?.position.x || 0;
+      const offY = layer?.position.y || 0;
+      ctx.beginPath();
+      if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+      lassoPaths.forEach(path => {
+        if (path.length < 3) return;
+        ctx.moveTo(path[0].x - offX, path[0].y - offY);
+        path.forEach(p => ctx.lineTo(p.x - offX, p.y - offY));
+        ctx.closePath();
+      });
+      ctx.clip('evenodd');
+    }
+
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.restore();
+
+    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+    recordHistory('Auto Contrast');
+  },
+
+  autoColor: () => {
+    const { layers, activeLayerId, updateLayer, recordHistory, selectionRect, lassoPaths, isInverseSelection } = get();
+    if (!activeLayerId) return;
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    ctx.save();
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    let count = 0;
+    const rHist = new Int32Array(256);
+    const gHist = new Int32Array(256);
+    const bHist = new Int32Array(256);
+
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 0) {
+        rHist[data[i]]++;
+        gHist[data[i + 1]]++;
+        bHist[data[i + 2]]++;
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      const clipCount = Math.floor(count * 0.002);
+      
+      let rMin = 0, rMax = 255;
+      let rSum = 0;
+      for (let v = 0; v < 256; v++) { rSum += rHist[v]; if (rSum > clipCount) { rMin = v; break; } }
+      rSum = 0;
+      for (let v = 255; v >= 0; v--) { rSum += rHist[v]; if (rSum > clipCount) { rMax = v; break; } }
+
+      let gMin = 0, gMax = 255;
+      let gSum = 0;
+      for (let v = 0; v < 256; v++) { gSum += gHist[v]; if (gSum > clipCount) { gMin = v; break; } }
+      gSum = 0;
+      for (let v = 255; v >= 0; v--) { gSum += gHist[v]; if (gSum > clipCount) { gMax = v; break; } }
+
+      let bMin = 0, bMax = 255;
+      let bSum = 0;
+      for (let v = 0; v < 256; v++) { bSum += bHist[v]; if (bSum > clipCount) { bMin = v; break; } }
+      bSum = 0;
+      for (let v = 255; v >= 0; v--) { bSum += bHist[v]; if (bSum > clipCount) { bMax = v; break; } }
+
+      const rRange = rMax - rMin || 1;
+      const gRange = gMax - gMin || 1;
+      const bRange = bMax - bMin || 1;
+
+      let rTotal = 0, gTotal = 0, bTotal = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          data[i] = Math.min(255, Math.max(0, ((data[i] - rMin) / rRange) * 255));
+          data[i + 1] = Math.min(255, Math.max(0, ((data[i + 1] - gMin) / gRange) * 255));
+          data[i + 2] = Math.min(255, Math.max(0, ((data[i + 2] - bMin) / bRange) * 255));
+
+          rTotal += data[i];
+          gTotal += data[i + 1];
+          bTotal += data[i + 2];
+        }
+      }
+
+      const rMean = rTotal / count;
+      const gMean = gTotal / count;
+      const bMean = bTotal / count;
+
+      const targetMean = (rMean + gMean + bMean) / 3;
+
+      const clampMean = (m: number) => Math.min(0.999, Math.max(0.001, m / 255));
+      const targetNormalized = clampMean(targetMean);
+      const rNormalized = clampMean(rMean);
+      const gNormalized = clampMean(gMean);
+      const bNormalized = clampMean(bMean);
+
+      const rGamma = Math.log(targetNormalized) / Math.log(rNormalized);
+      const gGamma = Math.log(targetNormalized) / Math.log(gNormalized);
+      const bGamma = Math.log(targetNormalized) / Math.log(bNormalized);
+
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          data[i] = Math.min(255, Math.max(0, Math.pow(data[i] / 255, rGamma) * 255));
+          data[i + 1] = Math.min(255, Math.max(0, Math.pow(data[i + 1] / 255, gGamma) * 255));
+          data[i + 2] = Math.min(255, Math.max(0, Math.pow(data[i + 2] / 255, bGamma) * 255));
+        }
+      }
+    }
+
+    tempCtx.putImageData(imageData, 0, 0);
+
+    if (selectionRect) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      const offX = layer?.position.x || 0;
+      const offY = layer?.position.y || 0;
+      ctx.beginPath();
+      if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+      ctx.rect(selectionRect.x - offX, selectionRect.y - offY, selectionRect.w, selectionRect.h);
+      ctx.clip(isInverseSelection ? 'evenodd' : 'nonzero');
+    } else if (lassoPaths && lassoPaths.length > 0) {
+      const layer = layers.find(l => l.id === activeLayerId);
+      const offX = layer?.position.x || 0;
+      const offY = layer?.position.y || 0;
+      ctx.beginPath();
+      if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+      lassoPaths.forEach(path => {
+        if (path.length < 3) return;
+        ctx.moveTo(path[0].x - offX, path[0].y - offY);
+        path.forEach(p => ctx.lineTo(p.x - offX, p.y - offY));
+        ctx.closePath();
+      });
+      ctx.clip('evenodd');
+    }
+
+    ctx.drawImage(tempCanvas, 0, 0);
+    ctx.restore();
+
+    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+    recordHistory('Auto Color');
+  },
+
+  applyFilterAction: (filterType) => {
+    const { setIsFilterGalleryDialogOpen, setFilterGallerySelectedType } = get();
+    setFilterGallerySelectedType(filterType);
+    setIsFilterGalleryDialogOpen(true);
+  },
+
+  applyActualFilter: (filterType, options) => {
+    const { layers, activeLayerId, updateLayer, recordHistory, selectionRect, lassoPaths, isInverseSelection, addAlert } = get();
+    if (!activeLayerId) return;
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    ctx.save();
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let resultData: ImageData | null = null;
+
+    try {
+      switch (filterType.toLowerCase()) {
+        case 'average':
+          resultData = FilterService.average(imageData);
+          break;
+        case 'blur':
+          resultData = FilterService.boxBlur(imageData, options.radius ?? 2);
+          break;
+        case 'gaussian_blur':
+          resultData = FilterService.boxBlur(imageData, options.radius ?? 5);
+          break;
+        case 'motion_blur':
+          resultData = FilterService.motionBlur(imageData, options.radius ?? 10, options.angle ?? 0);
+          break;
+        case 'displace':
+          resultData = FilterService.ripple(imageData, 40, options.scale ?? 10);
+          break;
+        case 'pinch':
+          resultData = FilterService.pinch(imageData, options.strength ?? 1.5);
+          break;
+        case 'ripple':
+          resultData = FilterService.ripple(imageData, options.wavelength ?? 30, options.amplitude ?? 10);
+          break;
+        case 'wave':
+          resultData = FilterService.wave(imageData, options.frequency ?? 20, options.amplitude ?? 10);
+          break;
+        case 'add_noise':
+          resultData = FilterService.addNoise(imageData, options.amount ?? 10);
+          break;
+        case 'dust_scratches':
+          resultData = FilterService.median(imageData, options.radius ?? 2);
+          break;
+        case 'median':
+          resultData = FilterService.median(imageData, options.radius ?? 3);
+          break;
+        case 'sharpen':
+          resultData = FilterService.convolve(imageData, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+          break;
+        case 'sharpen_more':
+          resultData = FilterService.convolve(imageData, [-1, -1, -1, -1, 9, -1, -1, -1, -1]);
+          break;
+        case 'unsharp_mask':
+          resultData = FilterService.unsharpMask(imageData, options.radius ?? 2, options.amount ?? 100);
+          break;
+        case 'emboss':
+          resultData = FilterService.convolve(imageData, [-2, -1, 0, -1, 1, 1, 0, 1, 2], 128);
+          break;
+        case 'find_edges':
+          resultData = FilterService.convolve(imageData, [-1, -1, -1, -1, 8, -1, -1, -1, -1]);
+          break;
+        case 'oil_paint':
+          resultData = FilterService.oilPaint(imageData, options.radius ?? 2, options.intensity ?? 10);
+          break;
+        case 'high_pass':
+          resultData = FilterService.highPass(imageData, options.radius ?? 10);
+          break;
+        case 'maximum':
+          resultData = FilterService.minMax(imageData, options.radius ?? 3, true);
+          break;
+        case 'minimum':
+          resultData = FilterService.minMax(imageData, options.radius ?? 3, false);
+          break;
+        case 'camera_raw': {
+          resultData = imageData;
+          ctx.restore();
+          setTimeout(() => {
+            get().autoTone();
+            get().autoColor();
+          }, 0);
+          return;
+        }
+        default:
+          addAlert({ type: 'error', message: 'Unknown filter type: ' + filterType });
+          ctx.restore();
+          return;
+      }
+    } catch (err: any) {
+      console.error('[applyActualFilter] Error:', err);
+      addAlert({ type: 'error', message: 'Filter failed: ' + err.message });
+      ctx.restore();
+      return;
+    }
+
+    if (resultData) {
+      tempCtx.putImageData(resultData, 0, 0);
+
+      if (selectionRect) {
+        const layer = layers.find(l => l.id === activeLayerId);
+        const offX = layer?.position.x || 0;
+        const offY = layer?.position.y || 0;
+        ctx.beginPath();
+        if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+        ctx.rect(selectionRect.x - offX, selectionRect.y - offY, selectionRect.w, selectionRect.h);
+        ctx.clip(isInverseSelection ? 'evenodd' : 'nonzero');
+      } else if (lassoPaths && lassoPaths.length > 0) {
+        const layer = layers.find(l => l.id === activeLayerId);
+        const offX = layer?.position.x || 0;
+        const offY = layer?.position.y || 0;
+        ctx.beginPath();
+        if (isInverseSelection) ctx.rect(0, 0, canvas.width, canvas.height);
+        lassoPaths.forEach(path => {
+          if (path.length < 3) return;
+          ctx.moveTo(path[0].x - offX, path[0].y - offY);
+          path.forEach(p => ctx.lineTo(p.x - offX, p.y - offY));
+          ctx.closePath();
+        });
+        ctx.clip('evenodd');
+      }
+
+      ctx.drawImage(tempCanvas, 0, 0);
+      ctx.restore();
+
+      updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+      recordHistory(`Filter: ${filterType}`);
+      addAlert({ type: 'success', message: `${filterType} filter applied.` });
+    } else {
+      ctx.restore();
+    }
+  },
+
+  flipCanvas: async (direction) => {
+    const state = get();
+    const { layers, documentSize } = state;
+
+    const flipImage = (dataUrl: string): Promise<string> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.save();
+          if (direction === 'horizontal') {
+            ctx.scale(-1, 1);
+            ctx.drawImage(img, -img.width, 0);
+          } else {
+            ctx.scale(1, -1);
+            ctx.drawImage(img, 0, -img.height);
+          }
+          ctx.restore();
+          resolve(canvas.toDataURL());
+        };
+        img.src = dataUrl;
+      });
+    };
+
+    const flipNode = async (node: Layer): Promise<Layer> => {
+      let newPos = node.position;
+      if (node.position) {
+        if (direction === 'horizontal') {
+          newPos = {
+            x: documentSize.w - (node.position.x + (node.width || 0)),
+            y: node.position.y
+          };
+        } else {
+          newPos = {
+            x: node.position.x,
+            y: documentSize.h - (node.position.y + (node.height || 0))
+          };
+        }
+      }
+
+      let newDataUrl = node.dataUrl;
+      if (node.dataUrl && node.type === 'paint') {
+        newDataUrl = await flipImage(node.dataUrl);
+      }
+
+      let newChildren = node.children;
+      if (node.children && node.children.length > 0) {
+        newChildren = await Promise.all(node.children.map(child => flipNode(child)));
+      }
+
+      return {
+        ...node,
+        position: newPos,
+        dataUrl: newDataUrl,
+        children: newChildren
+      };
+    };
+
+    try {
+      const flippedLayers = await Promise.all(layers.map(layer => flipNode(layer)));
+      set({ layers: flippedLayers });
+      state.recordHistory(`Flip Canvas ${direction === 'horizontal' ? 'Horizontal' : 'Vertical'}`);
+      state.addAlert?.({
+        type: 'success',
+        message: `Flipped canvas ${direction === 'horizontal' ? 'horizontally' : 'vertically'}.`
+      });
+    } catch (err: any) {
+      console.error('[flipCanvas] Error:', err);
+      state.addAlert?.({
+        type: 'error',
+        message: `Failed to flip canvas: ${err.message}`
+      });
+    }
+  },
+
+  trimCanvas: () => {
+    const state = get();
+    const { layers, documentSize } = state;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = documentSize.w;
+    canvas.height = documentSize.h;
+    const ctx = canvas.getContext('2d')!;
+
+    const drawNode = (node: Layer, parentX = 0, parentY = 0) => {
+      if (!node.visible) return;
+      const lx = parentX + (node.position?.x || 0);
+      const ly = parentY + (node.position?.y || 0);
+
+      if ((node.type === 'group' || node.type === 'artboard') && node.children) {
+        [...node.children].reverse().forEach(child => drawNode(child, lx, ly));
+        return;
+      }
+
+      const layerCanvas = document.querySelector(`canvas[data-layer-id="${node.id}"]`) as HTMLCanvasElement;
+      if (layerCanvas) {
+        ctx.save();
+        ctx.globalAlpha = node.opacity ?? 1;
+        ctx.drawImage(layerCanvas, lx, ly);
+        ctx.restore();
+      }
+    };
+
+    [...layers].reverse().forEach(layer => drawNode(layer));
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+    let foundVisible = false;
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const alpha = data[idx + 3];
+        if (alpha > 0) {
+          foundVisible = true;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    if (!foundVisible) {
+      state.addAlert?.({
+        type: 'warning',
+        message: 'No visible content found to trim.'
+      });
+      return;
+    }
+
+    const newW = maxX - minX + 1;
+    const newH = maxY - minY + 1;
+
+    const shiftNode = (node: Layer, isTopLevel = false): Layer => {
+      let newPos = node.position;
+      if (isTopLevel && node.position) {
+        newPos = {
+          x: node.position.x - minX,
+          y: node.position.y - minY
+        };
+      }
+      return {
+        ...node,
+        position: newPos,
+        children: node.children ? node.children.map(child => shiftNode(child, false)) : undefined
+      };
+    };
+
+    const trimmedLayers = layers.map(layer => shiftNode(layer, true));
+
+    set({
+      documentSize: { w: newW, h: newH },
+      layers: trimmedLayers
+    });
+
+    state.recordHistory('Trim Canvas');
+    state.addAlert?.({
+      type: 'success',
+      message: `Trimmed canvas to ${newW} x ${newH} px.`
+    });
   },
 });

@@ -26,6 +26,7 @@ const harfbuzzWasmPlugin = () => ({
 // https://vite.dev/config/
 export default defineConfig({
  define: {
+    global: 'globalThis',
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
   plugins: [
@@ -67,15 +68,8 @@ export default defineConfig({
     host: true,
     port: 5174,
     cors: true,
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
   },
   preview: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
+    port: 5174,
   },
 })

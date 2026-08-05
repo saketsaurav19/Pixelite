@@ -5,8 +5,16 @@ import { shouldClear } from './utils';
 export const lassoTools: ToolModule[] = [
   {
     id: 'lasso',
-    start: ({ coords, setLassoPaths, setIsInteracting, selectionMode, isShift, isAlt }) => {
-      if (shouldClear(selectionMode, isShift, isAlt)) setLassoPaths([]);
+    start: ({ coords, setLassoPaths, setSelectionRect, setIsInteracting, selectionMode, isShift, isAlt, selectionRect }) => {
+      if (shouldClear(selectionMode, isShift, isAlt)) {
+        setLassoPaths([]);
+        setSelectionRect(null);
+      } else if (selectionRect) {
+        const r = selectionRect;
+        const rectPath = [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }];
+        setLassoPaths((prev: any) => [...prev, rectPath]);
+        setSelectionRect(null);
+      }
       setLassoPaths((prev: any) => [...prev, [coords]]);
       setIsInteracting(true);
     },
@@ -20,12 +28,21 @@ export const lassoTools: ToolModule[] = [
   },
   {
     id: 'polygonal_lasso',
-    start: ({ coords, setLassoPaths, setIsInteracting, selectionMode, isShift, isAlt, zoom, recordHistory, isInteracting }) => {
+    start: ({ coords, setLassoPaths, setSelectionRect, setIsInteracting, selectionMode, isShift, isAlt, zoom, recordHistory, isInteracting, selectionRect }) => {
       let closed = false;
       setLassoPaths((prev: any) => {
         // Only start a brand new path if we aren't already building one
         if (!isInteracting || prev.length === 0 || (shouldClear(selectionMode, isShift, isAlt) && prev[prev.length-1].length === 0)) {
           setIsInteracting(true);
+          if (shouldClear(selectionMode, isShift, isAlt)) {
+            setSelectionRect(null);
+            return [[coords]];
+          } else if (selectionRect) {
+            const r = selectionRect;
+            const rectPath = [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }];
+            setSelectionRect(null);
+            return [rectPath, [coords]];
+          }
           return [[coords]];
         }
         
@@ -65,8 +82,16 @@ export const lassoTools: ToolModule[] = [
   },
   {
     id: 'magnetic_lasso',
-    start: ({ coords, ctx, setLassoPaths, setIsInteracting, selectionMode, isShift, isAlt }) => {
-      if (shouldClear(selectionMode, isShift, isAlt)) setLassoPaths([]);
+    start: ({ coords, ctx, setLassoPaths, setSelectionRect, setIsInteracting, selectionMode, isShift, isAlt, selectionRect }) => {
+      if (shouldClear(selectionMode, isShift, isAlt)) {
+        setLassoPaths([]);
+        setSelectionRect(null);
+      } else if (selectionRect) {
+        const r = selectionRect;
+        const rectPath = [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }];
+        setLassoPaths((prev: any) => [...prev, rectPath]);
+        setSelectionRect(null);
+      }
       const bestPoint = findBestEdgePoint(ctx, coords.x, coords.y, 15);
       setLassoPaths((prev: any) => [...prev, [bestPoint]]);
       setIsInteracting(true);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import { loadImage, applyPixiAdjustments, computeCurvesLut } from '../../utils/pixiUtils';
 import type { Point } from '../../utils/pixiUtils';
-import { flattenTree } from '../../utils/layerUtils';
+import { flattenTree, findLayerById } from '../../utils/layerUtils';
 import * as LucideIcons from 'lucide-react';
 import { motion, useDragControls } from 'framer-motion';
 import './Dialogs.css';
@@ -137,7 +137,7 @@ export const AdjustmentDialog: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const activeLayer = layers.find((l) => l.id === activeLayerId);
+  const activeLayer = activeLayerId ? findLayerById(layers, activeLayerId) : undefined;
 
   // Store the original layer state
   const originalDataUrlRef = useRef<string | null>(null);
@@ -271,7 +271,7 @@ export const AdjustmentDialog: React.FC = () => {
   useEffect(() => {
     if (activeAdjustmentModal) {
       const state = useStore.getState();
-      const currentLayer = state.layers.find((l: any) => l.id === state.activeLayerId);
+      const currentLayer = state.activeLayerId ? findLayerById(state.layers, state.activeLayerId) : undefined;
       if (!currentLayer) return;
 
       let dataUrl = currentLayer.dataUrl;
@@ -473,7 +473,7 @@ export const AdjustmentDialog: React.FC = () => {
     }
 
     const state = useStore.getState();
-    const currentLayer = state.layers.find((l: any) => l.id === state.activeLayerId);
+    const currentLayer = state.activeLayerId ? findLayerById(state.layers, state.activeLayerId) : undefined;
 
     if (currentLayer && currentLayer.type === 'adjustment') {
       if (currentLayer.isNew) {
@@ -517,7 +517,7 @@ export const AdjustmentDialog: React.FC = () => {
     }
 
     const state = useStore.getState();
-    const currentLayer = state.layers.find((l: any) => l.id === state.activeLayerId);
+    const currentLayer = state.activeLayerId ? findLayerById(state.layers, state.activeLayerId) : undefined;
 
     if (currentLayer && currentLayer.type === 'adjustment') {
       let finalSettings: any = {};

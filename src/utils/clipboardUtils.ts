@@ -97,7 +97,59 @@ export const pasteFromClipboard = async (
   state: EditorState,
   mode: 'center' | 'in_place' | 'into' | 'outside'
 ) => {
-  const { clipboardDataUrl, clipboardDataRect, documentSize, selectionRect, addLayer, recordHistory } = state;
+  const {
+    clipboardLayer,
+    clipboardLayers,
+    isInternalCopy,
+    clipboardDataUrl,
+    clipboardDataRect,
+    documentSize,
+    selectionRect,
+    addLayer,
+    recordHistory
+  } = state;
+
+  // Multi-layer internal paste (preserves type: shape, text, image, path, effects, etc.)
+  if (isInternalCopy && clipboardLayers && clipboardLayers.length > 0) {
+    clipboardLayers.forEach((layer: any, idx: number) => {
+      const offset = mode === 'in_place' ? 0 : idx * 15;
+      const { id, ...rest } = layer;
+      addLayer({
+        ...rest,
+        position: {
+          x: Math.round((layer.position?.x ?? 0) + offset),
+          y: Math.round((layer.position?.y ?? 0) + offset),
+        },
+        name: clipboardLayers.length === 1 ? `${layer.name} Copy` : `${layer.name} (Pasted)`,
+      });
+    });
+    recordHistory('Paste Layers');
+    return;
+  }
+
+  // Single-layer internal paste (backward compat)
+  if (isInternalCopy && clipboardLayer) {
+    let x = 0;
+    let y = 0;
+
+    if (mode === 'in_place') {
+      x = clipboardLayer.position?.x || 0;
+      y = clipboardLayer.position?.y || 0;
+    } else {
+      x = (clipboardLayer.position?.x || 0) + 20;
+      y = (clipboardLayer.position?.y || 0) + 20;
+    }
+
+    const { id, ...layerWithoutId } = clipboardLayer;
+    addLayer({
+      ...layerWithoutId,
+      position: { x, y },
+      name: `${clipboardLayer.name} Copy`
+    });
+
+    recordHistory('Paste Layer');
+    return;
+  }
 
   if (!clipboardDataUrl) return;
 

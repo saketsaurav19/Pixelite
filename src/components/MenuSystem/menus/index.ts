@@ -7,6 +7,7 @@ import { filterMenu } from './filter';
 import { viewMenu } from './view';
 import { windowMenu } from './window';
 import { helpMenu } from './help';
+import { experimentalMenu } from './experimental';
 
 export const staticMenus: Record<string, MenuItem[]> = {
   edit: editMenu,
@@ -17,4 +18,5 @@ export const staticMenus: Record<string, MenuItem[]> = {
   view: viewMenu,
   window: windowMenu,
   help: helpMenu,
+  experimental: experimentalMenu,
 };

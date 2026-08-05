@@ -327,3 +327,62 @@
     display: block;
   }
 }
+
+/* Welcome Screen Glassmorphism Styling (Desktop Only) */
+@media (min-width: 48.06rem) {
+  .welcome-only .app-header {
+    background: transparent !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .welcome-only .menubar {
+    background-color: transparent !important;
+  }
+
+  .welcome-only .menu-item-container {
+    color: rgba(255, 255, 255, 0.7) !important;
+    border-radius: 4px;
+    margin: 0 2px;
+    height: 80%;
+  }
+
+  .welcome-only .menu-item-container:hover,
+  .welcome-only .menu-item-container.active {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    color: #fff !important;
+  }
+
+  .welcome-only .menu-dropdown,
+  .welcome-only .menubar .menu-submenu {
+    background: rgba(15, 15, 15, 0.6) !important;
+    backdrop-filter: blur(30px) saturate(160%);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+    border-radius: 8px;
+    padding: 6px 0;
+  }
+
+  .welcome-only .menu-option {
+    color: rgba(255, 255, 255, 0.8) !important;
+    margin: 0 4px;
+    border-radius: 4px;
+  }
+
+  .welcome-only .menu-option:hover:not(.disabled) {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #fff !important;
+  }
+
+  .welcome-only .menu-option.disabled {
+    color: rgba(255, 255, 255, 0.3) !important;
+  }
+
+  .welcome-only .menu-divider {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    margin: 4px 0;
+  }
+}

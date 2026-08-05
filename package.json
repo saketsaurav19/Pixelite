@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest run",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },
@@ -29,6 +30,7 @@
     "lucide-react": "^1.11.0",
     "nanoid": "^5.1.9",
     "onnxruntime-web": "1.21.0",
+    "peerjs": "^1.5.5",
     "piexifjs": "^1.0.6",
     "pixi.js": "^8.19.0",
     "react": "^19.2.5",
@@ -50,8 +52,10 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "gh-pages": "^6.3.0",
     "globals": "^17.5.0",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.2",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^4.1.10"
   }
 }

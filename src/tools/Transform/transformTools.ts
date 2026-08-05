@@ -1,5 +1,5 @@
 import type { ToolModule } from '../types';
-import { warpPerspective } from '../../utils/canvasUtils';
+import { warpPerspective, getFontFamilyString } from '../../utils/canvasUtils';
 import { toolState } from '../toolState';
 import { findLayerById } from '../../utils/layerUtils';
 import { useStore } from '../../store/useStore';
@@ -53,23 +53,29 @@ const rasterizeVectorLayer = (layer: any, canvas: HTMLCanvasElement) => {
     const textColor = layer.color || '#000000';
     const fontWeight = layer.fontWeight || 'normal';
     const text = layer.textContent || '';
-    const cleanFamily = layer.fontFamily || 'sans-serif';
-    ctx.font = `${fontWeight} ${fontSize}px ${cleanFamily}`;
+    const cleanFamily = getFontFamilyString(layer.fontFamily, layer.fontChecksum);
+    ctx.font = `${layer.fontStyle || 'normal'} ${fontWeight} ${fontSize}px ${cleanFamily}`;
     ctx.fillStyle = textColor;
-    ctx.textBaseline = 'top';
+    ctx.textBaseline = 'alphabetic';
+    const metrics = ctx.measureText('M');
+    const ascent = metrics.fontBoundingBoxAscent;
+    const descent = metrics.fontBoundingBoxDescent;
+    const baselineOffset = (ascent !== undefined && descent !== undefined)
+      ? (fontSize + ascent - descent) / 2
+      : fontSize * 0.85;
 
     if (layer.isVertical) {
       const lines = text.split('\n');
       lines.forEach((line: string, i: number) => {
         const chars = line.split('');
         chars.forEach((char: string, j: number) => {
-          ctx.fillText(char, i * fontSize * 1.2, j * fontSize);
+          ctx.fillText(char, i * fontSize * 1.2, j * fontSize + baselineOffset);
         });
       });
     } else {
       const lines = text.split('\n');
       lines.forEach((line: string, i: number) => {
-        ctx.fillText(line, 0, i * fontSize);
+        ctx.fillText(line, 0, i * fontSize + baselineOffset);
       });
     }
   } else if (layer.type === 'shape' && layer.shapeData) {

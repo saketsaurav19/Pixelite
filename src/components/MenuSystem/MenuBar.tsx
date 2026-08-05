@@ -127,15 +127,16 @@ export const MenuBar: React.FC = () => {
   };
 
   const menus: { key: string; label: string; component?: React.ReactNode }[] = [
-    { key: 'file',   label: 'File',   component: <FileMenu onClose={() => setActiveMenu(null)} /> },
-    { key: 'edit',   label: 'Edit'   },
-    { key: 'image',  label: 'Image'  },
-    { key: 'layer',  label: 'Layer'  },
+    { key: 'file', label: 'File', component: <FileMenu onClose={() => setActiveMenu(null)} /> },
+    { key: 'edit', label: 'Edit' },
+    { key: 'image', label: 'Image' },
+    { key: 'layer', label: 'Layer' },
     { key: 'select', label: 'Select' },
     { key: 'filter', label: 'Filter' },
-    { key: 'view',   label: 'View'   },
+    { key: 'experimental', label: 'Experimental' },
+    { key: 'view', label: 'View' },
     { key: 'window', label: 'Window' },
-    { key: 'help',   label: 'Help'   },
+    { key: 'help', label: 'Help' },
   ];
 
   return (

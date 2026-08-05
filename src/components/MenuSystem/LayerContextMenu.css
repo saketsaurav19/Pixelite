@@ -35,3 +35,10 @@
 .layer-context-menu .menu-item.text-danger:hover {
   background-color: #d32f2f;
 }
+
+.layer-context-menu .menu-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 8px;
+  opacity: 0.5;
+}

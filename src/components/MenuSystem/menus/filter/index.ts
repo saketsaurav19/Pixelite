@@ -1,39 +1,39 @@
 import type { MenuItem } from '../types';
 
 export const filterMenu: MenuItem[] = [
-  { label: 'Filter Gallery...', action: (_s) => console.log('Filter Gallery') },
-  { label: 'Camera Raw Filter...', action: (_s) => console.log('Camera Raw Filter') },
+  { label: 'Filter Gallery...', action: (s) => s.applyFilterAction?.('filter_gallery') },
+  { label: 'Camera Raw Filter...', action: (s) => s.applyFilterAction?.('camera_raw') },
   { divider: true },
   { label: 'Blur', submenu: [
-    { label: 'Average', action: (_s) => console.log('Apply Average Blur') },
-    { label: 'Blur', action: (_s) => console.log('Apply Blur') },
-    { label: 'Gaussian Blur...', action: (_s) => console.log('Gaussian Blur dialog') },
-    { label: 'Motion Blur...', action: (_s) => console.log('Motion Blur dialog') }
+    { label: 'Average', action: (s) => s.applyFilterAction?.('average') },
+    { label: 'Blur', action: (s) => s.applyFilterAction?.('blur') },
+    { label: 'Gaussian Blur...', action: (s) => s.applyFilterAction?.('gaussian_blur') },
+    { label: 'Motion Blur...', action: (s) => s.applyFilterAction?.('motion_blur') }
   ] },
   { label: 'Distort', submenu: [
-    { label: 'Displace...', action: (_s) => console.log('Displace dialog') },
-    { label: 'Pinch...', action: (_s) => console.log('Pinch dialog') },
-    { label: 'Ripple...', action: (_s) => console.log('Ripple dialog') },
-    { label: 'Wave...', action: (_s) => console.log('Wave dialog') }
+    { label: 'Displace...', action: (s) => s.applyFilterAction?.('displace') },
+    { label: 'Pinch...', action: (s) => s.applyFilterAction?.('pinch') },
+    { label: 'Ripple...', action: (s) => s.applyFilterAction?.('ripple') },
+    { label: 'Wave...', action: (s) => s.applyFilterAction?.('wave') }
   ] },
   { label: 'Noise', submenu: [
-    { label: 'Add Noise...', action: (_s) => console.log('Add Noise dialog') },
-    { label: 'Dust & Scratches...', action: (_s) => console.log('Dust & Scratches dialog') },
-    { label: 'Median...', action: (_s) => console.log('Median dialog') }
+    { label: 'Add Noise...', action: (s) => s.applyFilterAction?.('add_noise') },
+    { label: 'Dust & Scratches...', action: (s) => s.applyFilterAction?.('dust_scratches') },
+    { label: 'Median...', action: (s) => s.applyFilterAction?.('median') }
   ] },
   { label: 'Sharpen', submenu: [
-    { label: 'Sharpen', action: (_s) => console.log('Apply Sharpen') },
-    { label: 'Sharpen More', action: (_s) => console.log('Apply Sharpen More') },
-    { label: 'Unsharp Mask...', action: (_s) => console.log('Unsharp Mask dialog') }
+    { label: 'Sharpen', action: (s) => s.applyFilterAction?.('sharpen') },
+    { label: 'Sharpen More', action: (s) => s.applyFilterAction?.('sharpen_more') },
+    { label: 'Unsharp Mask...', action: (s) => s.applyFilterAction?.('unsharp_mask') }
   ] },
   { label: 'Stylize', submenu: [
-    { label: 'Emboss...', action: (_s) => console.log('Emboss dialog') },
-    { label: 'Find Edges', action: (_s) => console.log('Apply Find Edges') },
-    { label: 'Oil Paint...', action: (_s) => console.log('Oil Paint dialog') }
+    { label: 'Emboss...', action: (s) => s.applyFilterAction?.('emboss') },
+    { label: 'Find Edges', action: (s) => s.applyFilterAction?.('find_edges') },
+    { label: 'Oil Paint...', action: (s) => s.applyFilterAction?.('oil_paint') }
   ] },
   { label: 'Other', submenu: [
-    { label: 'High Pass...', action: (_s) => console.log('High Pass dialog') },
-    { label: 'Maximum...', action: (_s) => console.log('Maximum dialog') },
-    { label: 'Minimum...', action: (_s) => console.log('Minimum dialog') }
+    { label: 'High Pass...', action: (s) => s.applyFilterAction?.('high_pass') },
+    { label: 'Maximum...', action: (s) => s.applyFilterAction?.('maximum') },
+    { label: 'Minimum...', action: (s) => s.applyFilterAction?.('minimum') }
   ] },
 ];

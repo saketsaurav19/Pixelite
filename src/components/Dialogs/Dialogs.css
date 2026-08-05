@@ -18,6 +18,7 @@
   box-shadow: 0 0.625rem 1.875rem rgba(0,0,0,0.5);
   display: flex;
   flex-direction: column;
+  max-height: 90vh;
 }
 
 .export-dialog {
@@ -1193,5 +1194,248 @@ flex-direction: column;
   cursor: pointer;
   background: transparent;
 }
+
+/* Image Size Dialog styles */
+.image-size-dialog {
+  max-width: 30rem;
+}
+
+.image-size-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.image-size-controls-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.inputs-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.lock-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+}
+
+.constrain-lock-btn {
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 6px;
+  cursor: pointer;
+  color: #888;
+  transition: all 0.15s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 4.5rem;
+  width: 2.25rem;
+  outline: none;
+}
+
+.constrain-lock-btn:hover {
+  background: #333;
+  color: #ccc;
+  border-color: #555;
+}
+
+.constrain-lock-btn.active {
+  background: #0066cc;
+  border-color: #0088ff;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0, 102, 204, 0.4);
+}
+
+.resampling-select {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.375rem 0.5rem;
+  color: #fff;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  height: 2.25rem;
+}
+
+.resampling-select:focus {
+  border-color: #0066cc;
+}
+
+/* Split layout and preview styling for Canvas Size / Image Size Dialogs */
+.canvas-size-body-split {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.25rem;
+  justify-content: space-between;
+  max-height: calc(85vh - 110px);
+  overflow-y: auto;
+}
+
+.canvas-size-controls {
+  flex: 1.2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.canvas-size-preview-panel {
+  flex: 0.8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-left: 1px solid #333;
+  padding-left: 1.5rem;
+  justify-content: flex-start;
+  min-width: 220px;
+}
+
+.preview-canvas-wrapper {
+  width: 220px;
+  height: 220px;
+  border: 1px solid #444;
+  background: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+}
+
+.preview-canvas-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.preview-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #aaa;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.legend-dot.original {
+  background: rgba(0, 122, 204, 0.35);
+  border: 1.5px solid #0088ff;
+}
+
+.legend-dot.target {
+  border: 2px solid #00ff00;
+  background: transparent;
+}
+
+.legend-dot.cropped {
+  background: rgba(255, 0, 0, 0.4);
+  border: 1px dashed red;
+}
+
+.resolution-unit-label {
+  color: #888;
+  font-size: 0.9rem;
+  margin-left: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .canvas-size-body-split {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .canvas-size-preview-panel {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid #333;
+    padding-top: 1rem;
+    align-items: center;
+  }
+}
+
+/* Anchor Grid styles */
+.anchor-grid-container {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.anchor-grid {
+  display: flex;
+  flex-direction: column;
+  width: 90px;
+  height: 90px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #1a1a1a;
+}
+
+.anchor-row {
+  display: flex;
+  width: 100%;
+  height: 30px;
+}
+
+.anchor-cell {
+  flex: 1;
+  height: 100%;
+  border: 1px solid #333;
+  background: #222;
+  color: #aaa;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  padding: 0;
+  outline: none;
+}
+
+.anchor-cell:hover {
+  background: #333;
+  color: #fff;
+}
+
+.anchor-cell.active {
+  background: #0066cc;
+  color: #fff;
+  border-color: #0088ff;
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+}
+
+.dialog-overlay.filter-gallery-overlay {
+  background: rgba(0, 0, 0, 0.05);
+  backdrop-filter: none;
+}
+
+
 
 

@@ -4,7 +4,7 @@ import type { CanvasRefs } from '../types';
 import { useStore } from '../../../store/useStore';
 import { applyPixiAdjustments } from '../../../utils/pixiUtils';
 import { flattenTree } from '../../../utils/layerUtils';
-import { drawTrianglesWarp } from '../../../utils/canvasUtils';
+import { drawTrianglesWarp, getFontFamilyString } from '../../../utils/canvasUtils';
 import { applyWarpDeformation } from '../../../utils/textWarpUtils';
 import { toolState } from '../../../tools/toolState';
 import { pdfiumManager } from '../../../services/import/PdfiumManager';
@@ -18,8 +18,14 @@ const renderLayer = (
   activeAdjustmentModal: string | null,
   allLayers: Layer[]
 ): void => {
-  // Skip re-rendering the active layer if we are currently interacting with it
-  if (isInteracting && layer.id === activeLayerId && useStore.getState().activeTool !== 'transform') return;
+  // Skip re-rendering the active layer if we are currently interacting with it or if the Filter Gallery / Layer Style dialogs are open
+  if (
+    (isInteracting && layer.id === activeLayerId && useStore.getState().activeTool !== 'transform') ||
+    (useStore.getState().isFilterGalleryDialogOpen && layer.id === activeLayerId) ||
+    (useStore.getState().isLayerStyleDialogOpen && layer.id === activeLayerId)
+  ) {
+    return;
+  }
 
   // If it's a group, recursively render children in bottom-to-top order
   if ((layer.type === 'group' || layer.type === 'artboard') && layer.children) {
@@ -154,24 +160,23 @@ const renderLayer = (
     targetCtx.textAlign = layer.textAlign || 'left';
     const fs = layer.fontSize || 40;
 
-    const hasCustomFont = !!layer.fontChecksum;
-    const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
-    const isGeneric = !layer.fontFamily || ['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'].includes(layer.fontFamily.toLowerCase());
-
-    const fontFamily = hasCustomFont
-      ? `"${customFontKey}", "${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif`
-      : isGeneric
-        ? `"Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`
-        : `"${layer.fontFamily}", "Noto Sans Devanagari", "Mangal", "Arial Unicode MS", "Noto Sans", sans-serif, Arial`;
+    const fontFamily = getFontFamilyString(layer.fontFamily, layer.fontChecksum);
 
     targetCtx.font = `${layer.fontStyle || 'normal'} ${layer.fontWeight || 'normal'} ${fs}px ${fontFamily}`;
+    targetCtx.textBaseline = 'alphabetic';
+    const metrics = targetCtx.measureText('M');
+    const ascent = metrics.fontBoundingBoxAscent;
+    const descent = metrics.fontBoundingBoxDescent;
+    const baselineOffset = (ascent !== undefined && descent !== undefined)
+      ? (fs + ascent - descent) / 2
+      : fs * 0.85;
 
     layer.textContent.split('\n').forEach((line: string, i: number) => {
       if (layer.isVertical) {
         const chars = line.split('');
         const xPos = i * fs * 1.2;
         chars.forEach((char: string, j: number) => {
-          const yPos = (j + 1) * fs;
+          const yPos = j * fs + baselineOffset;
           if (layer.strokeColor && layer.strokeWidth && layer.strokeWidth > 0) {
             targetCtx.strokeStyle = layer.strokeColor;
             targetCtx.lineWidth = layer.strokeWidth;
@@ -180,7 +185,7 @@ const renderLayer = (
           targetCtx.fillText(char, xPos, yPos);
         });
       } else {
-        const yPos = (i + 1) * fs;
+        const yPos = i * fs + baselineOffset;
         let xPos = 0;
         if (layer.textAlign === 'center') {
           xPos = origW / 2;
@@ -342,6 +347,8 @@ export const useLayerRendering = (
 ) => {
   const activeAdjustmentModal = useStore((state) => state.activeAdjustmentModal);
   const zoom = useStore((state) => state.zoom || 1);
+  const isFilterGalleryDialogOpen = useStore((state) => state.isFilterGalleryDialogOpen);
+  const isLayerStyleDialogOpen = useStore((state) => state.isLayerStyleDialogOpen);
 
   useEffect(() => {
     // Render bottom-to-top so adjustment layers composite correctly
@@ -349,5 +356,5 @@ export const useLayerRendering = (
     reversedLayers.forEach(layer => {
       renderLayer(layer, documentSize, canvasRefs, isInteracting, activeLayerId, activeAdjustmentModal, layers);
     });
-  }, [layers, documentSize, isInteracting, activeLayerId, activeAdjustmentModal, zoom]);
+  }, [layers, documentSize, isInteracting, activeLayerId, activeAdjustmentModal, zoom, isFilterGalleryDialogOpen, isLayerStyleDialogOpen]);
 };

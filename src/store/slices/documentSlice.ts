@@ -6,6 +6,12 @@ export interface DocumentSlice {
   currentProjectId: string | null;
   setCurrentProjectId: (id: string | null) => void;
   clipboardDataUrl: string | null;
+  clipboardLayer: any | null;
+  clipboardLayers: any[] | null;
+  isInternalCopy: boolean;
+  setClipboardLayer: (layer: any | null) => void;
+  setClipboardLayers: (layers: any[] | null) => void;
+  setIsInternalCopy: (val: boolean) => void;
   clipboardDataRect: { x: number; y: number; w: number; h: number } | null;
   setClipboardDataRect: (rect: { x: number; y: number; w: number; h: number } | null) => void;
   setClipboardDataUrl: (url: string | null) => void;
@@ -117,6 +123,7 @@ const extractDocumentState = (state: EditorState): DocumentSpecificState => ({
   interpolation: state.interpolation,
   colorMode: state.colorMode,
   bitDepth: state.bitDepth,
+  resolution: state.resolution,
   lights: state.lights,
   isLightingEnabled: state.isLightingEnabled,
   lightingQuality: state.lightingQuality,
@@ -153,6 +160,7 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
     canvasRotation: 0,
     colorMode: 'rgb',
     bitDepth: 8,
+    resolution: 72,
     lassoPaths: [],
     selectionRect: null,
     isInverseSelection: false,
@@ -202,6 +210,12 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   currentProjectId: null,
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
   clipboardDataUrl: null,
+  clipboardLayer: null,
+  clipboardLayers: null,
+  isInternalCopy: false,
+  setClipboardLayer: (layer) => set({ clipboardLayer: layer }),
+  setClipboardLayers: (layers) => set({ clipboardLayers: layers }),
+  setIsInternalCopy: (val) => set({ isInternalCopy: val }),
   clipboardDataRect: null,
   setClipboardDataUrl: (url) => set({ clipboardDataUrl: url }),
   setClipboardDataRect: (rect) => set({ clipboardDataRect: rect }),
@@ -209,6 +223,8 @@ export const createDocumentSlice: StateCreator<EditorState, [], [], DocumentSlic
   canvasOffset: { x: 0, y: 0 },
   canvasRotation: 0,
   documentSize: { w: 2000, h: 1400 },
+  resolution: 72,
+  setResolution: (resolution: number) => set({ resolution }),
   slices: [],
   colorSamplers: [],
   rulerData: null,

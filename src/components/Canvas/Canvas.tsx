@@ -527,11 +527,17 @@ const Canvas: React.FC = () => {
                             document.activeElement?.tagName === 'TEXTAREA' || 
                             (document.activeElement as HTMLElement)?.contentEditable === 'true';
           if (!textEditor && !isTyping && activeLayerId) {
-            const currentLayers = useStore.getState().layers;
-            if (flattenTree(currentLayers).length > 1) {
+            const hasSelection = selectionRect || (lassoPaths && lassoPaths.length > 0);
+            if (hasSelection) {
               e.preventDefault();
-              removeLayer(activeLayerId);
-              recordHistory('Delete Layer');
+              clearSelection();
+            } else {
+              const currentLayers = useStore.getState().layers;
+              if (flattenTree(currentLayers).length > 1) {
+                e.preventDefault();
+                removeLayer(activeLayerId);
+                recordHistory('Delete Layer');
+              }
             }
           }
         }
@@ -550,7 +556,7 @@ const Canvas: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTool, lassoPaths, recordHistory, setLassoPaths, isInteracting, activeLayerId, removeLayer, textEditor]);
+  }, [activeTool, lassoPaths, selectionRect, clearSelection, recordHistory, setLassoPaths, isInteracting, activeLayerId, removeLayer, textEditor]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     handleTouchStartUtil(e, zoom, canvasOffset, {
@@ -679,7 +685,8 @@ const Canvas: React.FC = () => {
   // Handles mouse wheel zooming
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      const zoomScroll = useStore.getState().zoomScroll;
+      if (zoomScroll || e.ctrlKey || e.metaKey || e.altKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
         setZoom(Math.min(32, Math.max(0.01, zoom + delta)));

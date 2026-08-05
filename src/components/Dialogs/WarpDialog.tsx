@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { findLayerById } from '../../utils/layerUtils';
 import type { TextWarp } from '../../store/types';
 import './Dialogs.css';
 
@@ -33,7 +34,7 @@ export const WarpDialog: React.FC = () => {
     recordHistory
   } = useStore();
 
-  const activeLayer = layers.find(l => l.id === activeLayerId);
+  const activeLayer = activeLayerId ? findLayerById(layers, activeLayerId) : undefined;
   const [backupWarp, setBackupWarp] = useState<TextWarp | undefined>(undefined);
 
   // local defaults
