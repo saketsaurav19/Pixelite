@@ -151,3 +151,26 @@
   border-radius: 6px;
   font-size: 12px;
 }
+
+.three-word-input-container {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.mnemonic-dash-separator {
+  color: var(--text-secondary, #a0a0b0);
+  font-weight: bold;
+}
+
+@media (max-width: 580px) {
+  .three-word-input-container {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .mnemonic-dash-separator {
+    display: none;
+  }
+}

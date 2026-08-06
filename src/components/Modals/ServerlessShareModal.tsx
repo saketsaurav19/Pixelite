@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { serializeCanvasState, compressStateToHash, generateQrCodeUrl, getShareBaseUrl } from '../../utils/shareUtils';
 import { collaborationService } from '../../services/collaboration/WebRTCCollaborationService';
 import { initCollaborationSync } from '../../services/collaboration/collaborationSync';
+import { normalizeRoomCode } from '../../utils/bip39Wordlist';
 import './Modals.css';
 import './ServerlessShareModal.css';
 
@@ -22,11 +23,56 @@ export const ServerlessShareModal: React.FC = () => {
 
   // WebRTC state
   const [roomCode, setRoomCode] = useState<string>(collaborationService.getRoomCode());
-  const [joinInput, setJoinInput] = useState<string>('');
+  const [word1, setWord1] = useState<string>('');
+  const [word2, setWord2] = useState<string>('');
+  const [word3, setWord3] = useState<string>('');
+
+  const word1Ref = useRef<HTMLInputElement>(null);
+  const word2Ref = useRef<HTMLInputElement>(null);
+  const word3Ref = useRef<HTMLInputElement>(null);
+
   const [isConnected, setIsConnected] = useState<boolean>(Boolean(collaborationService.getRoomCode()));
   const [peerCount, setPeerCount] = useState<number>(collaborationService.getConnectedPeerCount());
   const [userNameInput, setUserNameInput] = useState<string>(collaborationService.getUserName());
   const [canEdit, setCanEdit] = useState<boolean>(collaborationService.getCanEdit());
+
+  const handleWordChange = (index: 0 | 1 | 2, val: string) => {
+    let clean = val.toLowerCase().trim();
+
+    // Smart Paste handler: If user pasted a full phrase or URL with room code
+    if (clean.includes('room=') || clean.includes('-') || clean.includes(' ') || clean.includes('_')) {
+      if (clean.includes('room=')) {
+        const match = clean.match(/[?&]room=([^&]+)/);
+        if (match) clean = match[1];
+      }
+      const parts = clean.split(/[\s_-]+/).filter(Boolean);
+      if (parts.length >= 3) {
+        setWord1(parts[0]);
+        setWord2(parts[1]);
+        setWord3(parts[2]);
+        return;
+      }
+    }
+
+    // Auto-advance focus to next field on Space, Hyphen, or Underscore
+    if (clean.endsWith('-') || clean.endsWith(' ') || clean.endsWith('_')) {
+      const single = clean.replace(/[\s_-]+/g, '');
+      if (index === 0) {
+        setWord1(single);
+        word2Ref.current?.focus();
+      } else if (index === 1) {
+        setWord2(single);
+        word3Ref.current?.focus();
+      } else {
+        setWord3(single);
+      }
+      return;
+    }
+
+    if (index === 0) setWord1(clean);
+    if (index === 1) setWord2(clean);
+    if (index === 2) setWord3(clean);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -96,12 +142,41 @@ export const ServerlessShareModal: React.FC = () => {
     }
   };
 
-  const handleCopyUrl = () => {
+  const safeCopyToClipboard = async (text: string): Promise<boolean> => {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {
+        // Fallback below
+      }
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return successful;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  const handleCopyUrl = async () => {
     if (!shareUrl) return;
-    navigator.clipboard.writeText(shareUrl);
-    setIsCopied(true);
-    addAlert({ type: 'success', message: 'Shareable canvas URL copied to clipboard!' });
-    setTimeout(() => setIsCopied(false), 2000);
+    const success = await safeCopyToClipboard(shareUrl);
+    if (success) {
+      setIsCopied(true);
+      addAlert({ type: 'success', message: 'Shareable canvas URL copied to clipboard!' });
+      setTimeout(() => setIsCopied(false), 2000);
+    } else {
+      addAlert({ type: 'error', message: 'Failed to copy URL. Copy manually.' });
+    }
   };
 
   const handleCreateRoom = () => {
@@ -113,26 +188,33 @@ export const ServerlessShareModal: React.FC = () => {
     addAlert({ type: 'success', message: `Serverless P2P Room created! Room Code: ${code}` });
   };
 
-  const handleCopyRoomCode = () => {
+  const handleCopyRoomCode = async () => {
     if (!roomCode) return;
-    navigator.clipboard.writeText(roomCode);
-    addAlert({ type: 'success', message: `Room Code "${roomCode}" copied to clipboard!` });
+    const success = await safeCopyToClipboard(roomCode);
+    if (success) {
+      addAlert({ type: 'success', message: `Room Code "${roomCode}" copied to clipboard!` });
+    } else {
+      addAlert({ type: 'error', message: `Failed to copy Room Code. Copy manually: ${roomCode}` });
+    }
   };
 
-  const handleCopyRoomLink = () => {
+  const handleCopyRoomLink = async () => {
     if (!roomCode) return;
     const inviteLink = `${getShareBaseUrl()}${window.location.pathname}?room=${roomCode}`;
-    navigator.clipboard.writeText(inviteLink);
-    addAlert({ type: 'success', message: 'Direct P2P invite link copied to clipboard!' });
+    const success = await safeCopyToClipboard(inviteLink);
+    if (success) {
+      addAlert({ type: 'success', message: 'Direct P2P invite link copied to clipboard!' });
+    } else {
+      addAlert({ type: 'error', message: `Failed to copy link. Copy manually: ${inviteLink}` });
+    }
   };
 
   const handleJoinRoom = () => {
-    let cleanCode = joinInput.trim();
-    if (!cleanCode) return;
-
-    if (cleanCode.includes('room=')) {
-      const match = cleanCode.match(/[?&]room=([^&]+)/);
-      if (match) cleanCode = match[1];
+    const fullCode = `${word1.trim()}-${word2.trim()}-${word3.trim()}`.toLowerCase();
+    const cleanCode = normalizeRoomCode(fullCode);
+    if (!cleanCode) {
+      addAlert({ type: 'warning', message: 'Please enter all 3 mnemonic words to join room.' });
+      return;
     }
 
     ensureCanvasExists();
@@ -395,18 +477,47 @@ export const ServerlessShareModal: React.FC = () => {
                     <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '8px 0' }} />
 
                     <div>
-                      <h4 style={{ margin: '0 0 6px 0', fontSize: '14px' }}>Join Existing Session</h4>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <h4 style={{ margin: '0 0 4px 0', fontSize: '14px' }}>Join Existing Session</h4>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        Enter 3-word mnemonic phrase (or paste full link/code into any field):
+                      </p>
+
+                      <div className="three-word-input-container">
                         <input
+                          ref={word1Ref}
                           className="url-input"
-                          placeholder="Enter Room Code (e.g. px_9a1f2)"
-                          value={joinInput}
-                          onChange={(e) => setJoinInput(e.target.value)}
+                          placeholder="word 1"
+                          value={word1}
+                          onChange={(e) => handleWordChange(0, e.target.value)}
+                          style={{ textAlign: 'center', fontSize: '13px', padding: '6px' }}
                         />
-                        <button className="btn btn-secondary" onClick={handleJoinRoom}>
-                          Join
-                        </button>
+                        <span className="mnemonic-dash-separator">-</span>
+                        <input
+                          ref={word2Ref}
+                          className="url-input"
+                          placeholder="word 2"
+                          value={word2}
+                          onChange={(e) => handleWordChange(1, e.target.value)}
+                          style={{ textAlign: 'center', fontSize: '13px', padding: '6px' }}
+                        />
+                        <span className="mnemonic-dash-separator">-</span>
+                        <input
+                          ref={word3Ref}
+                          className="url-input"
+                          placeholder="word 3"
+                          value={word3}
+                          onChange={(e) => handleWordChange(2, e.target.value)}
+                          style={{ textAlign: 'center', fontSize: '13px', padding: '6px' }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleJoinRoom();
+                          }}
+                        />
                       </div>
+
+                      <button className="btn btn-secondary" style={{ width: '100%', marginTop: '6px' }} onClick={handleJoinRoom}>
+                        <LucideIcons.LogIn size={14} />
+                        <span>Join Live Session</span>
+                      </button>
                     </div>
                   </>
                 )}

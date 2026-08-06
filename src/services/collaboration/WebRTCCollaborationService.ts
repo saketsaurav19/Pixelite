@@ -1,6 +1,7 @@
 import Peer, { type DataConnection } from 'peerjs';
 import { useStore } from '../../store/useStore';
 import { serializeCanvasState } from '../../utils/shareUtils';
+import { generateThreeWordMnemonic, normalizeRoomCode } from '../../utils/bip39Wordlist';
 
 export interface PeerMessage {
   type:
@@ -85,29 +86,70 @@ class WebRTCCollaborationService {
   }
 
   public getConnectedPeerCount(): number {
-    return this.connectedPeers.size;
+    const activeRemotePeers = new Set<string>();
+
+    // 1. Check open PeerJS connections
+    this.peerjsConnections.forEach((conn, key) => {
+      if (conn && conn.open) {
+        let appPeerId: string | null = null;
+        this.peerIdToConnMap.forEach((c, pId) => {
+          if (c === conn && pId !== this.peerId) {
+            appPeerId = pId;
+          }
+        });
+        if (appPeerId) {
+          activeRemotePeers.add(appPeerId);
+        } else if (key !== this.roomCode && key !== this.peerId) {
+          activeRemotePeers.add(key);
+        }
+      }
+    });
+
+    // 2. Add active peers from connectedPeers set
+    this.connectedPeers.forEach((pId) => {
+      if (pId !== this.peerId && pId.startsWith('peer_')) {
+        activeRemotePeers.add(pId);
+      }
+    });
+
+    return activeRemotePeers.size;
   }
 
   private getIceServers(): RTCIceServer[] {
-    return [
-      // Primary Google STUN cluster
+    const customTurnUrl = import.meta.env?.VITE_TURN_SERVER_URL;
+    const customTurnUser = import.meta.env?.VITE_TURN_USERNAME;
+    const customTurnPass = import.meta.env?.VITE_TURN_CREDENTIAL;
+
+    const servers: RTCIceServer[] = [
+      // Primary Google STUN
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      // Secondary Public STUN providers
-      { urls: 'stun:stun.services.mozilla.com' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      { urls: 'stun:stun.nextcloud.com:443' },
-      // OpenRelay TURN servers (UDP, TCP, and TLS for NAT & mobile network traversal)
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelay', credential: 'openrelay' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelay', credential: 'openrelay' },
-      { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelay', credential: 'openrelay' },
-      { urls: 'turns:openrelay.metered.ca:443', username: 'openrelay', credential: 'openrelay' },
     ];
+
+    // Add custom TURN server if provided via environment variables (e.g. Metered/Twilio/Xirsys)
+    if (customTurnUrl && customTurnUser && customTurnPass) {
+      servers.push({
+        urls: [
+          `turn:${customTurnUrl}:80`,
+          `turn:${customTurnUrl}:443`,
+          `turns:${customTurnUrl}:443`,
+        ],
+        username: customTurnUser,
+        credential: customTurnPass,
+      });
+    } else {
+      // Consolidated Free OpenRelay TURN server fallback
+      servers.push({
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+        ],
+        username: 'openrelay',
+        credential: 'openrelay',
+      });
+    }
+
+    console.log('[Pixelite P2P] 🧊 Configured ICE Servers passed to PeerJS:', JSON.stringify(servers, null, 2));
+    return servers;
   }
 
   /**
@@ -115,7 +157,7 @@ class WebRTCCollaborationService {
    */
   public createRoom(roomName?: string): string {
     this.leaveRoom();
-    this.roomCode = (roomName || 'px_' + Math.random().toString(36).substring(2, 7)).toLowerCase();
+    this.roomCode = normalizeRoomCode(roomName || generateThreeWordMnemonic());
     this.isHost = true;
     this.canEdit = true;
     console.log(`[Pixelite P2P] 🚀 Hosting Room "${this.roomCode}" as Host (Peer ID: ${this.peerId})`);
@@ -130,7 +172,7 @@ class WebRTCCollaborationService {
    * Joins an existing room session as Guest.
    */
   public joinRoom(code: string): void {
-    const cleanCode = code.toLowerCase().trim();
+    const cleanCode = normalizeRoomCode(code);
     if (!cleanCode) return;
 
     this.leaveRoom();
@@ -307,15 +349,174 @@ class WebRTCCollaborationService {
     }
   }
 
+  private setupPeerConnectionDiagnostics(conn: DataConnection, role: 'Host' | 'Guest'): void {
+    const pc = conn.peerConnection;
+    if (!pc) return;
+
+    // Buffer ICE candidates that arrive before remoteDescription is set to prevent InvalidStateError drops
+    const candidateQueue: any[] = [];
+    const originalAddIceCandidate = pc.addIceCandidate.bind(pc);
+
+    pc.addIceCandidate = async (candidate?: any): Promise<void> => {
+      if (!candidate) return;
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        console.log(`[Pixelite WebRTC Diagnostics] 📦 Queueing ${role} ICE candidate (remoteDescription pending)...`);
+        candidateQueue.push(candidate);
+        return;
+      }
+      try {
+        await originalAddIceCandidate(candidate);
+      } catch (err) {
+        console.warn(`[Pixelite WebRTC Diagnostics] ⚠️ ${role} addIceCandidate warning:`, err);
+      }
+    };
+
+    const flushCandidates = async () => {
+      if (pc.remoteDescription && pc.remoteDescription.type && candidateQueue.length > 0) {
+        console.log(`[Pixelite WebRTC Diagnostics] 🚀 Flushing ${candidateQueue.length} queued ICE candidates for ${role}...`);
+        const queueCopy = [...candidateQueue];
+        candidateQueue.length = 0;
+        for (const cand of queueCopy) {
+          try {
+            await originalAddIceCandidate(cand);
+          } catch (e) {
+            // Ignore
+          }
+        }
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`[Pixelite WebRTC Diagnostics] ${role} ConnectionState = ${pc.connectionState}`);
+    };
+
+    pc.oniceconnectionstatechange = async () => {
+      const state = pc.iceConnectionState;
+      console.log(`[Pixelite WebRTC Diagnostics] ${role} ICE State = ${state}`);
+
+      if (state === 'failed') {
+        console.warn(`[Pixelite WebRTC Diagnostics] ⚠️ ICE failed for ${role}. Attempting ICE restart...`);
+        try {
+          pc.restartIce();
+        } catch (e) {
+          console.error(`[Pixelite WebRTC Diagnostics] ICE restart error:`, e);
+        }
+        useStore.getState().addAlert({
+          type: 'warning',
+          message: 'Cross-network connection failed (NAT blocked). Please configure a TURN server (Metered.ca) for Mobile 4G/5G to Laptop P2P.',
+        });
+      } else if (state === 'disconnected') {
+        console.warn(`[Pixelite WebRTC Diagnostics] ⚠️ ICE disconnected for ${role}.`);
+      } else if (state === 'connected' || state === 'completed') {
+        console.log(`[Pixelite WebRTC Diagnostics] 🎉 ICE Connected! Inspecting winning Candidate Pair...`);
+        try {
+          const stats = await pc.getStats();
+          const statsMap = stats as unknown as Map<string, any>;
+          stats.forEach((report: any) => {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              const localCand = statsMap.get ? statsMap.get(report.localCandidateId) : null;
+              const remoteCand = statsMap.get ? statsMap.get(report.remoteCandidateId) : null;
+              const localIp = localCand?.ip || localCand?.address || '';
+              const remoteIp = remoteCand?.ip || remoteCand?.address || '';
+              const isIPv6 = localIp.includes(':') || remoteIp.includes(':');
+              console.log(`[Pixelite WebRTC Diagnostics] 🏆 Winning Candidate Pair [${isIPv6 ? 'IPv6 ⚡' : 'IPv4 🌐'}]:`, {
+                localIp,
+                remoteIp,
+                pairReport: report,
+              });
+            }
+          });
+        } catch (e) {
+          // Ignore
+        }
+      }
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log(`[Pixelite WebRTC Diagnostics] ${role} ICE Gathering = ${pc.iceGatheringState}`);
+    };
+
+    pc.onsignalingstatechange = () => {
+      console.log(`[Pixelite WebRTC Diagnostics] ${role} Signaling = ${pc.signalingState}`);
+      if (pc.signalingState === 'stable' || pc.signalingState === 'have-remote-offer' || pc.signalingState === 'have-local-pranswer') {
+        flushCandidates();
+      }
+    };
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        const raw = e.candidate.candidate;
+        // Determine IP version: IPv6 candidate strings contain colons in IP address portion
+        const isIPv6 = raw.includes(':');
+        const ipVer = isIPv6 ? 'IPv6' : 'IPv4';
+
+        let typeTag = 'Unknown';
+        if (raw.includes('typ relay')) typeTag = `[${ipVer} TURN Relay 🚀]`;
+        else if (raw.includes('typ srflx')) typeTag = `[${ipVer} STUN Public 🌐]`;
+        else if (raw.includes('typ host')) typeTag = `[${ipVer} Local Network 🏠]`;
+
+        console.log(`[Pixelite ICE Candidate] ${typeTag}`, raw);
+
+        // Explicit candidate dispatch via PeerJS socket to guarantee signaling routing
+        if (this.peerjs && !(this.peerjs as any).destroyed && conn.peer) {
+          try {
+            const socket = (this.peerjs as any)._socket || (this.peerjs as any).socket;
+            if (socket && typeof socket.send === 'function') {
+              socket.send({
+                type: 'CANDIDATE',
+                src: this.peerId,
+                dst: role === 'Guest' ? this.roomCode : conn.peer,
+                payload: {
+                  candidate: e.candidate,
+                  type: 'data',
+                  connectionId: conn.connectionId || (conn as any).id,
+                },
+              });
+            }
+          } catch (err) {
+            // Ignore
+          }
+        }
+      } else {
+        console.log(`[Pixelite WebRTC Diagnostics] ${role} ICE Gathering Complete.`);
+      }
+    };
+
+    pc.onicecandidateerror = (e) => {
+      console.error(`[Pixelite WebRTC Diagnostics] ${role} ICE Candidate Error:`, e);
+    };
+
+    // 5-second check to verify if a TURN relay candidate is actively used
+    setTimeout(async () => {
+      if (pc.connectionState === 'closed') return;
+      try {
+        const stats = await pc.getStats();
+        let relayFound = false;
+        stats.forEach((report) => {
+          if (report.type === 'local-candidate' && report.candidateType === 'relay') {
+            relayFound = true;
+          }
+        });
+        if (!relayFound) {
+          console.warn(`[Pixelite WebRTC Diagnostics] ⚠️ TURN server NOT being used for ${role} (Falling back to STUN/Local).`);
+        } else {
+          console.log(`[Pixelite WebRTC Diagnostics] ✅ TURN relay candidate active for ${role}!`);
+        }
+      } catch (err) {
+        // Ignore
+      }
+    }, 5000);
+  }
+
   private initPeerJSHost(): void {
     try {
       console.log(`[Pixelite P2P] 🛠️ Initializing Host signaling with room code "${this.roomCode}"...`);
       this.peerjs = new Peer(this.roomCode, {
         config: {
           iceServers: this.getIceServers(),
-          iceCandidatePoolSize: 10,
+          iceTransportPolicy: 'all', // Dual Mode: Tries Local/STUN first, auto-shifts to TURN relay if direct connection fails
         },
-        debug: 1,
+        debug: 3,
       });
 
       this.peerjs.on('open', (id) => {
@@ -334,9 +535,15 @@ class WebRTCCollaborationService {
       this.peerjs.on('connection', (conn: DataConnection) => {
         console.log(`[Pixelite P2P] 📥 Incoming WebRTC connection from remote peer: "${conn.peer}"`);
 
+        this.setupPeerConnectionDiagnostics(conn, 'Host');
+
         const handleOpen = () => {
           console.log(`[Pixelite P2P] 🤝 WebRTC DataChannel OPENED with peer "${conn.peer}"`);
+          console.log(`[Pixelite P2P] DataChannel Open: ${conn.open}, ConnectionState: ${conn.peerConnection?.connectionState}, ICE: ${conn.peerConnection?.iceConnectionState}`);
           this.peerjsConnections.set(conn.peer, conn);
+          if (conn.peer) {
+            this.connectedPeers.add(conn.peer);
+          }
           this.sendStateSnapshotToConn(conn);
         };
 
@@ -362,6 +569,12 @@ class WebRTCCollaborationService {
           if (conn.peer) {
             this.connectedPeers.delete(conn.peer);
           }
+          this.peerIdToConnMap.forEach((c, pId) => {
+            if (c === conn) {
+              this.peerIdToConnMap.delete(pId);
+              this.connectedPeers.delete(pId);
+            }
+          });
         });
 
         conn.on('error', (err) => {
@@ -372,7 +585,7 @@ class WebRTCCollaborationService {
       this.peerjs.on('error', (err) => {
         console.error('[Pixelite P2P] ❌ Signaling Host Error:', err.type, err.message);
         if (err.type === 'unavailable-id') {
-          const newCode = 'px_' + Math.random().toString(36).substring(2, 7);
+          const newCode = generateThreeWordMnemonic();
           console.log(`[Pixelite P2P] 🔄 Room code "${this.roomCode}" was taken. Generating new code "${newCode}"...`);
           this.roomCode = newCode;
           this.initPeerJSHost();
@@ -383,24 +596,71 @@ class WebRTCCollaborationService {
     }
   }
 
+  /**
+   * Cleans up room state and redirects user back to homepage when a P2P room cannot be found or connection times out.
+   */
+  public handleRoomNotFoundRedirect(targetRoomCode?: string): void {
+    const code = targetRoomCode || this.roomCode;
+    this.leaveRoom();
+
+    // Cleanly remove ?room= parameter from URL bar without reloading
+    try {
+      if (typeof window !== 'undefined' && window.location.search.includes('room=')) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('room');
+        window.history.replaceState({}, document.title, url.pathname + url.search);
+      }
+    } catch (e) {
+      // Ignore
+    }
+
+    if (code) {
+      useStore.getState().addAlert({
+        type: 'error',
+        message: `P2P Room "${code}" not found or Host is offline. Redirected to homepage.`,
+      });
+    }
+  }
+
   private initPeerJSGuest(): void {
     try {
       console.log(`[Pixelite P2P] 🛠️ Initializing Guest signaling to connect to Host room "${this.roomCode}"...`);
+      const targetRoom = this.roomCode;
+
       // Let PeerJS generate a unique signaling broker ID automatically
       this.peerjs = new Peer({
         config: {
           iceServers: this.getIceServers(),
-          iceCandidatePoolSize: 10,
+          iceTransportPolicy: 'all', // Dual Mode: Tries Local/STUN first, auto-shifts to TURN relay if direct connection fails
         },
-        debug: 1,
+        debug: 3,
       });
+
+      let connectionTimeoutTimer: any = null;
+
+      const clearTimer = () => {
+        if (connectionTimeoutTimer) {
+          clearTimeout(connectionTimeoutTimer);
+          connectionTimeoutTimer = null;
+        }
+      };
+
+      // 12-second guard: If DataChannel fails to connect to Host room, redirect cleanly to homepage
+      connectionTimeoutTimer = setTimeout(() => {
+        if (!this.connectedPeers.has(targetRoom) && !this.isHost && this.roomCode === targetRoom) {
+          console.warn(`[Pixelite P2P] ⏰ Guest connection to Host "${targetRoom}" timed out. Redirecting to homepage...`);
+          this.handleRoomNotFoundRedirect(targetRoom);
+        }
+      }, 12000);
 
       const connectToHost = () => {
         if (!this.peerjs || this.peerjs.destroyed) return;
 
         console.log(`[Pixelite P2P] 🤝 Guest connecting WebRTC DataChannel to Host Room "${this.roomCode}"...`);
-        const conn = this.peerjs.connect(this.roomCode, { reliable: true });
+        const conn = this.peerjs.connect(this.roomCode);
         this.peerjsConnections.set(this.roomCode, conn);
+
+        this.setupPeerConnectionDiagnostics(conn, 'Guest');
 
         const sendJoin = () => {
           conn.send({
@@ -412,7 +672,9 @@ class WebRTCCollaborationService {
         };
 
         conn.on('open', () => {
+          clearTimer();
           console.log(`[Pixelite P2P] 🎉 WebRTC P2P DataChannel OPENED with Host "${this.roomCode}"!`);
+          console.log(`[Pixelite P2P] DataChannel Open: ${conn.open}, ConnectionState: ${conn.peerConnection?.connectionState}, ICE: ${conn.peerConnection?.iceConnectionState}`);
           this.connectedPeers.add(this.roomCode);
 
           // Send JOIN payload immediately and retry 1.2s later to guarantee snapshot delivery across high-latency mobile networks
@@ -456,17 +718,15 @@ class WebRTCCollaborationService {
       let guestRetryCount = 0;
       this.peerjs.on('error', (err) => {
         console.error('[Pixelite P2P] ❌ Signaling Guest Error:', err.type, err.message);
-        if (err.type === 'peer-unavailable' && guestRetryCount < 6) {
+        if (err.type === 'peer-unavailable' && guestRetryCount < 4) {
           guestRetryCount++;
-          console.log(`[Pixelite P2P] 🔄 Host room "${this.roomCode}" not found on signaling server yet. Retrying (${guestRetryCount}/6)...`);
+          console.log(`[Pixelite P2P] 🔄 Host room "${this.roomCode}" not found on signaling server yet. Retrying (${guestRetryCount}/4)...`);
           setTimeout(() => {
             connectToHost();
-          }, 1500);
-        } else if (err.type === 'peer-unavailable') {
-          useStore.getState().addAlert({
-            type: 'error',
-            message: `P2P Room "${this.roomCode}" not found or Host is offline. Check Room Code.`,
-          });
+          }, 1200);
+        } else if (err.type === 'peer-unavailable' || (err.type as string) === 'network' || (err.type as string) === 'could-not-connect') {
+          clearTimer();
+          this.handleRoomNotFoundRedirect(targetRoom);
         }
       });
     } catch (err) {

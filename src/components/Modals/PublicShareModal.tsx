@@ -40,10 +40,35 @@ export const PublicShareModal: React.FC<PublicShareModalProps> = ({
     }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(shareLink);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
+  const handleCopy = async () => {
+    let success = false;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(shareLink);
+        success = true;
+      } catch (e) {
+        // Fallback below
+      }
+    }
+    if (!success) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = shareLink;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch (err) {
+        // Ignore
+      }
+    }
+    if (success) {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    }
   };
 
   const getServiceIcon = (iconName: string) => {

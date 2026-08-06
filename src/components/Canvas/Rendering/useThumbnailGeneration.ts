@@ -10,8 +10,9 @@ const MAX_THUMB = 48;
  * (huge base64 string) — instead tracks just the first 200 chars as a signature.
  */
 function cacheKey(layer: Layer, docW: number, docH: number): string {
-  const dataUrlSig = (layer as any).dataUrl
-    ? ((layer as any).dataUrl as string).slice(0, 200)
+  const dataUrl = (layer as any).dataUrl as string | undefined;
+  const dataUrlSig = dataUrl
+    ? `${dataUrl.length}_${dataUrl.slice(-120)}`
     : '';
   return [
     layer.id,
@@ -146,9 +147,8 @@ const generateThumbnail = (
     return;
   }
 
-  // ── Image layers (type='image', has dataUrl) ───────────────────────────
+  // ── Image / DataUrl Layers (has dataUrl string) ────────────────────────
   if ((layer as any).dataUrl) {
-    // Prevent concurrent loads for the same layer
     if (pendingRef.current[layer.id]) return;
 
     const refW = parentArtboard ? (parentArtboard.width || documentSize.w) : documentSize.w;
@@ -160,8 +160,6 @@ const generateThumbnail = (
     const img = new Image();
     img.onload = () => {
       pendingRef.current[layer.id] = false;
-      // If layer state has changed while we were loading, abort — a new load will be scheduled
-      if (lastKeyRef.current[layer.id] === capturedKey) return;
       lastKeyRef.current[layer.id] = capturedKey;
 
       const tc = document.createElement('canvas');
@@ -171,12 +169,15 @@ const generateThumbnail = (
 
       const scaleX = thumbW / refW;
       const scaleY = thumbH / refH;
-      const lw = layer.width || img.naturalWidth;
-      const lh = layer.height || img.naturalHeight;
-      const px = (layer.position?.x || 0) * scaleX;
-      const py = (layer.position?.y || 0) * scaleY;
+      const layerW = (layer.width && layer.width > 0) ? layer.width : refW;
+      const layerH = (layer.height && layer.height > 0) ? layer.height : refH;
+      const destX = (layer.position?.x || 0) * scaleX;
+      const destY = (layer.position?.y || 0) * scaleY;
+      const destW = layerW * scaleX;
+      const destH = layerH * scaleY;
+
       ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight,
-        px, py, lw * scaleX, lh * scaleY);
+        destX, destY, destW, destH);
       updateLayer(layer.id, { thumbnail: tc.toDataURL() });
     };
     img.onerror = () => { pendingRef.current[layer.id] = false; };
@@ -184,27 +185,42 @@ const generateThumbnail = (
     return;
   }
 
-  // ── Paint / other canvas-backed layers ─────────────────────────────────
-  const canvas = canvasRefs.current[layer.id];
-  if (!canvas) return;
+  // ── Paint / Live DOM Canvas Fallback Layers ────────────────────────────
+  const liveCanvas = canvasRefs.current[layer.id];
+  if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0) {
+    lastKeyRef.current[layer.id] = key;
+    const refW = parentArtboard ? (parentArtboard.width || documentSize.w) : documentSize.w;
+    const refH = parentArtboard ? (parentArtboard.height || documentSize.h) : documentSize.h;
+    const { w: thumbW, h: thumbH } = thumbSize(refW, refH);
+    const tc = document.createElement('canvas');
+    tc.width = thumbW;
+    tc.height = thumbH;
+    const ctx = tc.getContext('2d');
+    if (!ctx) return;
 
-  lastKeyRef.current[layer.id] = key;
-  const refW = parentArtboard ? (parentArtboard.width || documentSize.w) : documentSize.w;
-  const refH = parentArtboard ? (parentArtboard.height || documentSize.h) : documentSize.h;
-  const { w: thumbW, h: thumbH } = thumbSize(refW, refH);
-  const tc = document.createElement('canvas');
-  tc.width = thumbW; tc.height = thumbH;
-  const ctx = tc.getContext('2d');
-  if (!ctx) return;
+    const scaleX = thumbW / refW;
+    const scaleY = thumbH / refH;
+    const layerW = (layer.width && layer.width > 0) ? layer.width : refW;
+    const layerH = (layer.height && layer.height > 0) ? layer.height : refH;
+    const destX = (layer.position?.x || 0) * scaleX;
+    const destY = (layer.position?.y || 0) * scaleY;
+    const destW = layerW * scaleX;
+    const destH = layerH * scaleY;
 
-  const scaleX = thumbW / refW;
-  const scaleY = thumbH / refH;
-  const lw = layer.width || (canvas.width / (window.devicePixelRatio || 1));
-  const lh = layer.height || (canvas.height / (window.devicePixelRatio || 1));
-  ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height,
-    (layer.position?.x || 0) * scaleX, (layer.position?.y || 0) * scaleY,
-    lw * scaleX, lh * scaleY);
-  updateLayer(layer.id, { thumbnail: tc.toDataURL() });
+    ctx.drawImage(
+      liveCanvas,
+      0,
+      0,
+      liveCanvas.width,
+      liveCanvas.height,
+      destX,
+      destY,
+      destW,
+      destH
+    );
+    updateLayer(layer.id, { thumbnail: tc.toDataURL() });
+    return;
+  }
 };
 
 export const useThumbnailGeneration = (
