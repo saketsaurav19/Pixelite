@@ -1,7 +1,7 @@
 {
   "name": "pixelite",
   "private": true,
-  "version": "1.3.1",
+  "version": "1.4.0",
   "homepage": "https://pixelite.taskcraft.site/",
   "type": "module",
   "scripts": {
