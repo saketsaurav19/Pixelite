@@ -710,6 +710,45 @@ body {
   position: relative;
 }
 
+/* Active edit-target indicator: which thumbnail receives paint strokes */
+.layer-thumb.active-content,
+.layer-mask-thumb.active-mask {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+/* Layer mask thumbnail — same size as the layer thumb (Photoshop-style) */
+.layer-mask-thumb {
+  width: 3rem;
+  min-height: 0.625rem;
+  background-color: #333;
+  border: 1px solid #444;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.layer-mask-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.layer-mask-thumb.mask-disabled {
+  opacity: 0.4;
+}
+
+/* Bent-arrow indicator for layers clipped to the layer below */
+.layer-clip-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .layer-title {
   flex: 1;
   overflow: hidden;
