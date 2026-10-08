@@ -12,7 +12,6 @@ interface SelectionOverlayProps {
 export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
   selectionRect,
   lassoPaths,
-  isInverseSelection,
   documentSize,
   getSelectionPathData
 }) => {
@@ -30,30 +29,16 @@ export const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
         transform: 'none'
       }}
     >
-      <defs>
-        <filter id="selectionUnion" colorInterpolationFilters="sRGB">
-          <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" />
-          <feMorphology operator="dilate" radius="1.2" result="expanded" />
-          <feComposite in="expanded" in2="SourceGraphic" operator="out" />
-          <feComponentTransfer>
-            <feFuncA type="discrete" tableValues="0 1" />
-          </feComponentTransfer>
-        </filter>
-      </defs>
-
-      {/* The Selection Mask (Dimming the UNSELECTED area) */}
+      {/* Dim the unselected area */}
       <path
-        d={isInverseSelection
-          ? getSelectionPathData()
-          : `M 0,0 L 0,${documentSize.h} L ${documentSize.w},${documentSize.h} L ${documentSize.w},0 Z ` +
-          getSelectionPathData()}
-        fill="rgba(0, 0, 0, 0.4)"
-        fillRule={isInverseSelection ? 'nonzero' : 'evenodd'}
+        d={`M 0,0 L 0,${documentSize.h} L ${documentSize.w},${documentSize.h} L ${documentSize.w},0 Z ` + getSelectionPathData()}
+        fill="rgba(255, 255, 255, 0.45)"
+        fillRule="evenodd"
         style={{ pointerEvents: 'none' }}
       />
 
-      {/* The marching ants outline */}
-      <g className="marquee-dash">
+      {/* Marching ants selection outline */}
+      <g>
         <path
           d={getSelectionPathData()}
           fill="none"

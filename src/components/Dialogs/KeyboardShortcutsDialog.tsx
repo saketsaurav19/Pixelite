@@ -48,7 +48,8 @@ const commandsList: CommandDef[] = [
   { id: 'layer_new', name: 'New Layer', category: 'Layer', defaultVal: 'Shift+Ctrl+N' },
   { id: 'layer_duplicate', name: 'Duplicate Layer', category: 'Layer', defaultVal: 'Ctrl+J' },
   { id: 'layer_delete', name: 'Delete Layer', category: 'Layer', defaultVal: 'Del' },
-  { id: 'layer_merge', name: 'Merge Layers', category: 'Layer', defaultVal: 'Ctrl+E' },
+  { id: 'layer_merge', name: 'Merge Down', category: 'Layer', defaultVal: 'Ctrl+E' },
+  { id: 'layer_merge_visible', name: 'Merge Visible', category: 'Layer', defaultVal: 'Shift+Ctrl+E' },
   { id: 'layer_flatten', name: 'Flatten Image', category: 'Layer', defaultVal: '' },
   // Select
   { id: 'select_all', name: 'All', category: 'Select', defaultVal: 'Ctrl+A' },

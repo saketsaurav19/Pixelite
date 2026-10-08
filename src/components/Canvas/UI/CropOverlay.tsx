@@ -74,6 +74,23 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({
 
       <div className="crop-actions-bar bottom" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} style={{ width: 'fit-content' }}>
         <button
+          className="crop-action-btn redraw"
+          onClick={(e) => {
+            e.stopPropagation();
+            // Clear the current rect so the user can draw a fresh one.
+            // We do NOT cancel the crop tool — the marquee disappears, and the
+            // next mousedown inside the document will start a new selection rect
+            // (handled by the crop tool's start() which fires when
+            // activeCropHandle is null).
+            setActiveCropHandle(null);
+            setCropRect(null);
+          }}
+          title="Reset / Draw New"
+          style={{ cursor: 'pointer' }}
+        >
+          ↻
+        </button>
+        <button
           className="crop-action-btn confirm"
           onClick={(e) => { e.stopPropagation(); applyCrop(); }}
           title="Apply Crop"

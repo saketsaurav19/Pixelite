@@ -8,7 +8,7 @@ export interface SelectionSlice {
   isInverseSelection: boolean;
   selectionTolerance: number;
   selectionContiguous: boolean;
-  selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
+  selectionMode: 'replace' | 'subtract' | 'intersect' | 'unite';
   selectionFeather: number;
   selectionAntiAlias: boolean;
 
@@ -18,7 +18,7 @@ export interface SelectionSlice {
   inverseSelection: () => void;
   setSelectionTolerance: (tolerance: number) => void;
   setSelectionContiguous: (contiguous: boolean) => void;
-  setSelectionMode: (mode: 'new' | 'add' | 'subtract' | 'intersect') => void;
+  setSelectionMode: (mode: 'replace' | 'subtract' | 'intersect' | 'unite') => void;
   setSelectionFeather: (val: number) => void;
   setSelectionAntiAlias: (val: boolean) => void;
   reselect: () => void;
@@ -32,7 +32,7 @@ export const createSelectionSlice: StateCreator<EditorState, [], [], SelectionSl
   isInverseSelection: false,
   selectionTolerance: 32,
   selectionContiguous: true,
-  selectionMode: 'new',
+  selectionMode: 'replace',
   selectionFeather: 0,
   selectionAntiAlias: true,
 

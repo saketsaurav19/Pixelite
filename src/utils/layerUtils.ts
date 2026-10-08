@@ -40,6 +40,32 @@ export function removeNode(layers: Layer[], id: string): Layer[] {
     });
 }
 
+export function insertAfter(layers: Layer[], anchorId: string, node: Layer): Layer[] {
+  // Place `node` immediately after the layer with id `anchorId` in the same
+  // sibling list. If `anchorId` is not found, prepend at the top level.
+  // Used by "Merge Down" to put the merged layer where the lower of the two
+  // source layers used to be (matching Photoshop's behavior).
+  let placed = false;
+  const walk = (siblings: Layer[]): Layer[] => {
+    const out: Layer[] = [];
+    for (const l of siblings) {
+      out.push(l);
+      if (l.id === anchorId) {
+        out.push(node);
+        placed = true;
+      }
+      if (l.children) {
+        const idx = out.length - 1;
+        out[idx] = { ...l, children: walk(l.children) };
+      }
+    }
+    return out;
+  };
+  const result = walk(layers);
+  if (!placed) return [node, ...result];
+  return result;
+}
+
 export function insertNode(layers: Layer[], node: Layer, parentId?: string | null): Layer[] {
   if (!parentId) {
     return [node, ...layers];
@@ -180,4 +206,49 @@ export function isLayerOrAncestorsLocked(layers: Layer[], layerId: string): bool
 
   return false;
 }
+
+// ----------------------------------------------------------------------
+// Visible-layer slot replacement (used by "Merge Visible")
+// ----------------------------------------------------------------------
+
+/**
+ * Walk the layer tree and return a copy where every visible leaf has been
+ * removed, except for the layer with id `keepId`, which is replaced with
+ * `replacement`. Hidden layers are preserved in their original slots.
+ * Groups and artboards are recursed into so nested visible/hidden layers
+ * are handled correctly.
+ *
+ * This is the structural half of Photoshop's "Merge Visible" — it doesn't
+ * produce the rasterized pixels itself; the caller does that once for
+ * ALL visible layers, then drops the merged result into the bottom-most
+ * visible slot. Visible layers that are "sandwiched" between two hidden
+ * layers collapse into the same single merged layer.
+ */
+export function replaceVisibleExceptKeep(
+  layers: Layer[],
+  visibleIds: Set<string>,
+  keepId: string,
+  replacement: Layer
+): Layer[] {
+  const visit = (siblings: Layer[]): Layer[] => {
+    const out: Layer[] = [];
+    for (const l of siblings) {
+      if ((l.type === 'group' || l.type === 'artboard') && l.children) {
+        out.push({ ...l, children: visit(l.children) });
+        continue;
+      }
+      if (l.id === keepId) {
+        out.push(replacement);
+        continue;
+      }
+      if (visibleIds.has(l.id)) {
+        continue;
+      }
+      out.push(l);
+    }
+    return out;
+  };
+  return visit(layers);
+}
+
 

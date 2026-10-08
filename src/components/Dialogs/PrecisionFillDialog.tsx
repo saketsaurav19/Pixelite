@@ -3,6 +3,7 @@ import React, {
 } from 'react';
 import './PrecisionFillDialog.css';
 import { useStore } from '../../store/useStore';
+import { getCapability } from '../../utils/capabilities';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 const MAX_ZOOM = 64;   // 6400%
@@ -47,6 +48,12 @@ export const PrecisionFillDialog: React.FC = () => {
   const layers  = useStore(s => s.layers);
   const updateLayer = useStore(s => s.updateLayer);
   const addAlert  = useStore(s => s.addAlert);
+
+  // AI Inpaint requires a local model backend (LaMa / MAT) that is not wired up.
+  // Gate the button instead of showing a fake "coming soon" alert.
+  const aiInpaint = getCapability('ai_image_models');
+  const aiInpaintAvailable = aiInpaint.available;
+  const aiInpaintReason = aiInpaint.reason;
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const imgCanvasRef  = useRef<HTMLCanvasElement>(null);
@@ -1081,8 +1088,11 @@ export const PrecisionFillDialog: React.FC = () => {
                 <span>{m.icon}</span><span>{m.label}</span>
               </button>
             ))}
-            <button className="pf-mode-btn disabled"
-              onClick={() => addAlert({ type: 'info', message: '🧪 AI Inpaint — coming soon! Requires LaMa / MAT local model.' })}>
+            <button
+              className="pf-mode-btn disabled"
+              disabled
+              title={!aiInpaintAvailable ? aiInpaintReason : undefined}
+              onClick={() => { if (aiInpaintAvailable) { /* wired when a local model backend is configured */ } }}>
               <span>🤖</span><span>AI Inpaint</span>
             </button>
           </div>

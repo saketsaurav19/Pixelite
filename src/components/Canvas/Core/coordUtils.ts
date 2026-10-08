@@ -60,3 +60,28 @@ export const getSnappedCoords = (
 
   return coords;
 };
+
+export const getLayerLocalCoords = (
+  docCoords: Point | null,
+  layer?: { position?: { x: number; y: number }; rotation?: number }
+): Point | null => {
+  if (!docCoords) return null;
+  if (!layer) return docCoords;
+
+  const posX = layer.position?.x || 0;
+  const posY = layer.position?.y || 0;
+  const rotDeg = layer.rotation || 0;
+
+  let dx = docCoords.x - posX;
+  let dy = docCoords.y - posY;
+
+  if (rotDeg !== 0) {
+    const rad = (-rotDeg * Math.PI) / 180;
+    const rx = dx * Math.cos(rad) - dy * Math.sin(rad);
+    const ry = dx * Math.sin(rad) + dy * Math.cos(rad);
+    dx = rx;
+    dy = ry;
+  }
+
+  return { x: dx, y: dy };
+};

@@ -8,6 +8,8 @@ export interface MenuLeafItem {
   action: MenuAction;
   isEnabled?: (state: EditorState) => boolean;
   isChecked?: (state: EditorState) => boolean;
+  /** When true the item renders greyed-out and cannot be invoked. */
+  disabled?: boolean;
 }
 
 export interface MenuGroupItem {

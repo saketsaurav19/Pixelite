@@ -47,6 +47,8 @@ export const applyCrop = (
     return {
       ...layer,
       position: { x: 0, y: 0 },
+      width: absW,
+      height: absH,
       dataUrl: tempCanvas.toDataURL()
     };
   });

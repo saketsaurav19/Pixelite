@@ -1,13 +1,111 @@
 import { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
+import { mapBlendModeToCanvas } from '../../../utils/blendModes';
 import type { CanvasRefs } from '../types';
 import { useStore } from '../../../store/useStore';
 import { applyPixiAdjustments } from '../../../utils/pixiUtils';
 import { flattenTree } from '../../../utils/layerUtils';
 import { drawTrianglesWarp, getFontFamilyString } from '../../../utils/canvasUtils';
+import { renderDelaunayMesh } from '../../../utils/puppetWarpUtils';
 import { applyWarpDeformation } from '../../../utils/textWarpUtils';
 import { toolState } from '../../../tools/toolState';
 import { pdfiumManager } from '../../../services/import/PdfiumManager';
+import { combineShapes as combineShapesUtil, type BooleanOp as ShapeBooleanOp } from '../../../utils/shapeBooleanOps';
+
+// Cache compound-shape rasterizations so re-renders triggered by unrelated
+// state (selection, zoom, etc.) don't re-rasterize. Keyed by a tuple of
+// (childIds, op, child signature) where the signature captures positions,
+// fillRule and the svgPath hash. We don't cache across mount cycles.
+const compoundCache = new WeakMap<Layer, { path: Path2D; bbox: { x: number; y: number; w: number; h: number }; deps: string }>();
+
+const compoundDeps = (compound: Layer, allLayers: Layer[]): string => {
+  const childIds = (compound.shapeData?.childIds || []).join(',');
+  const op = compound.shapeData?.booleanOp || 'union';
+  const sig = (compound.shapeData?.childIds || [])
+    .map((id) => {
+      const c = allLayers.find((l) => l.id === id);
+      if (!c || !c.shapeData) return `${id}:missing`;
+      const sd = c.shapeData as any;
+      const pos = c.position || { x: 0, y: 0 };
+      return [
+        id,
+        c.visible ? 1 : 0,
+        pos.x.toFixed(2),
+        pos.y.toFixed(2),
+        sd.type,
+        (sd.w || 0).toFixed(2),
+        (sd.h || 0).toFixed(2),
+        sd.svgPath || '',
+        (sd.points || []).map((p: any) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(';'),
+      ].join('|');
+    })
+    .join('::');
+  return `${childIds}#${op}#${sig}`;
+};
+
+// Compute (or fetch from cache) the Path2D that renders a compound shape
+// over its children. Returns null if there are fewer than two valid children.
+const renderCompoundShape = (
+  compound: Layer,
+  allLayers: Layer[]
+): { path: Path2D; bbox: { x: number; y: number; w: number; h: number } } | null => {
+  const childIds = compound.shapeData?.childIds || [];
+  if (childIds.length < 1) return null;
+
+  const sd = compound.shapeData as any;
+  const op = (sd.booleanOp as ShapeBooleanOp) || 'union';
+
+  // Resolve children in the order stored on the compound, then project to
+  // (shape, position) pairs in document coordinates.
+  const inputs = childIds
+    .map((id) => allLayers.find((l) => l.id === id))
+    .filter((l): l is Layer => !!l && !!l.shapeData)
+    .map((l) => ({
+      shapeData: l.shapeData as any,
+      position: l.position || { x: 0, y: 0 },
+    }));
+
+  if (inputs.length < 2) {
+    // 1-child case: just paint the single child as a flat path.
+    const only = inputs[0];
+    if (!only || !only.shapeData) return null;
+    const sd2 = only.shapeData;
+    if (sd2.type === 'path' && sd2.svgPath) {
+      // Translate path so its local origin matches the compound's position (0,0).
+      const p = new Path2D();
+      p.addPath(new Path2D(sd2.svgPath), new DOMMatrix().translate(only.position.x, only.position.y));
+      return {
+        path: p,
+        bbox: { x: only.position.x, y: only.position.y, w: 0, h: 0 },
+      };
+    }
+    return null;
+  }
+
+  const deps = compoundDeps(compound, allLayers);
+  const cached = compoundCache.get(compound);
+  if (cached && cached.deps === deps) return cached;
+
+  const result = combineShapesUtil(inputs, op);
+  if (!result) return null;
+  const localPath = result.polygons
+    .map((poly) => {
+      let d = '';
+      if (poly.length < 3) return '';
+      d += `M ${poly[0].x.toFixed(2)} ${poly[0].y.toFixed(2)} `;
+      for (let i = 1; i < poly.length; i++) {
+        d += `L ${poly[i].x.toFixed(2)} ${poly[i].y.toFixed(2)} `;
+      }
+      d += 'Z ';
+      return d;
+    })
+    .join(' ')
+    .trim();
+  if (!localPath) return null;
+  const path = new Path2D(localPath);
+  compoundCache.set(compound, { path, bbox: result.bbox, deps });
+  return { path, bbox: result.bbox };
+};
 
 const renderLayer = (
   layer: Layer,
@@ -72,6 +170,7 @@ const renderLayer = (
         if (lCanvas) {
           tempCtx.save();
           tempCtx.globalAlpha = l.opacity ?? 1;
+          tempCtx.globalCompositeOperation = mapBlendModeToCanvas(l.blendMode);
           const lx = l.position?.x || 0;
           const ly = l.position?.y || 0;
           tempCtx.drawImage(lCanvas, lx, ly);
@@ -102,23 +201,58 @@ const renderLayer = (
       .catch((err) => console.error('Failed to dynamically render PDF page:', err));
   } else if (layer.dataUrl) {
     const activeTool = useStore.getState().activeTool;
-    const isTransformingThisLayer = activeTool === 'transform' && layer.id === activeLayerId && toolState.transformOriginalImage;
+    const transformMode = useStore.getState().transformMode;
+
+    // Consider this layer "transforming" if:
+    // a) the transform tool is active with an original image captured (classic modes), OR
+    // b) puppet mode is active and the layer has a live mesh with pins
+    const hasPuppetWarp =
+      activeTool === 'transform' &&
+      transformMode === 'puppet' &&
+      layer.id === activeLayerId &&
+      !!layer.puppetRestPoints &&
+      !!layer.warpGrid &&
+      !!layer.puppetTriangles &&
+      !!toolState.transformOriginalCanvas;
+
+    const isTransformingThisLayer =
+      (activeTool === 'transform' && layer.id === activeLayerId && !!toolState.transformOriginalImage) ||
+      hasPuppetWarp;
 
     if (isTransformingThisLayer) {
-      const img = toolState.transformOriginalImage as HTMLImageElement;
-      if (img.width && img.height && (canvas.width !== img.width || canvas.height !== img.height)) {
-        canvas.width = img.width;
-        canvas.height = img.height;
+      // While transforming, paint the LIVE deformed result.
+      const origCanvas = toolState.transformOriginalCanvas;
+      let paintedWarp = false;
+
+      if (origCanvas && layer.warpGrid) {
+        if (
+          transformMode === 'puppet' &&
+          layer.puppetTriangles &&
+          layer.puppetRestPoints &&
+          layer.puppetRestPoints.length === layer.warpGrid.length
+        ) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          renderDelaunayMesh(
+            ctx,
+            origCanvas,
+            layer.puppetRestPoints.map((p: any) => ({ x: p.x, y: p.y })),
+            layer.warpGrid.map((p: any) => ({ x: p.x, y: p.y })),
+            layer.puppetTriangles
+          );
+          paintedWarp = true;
+        }
       }
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      if (!paintedWarp) {
+        const img = toolState.transformOriginalImage as HTMLImageElement;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (img) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
+      }
     } else {
       const img = new Image();
       img.onload = () => {
-        if (img.width && img.height && (canvas.width !== img.width || canvas.height !== img.height)) {
-          canvas.width = img.width;
-          canvas.height = img.height;
-        }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       };
@@ -263,6 +397,25 @@ const renderLayer = (
     const { type, w, h, points, fill, stroke, strokeWidth } = layer.shapeData as any;
     const sw = strokeWidth || 0;
 
+    if (type === 'compound') {
+      // Live mode: compose children into a Path2D and fill/stroke that.
+      const composed = renderCompoundShape(layer, allLayers);
+      if (composed) {
+        const fillRule = layer.shapeData.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill(composed.path, fillRule as CanvasFillRule);
+        }
+        if (stroke && sw > 0) {
+          ctx.strokeStyle = stroke;
+          ctx.lineWidth = sw;
+          ctx.stroke(composed.path);
+        }
+      }
+      ctx.restore();
+      return;
+    }
+
     if (type === 'rect' || !type) {
       ctx.beginPath();
       ctx.rect(sw/2, sw/2, (w || 100) - sw, (h || 100) - sw);
@@ -290,9 +443,10 @@ const renderLayer = (
     } else if (type === 'path') {
       if (layer.shapeData.svgPath) {
         const p = new Path2D(layer.shapeData.svgPath);
+        const fillRule = layer.shapeData.fillRule === 'evenodd' ? 'evenodd' : 'nonzero';
         if (fill) {
           ctx.fillStyle = fill;
-          ctx.fill(p);
+          ctx.fill(p, fillRule as CanvasFillRule);
         }
         if (stroke && sw > 0) {
           ctx.strokeStyle = stroke;
@@ -303,16 +457,17 @@ const renderLayer = (
         ctx.beginPath();
         if (layer.shapeData.smooth && points.length >= 3) {
           ctx.moveTo(points[0].x, points[0].y);
-          for (let i = 0; i < (layer.shapeData.closed ? points.length : points.length - 1); i++) {
-            const p0 = points[(i - 1 + points.length) % points.length];
-            const p1 = points[i % points.length];
-            const p2 = points[(i + 1) % points.length];
-            const p3 = points[(i + 2) % points.length];
+          const len = points.length;
+          for (let i = 0; i < (layer.shapeData.closed ? len : len - 1); i++) {
+            const p1 = points[i % len];
+            const p2 = points[(i + 1) % len];
+            const p0 = points[(i - 1 + len) % len];
+            const p3 = points[(i + 2) % len];
 
-            const cp1x = p1.x + (p2.x - p0.x) / 6;
-            const cp1y = p1.y + (p2.y - p0.y) / 6;
-            const cp2x = p2.x - (p3.x - p1.x) / 6;
-            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            const cp1x = (p1 as any).handleOut?.x ?? p1.x + (p2.x - p0.x) / 6;
+            const cp1y = (p1 as any).handleOut?.y ?? p1.y + (p2.y - p0.y) / 6;
+            const cp2x = (p2 as any).handleIn?.x ?? p2.x - (p3.x - p1.x) / 6;
+            const cp2y = (p2 as any).handleIn?.y ?? p2.y - (p3.y - p1.y) / 6;
 
             ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
           }

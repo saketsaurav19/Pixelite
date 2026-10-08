@@ -2,8 +2,8 @@ import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
 import { mapBlendModeToCss } from '../../../utils/blendModes';
-import { getHomography, drawTrianglesWarp, loadGoogleFont, getFontFamilyString } from '../../../utils/canvasUtils';
-import { toolState } from '../../../tools/toolState';
+import { getHomography, loadGoogleFont, getFontFamilyString } from '../../../utils/canvasUtils';
+import { combineShapes as combineShapesUtil, polygonsToSvgPath } from '../../../utils/shapeBooleanOps';
 
 interface CanvasLayerProps {
   layer: Layer;
@@ -228,7 +228,7 @@ const VectorTextLayer: React.FC<VectorTextLayerProps> = ({ layer }) => {
   );
 };
 
-const renderVectorShape = (layer: Layer) => {
+const renderVectorShape = (layer: Layer, allLayers: Layer[]) => {
   if (layer.type !== 'shape' || !layer.shapeData) return null;
   const { type, w, h, points, fill, stroke, strokeWidth: sw } = layer.shapeData as any;
 
@@ -267,11 +267,18 @@ const renderVectorShape = (layer: Layer) => {
   }
 
   if (type === 'path') {
+    // Default path fills to 'evenodd' so interior counters (the holes in
+    // "A", "B", "P", "D", "a", "o", …) are cut out and render transparent
+    // instead of solid. The canvas2D renderer already honors this; the SVG
+    // layer renderer must too, or the holes look filled in the live view.
+    const fillRule = layer.shapeData.fillRule === 'nonzero' ? 'nonzero' : 'evenodd';
+
     if (layer.shapeData.svgPath) {
       return (
         <path
           d={layer.shapeData.svgPath}
           fill={fillColor}
+          fillRule={fillRule}
           stroke={strokeColor}
           strokeWidth={strokeW}
         />
@@ -311,11 +318,62 @@ const renderVectorShape = (layer: Layer) => {
         <path
           d={d}
           fill={fillColor}
+          fillRule={fillRule}
           stroke={strokeColor}
           strokeWidth={strokeW}
         />
       );
     }
+  }
+
+  if (type === 'compound') {
+    // Live compound: compose the children into a closed polygon path each frame
+    // (same algorithm as the canvas renderer in `useLayerRendering.ts`). The
+    // canvas-side path is hidden (`opacity: 0`) for vector layers, so this SVG
+    // path is the only thing the user actually sees for the compound.
+    const childIds: string[] = layer.shapeData.childIds || [];
+    if (childIds.length < 1) return null;
+    const inputs = childIds
+      .map((id) => allLayers.find((l) => l.id === id))
+      .filter((l): l is Layer => !!l && !!l.shapeData)
+      .map((l) => ({
+        shapeData: l.shapeData as any,
+        position: l.position || { x: 0, y: 0 },
+      }));
+    if (inputs.length < 2) {
+      // 1-child fallback: just render the single child's geometry.
+      const only = inputs[0];
+      if (!only) return null;
+      const sd2 = only.shapeData;
+      if (sd2.type === 'path' && sd2.svgPath) {
+        return (
+          <g transform={`translate(${only.position.x} ${only.position.y})`}>
+            <path
+              d={sd2.svgPath}
+              fill={fillColor}
+              fillRule="evenodd"
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+            />
+          </g>
+        );
+      }
+      return null;
+    }
+    const op = (layer.shapeData as any).booleanOp || 'union';
+    const result = combineShapesUtil(inputs, op);
+    if (!result || result.polygons.length === 0) return null;
+    const d = polygonsToSvgPath(result.polygons);
+    if (!d) return null;
+    return (
+      <path
+        d={d}
+        fill={fillColor}
+        fillRule="evenodd"
+        stroke={strokeColor}
+        strokeWidth={strokeW}
+      />
+    );
   }
 
   return null;
@@ -332,6 +390,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   const textEditor = useStore(state => state.textEditor);
   const updateLayer = useStore(state => state.updateLayer);
   const zoom = useStore(state => state.zoom || 1);
+  const layers = useStore(state => state.layers);
   const isEditingThisLayer = textEditor?.layerId === layer.id;
   const hasCustomFont = !!layer.fontChecksum;
   const customFontKey = hasCustomFont ? `pdf-font-${layer.fontChecksum}` : '';
@@ -582,43 +641,9 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
     );
   }
 
-  const activeTool = useStore(state => state.activeTool);
-  const transformMode = useStore(state => state.transformMode);
-
-  // Render warp grid onto canvas
-  useEffect(() => {
-    if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid && layer.warpGrid.length === 16) {
-      const canvas = canvasRefs?.current?.[layer.id];
-      const origCanvas = toolState.transformOriginalCanvas;
-      if (canvas && origCanvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          const w = origCanvas.width;
-          const h = origCanvas.height;
-          const srcGrid: { x: number; y: number }[] = [];
-          for (let r = 0; r < 4; r++) {
-            const v = r / 3;
-            for (let c = 0; c < 4; c++) {
-              const u = c / 3;
-              srcGrid.push({ x: u * w, y: v * h });
-            }
-          }
-
-          const xs = layer.warpGrid.map(p => p.x);
-          const ys = layer.warpGrid.map(p => p.y);
-          const xMin = Math.min(...xs);
-          const yMin = Math.min(...ys);
-
-          const dstGrid = layer.warpGrid.map(p => ({
-            x: p.x - xMin,
-            y: p.y - yMin
-          }));
-
-          drawTrianglesWarp(ctx, origCanvas, srcGrid, dstGrid, 4, 4);
-        }
-      }
-    }
-  }, [activeTool, transformMode, layer.warpGrid, layer.id, canvasRefs]);
+  // Warp/puppet rendering now lives in `useLayerRendering.renderLayer` — the SAME
+  // render pass that draws the base layer — so re-renders (e.g. on pointer-up when
+  // `isInteracting` flips) repaint the live deformation instead of the original.
 
   // Regular layer — use native dimensions if available (e.g. PDF bitmap pages)
   let canvasW = layer.isPdfBackground ? (layer.width || 1000) : (layer.width || documentSize.w);
@@ -639,6 +664,9 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
     padX = Math.round(canvasW * 0.3) + 20;
     padY = Math.round(canvasH * 0.8) + 20;
   }
+
+  const activeTool = useStore(state => state.activeTool);
+  const transformMode = useStore(state => state.transformMode);
 
   if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid) {
     const xs = layer.warpGrid.map(p => p.x);
@@ -827,7 +855,7 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
               display: (layer.importedFromPdf && !layer.isModified) ? 'none' : 'block',
             }}
           >
-            {renderVectorShape(layer)}
+            {renderVectorShape(layer, layers)}
           </svg>
         )}
       </div>

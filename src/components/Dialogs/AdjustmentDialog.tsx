@@ -162,6 +162,9 @@ export const AdjustmentDialog: React.FC = () => {
   // Vibrance states
   const [vibrance, setVibrance] = useState(0);
 
+  // Posterize states
+  const [posterizeLevels, setPosterizeLevels] = useState(4);
+
   // Color Balance states
   const [colorBalanceTone, setColorBalanceTone] = useState<'shadows' | 'midtones' | 'highlights'>('midtones');
   const [cbShadows, setCbShadows] = useState({ cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
@@ -230,6 +233,7 @@ export const AdjustmentDialog: React.FC = () => {
       offset: offsetVal,
       gamma: exposureGamma,
       vibrance,
+      posterizeLevels,
       cbShadows,
       cbMidtones,
       cbHighlights,
@@ -240,6 +244,7 @@ export const AdjustmentDialog: React.FC = () => {
   }, [
     brightness, contrast, hue, saturation, lightness, effect,
     exposure, offsetVal, exposureGamma, vibrance,
+    posterizeLevels,
     cbShadows, cbMidtones, cbHighlights, preserveLuminosity,
     levelsState, curvesState
   ]);
@@ -347,6 +352,8 @@ export const AdjustmentDialog: React.FC = () => {
 
           setVibrance(settings.vibrance ?? 0);
 
+          setPosterizeLevels(settings.posterize?.levels ?? 4);
+
           setCbShadows(settings.colorBalance?.shadows ?? { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbMidtones(settings.colorBalance?.midtones ?? { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbHighlights(settings.colorBalance?.highlights ?? { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
@@ -387,6 +394,7 @@ export const AdjustmentDialog: React.FC = () => {
           setOffsetVal(0);
           setExposureGamma(1.0);
           setVibrance(0);
+          setPosterizeLevels(4);
           setCbShadows({ cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbMidtones({ cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbHighlights({ cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
@@ -485,7 +493,7 @@ export const AdjustmentDialog: React.FC = () => {
             useStore.getState().setActiveLayer(sourceLayerId);
           }
         }
-      } else if (originalSettingsRef.current) {
+      } else if (originalSettingsRef.current && currentLayer.adjustmentData) {
         updateLayer(currentLayer.id, {
           adjustmentData: {
             type: currentLayer.adjustmentData.type,
@@ -546,6 +554,8 @@ export const AdjustmentDialog: React.FC = () => {
         };
       } else if (activeAdjustmentModal === 'vibrance') {
         finalSettings = { vibrance: sliderValuesRef.current.vibrance };
+      } else if (activeAdjustmentModal === 'posterize') {
+        finalSettings = { posterize: { levels: sliderValuesRef.current.posterizeLevels } };
       } else if (activeAdjustmentModal === 'color_balance') {
         finalSettings = {
           colorBalance: {
@@ -565,7 +575,7 @@ export const AdjustmentDialog: React.FC = () => {
         isNew: false,
         dataUrl: undefined,
         adjustmentData: {
-          type: currentLayer.adjustmentData.type,
+          type: currentLayer.adjustmentData?.type,
           settings: finalSettings
         }
       });
@@ -578,6 +588,7 @@ export const AdjustmentDialog: React.FC = () => {
     else if (activeAdjustmentModal === 'photo_effects') actionName = `Photo Effect: ${sliderValuesRef.current.effect}`;
     else if (activeAdjustmentModal === 'exposure') actionName = 'Exposure';
     else if (activeAdjustmentModal === 'vibrance') actionName = 'Vibrance';
+    else if (activeAdjustmentModal === 'posterize') actionName = 'Posterize';
     else if (activeAdjustmentModal === 'color_balance') actionName = 'Color Balance';
     else if (activeAdjustmentModal === 'levels') actionName = 'Levels';
     else if (activeAdjustmentModal === 'curves') actionName = 'Curves';
@@ -702,6 +713,12 @@ export const AdjustmentDialog: React.FC = () => {
   const handleVibranceChange = (vib: number) => {
     setVibrance(vib);
     applyPreviewDebounced({ vibrance: vib });
+  };
+
+  // 2b. Posterize handler
+  const handlePosterizeLevelsChange = (lvl: number) => {
+    setPosterizeLevels(lvl);
+    applyPreviewDebounced({ posterize: { levels: lvl } });
   };
 
   // 3. Color Balance handlers
@@ -1213,6 +1230,38 @@ export const AdjustmentDialog: React.FC = () => {
           </div>
         );
 
+      case 'posterize':
+        return (
+          <div className="adjustment-sliders-container">
+            <div className="adjustment-control-row">
+              <div className="control-header">
+                <label>Levels:</label>
+                <input
+                  type="number"
+                  min="2"
+                  max="255"
+                  value={posterizeLevels}
+                  onChange={(e) => handlePosterizeLevelsChange(Math.max(2, Math.min(255, parseInt(e.target.value, 10) || 4)))}
+                  className="control-number-input"
+                />
+              </div>
+              <div className="slider-wrapper">
+                <input
+                  type="range"
+                  min="2"
+                  max="255"
+                  value={posterizeLevels}
+                  onChange={(e) => handlePosterizeLevelsChange(parseInt(e.target.value, 10))}
+                  className="adjustment-range"
+                />
+              </div>
+            </div>
+            <p style={{ marginTop: '1rem', fontSize: '0.78rem', color: '#888', textAlign: 'center' }}>
+              Quantizes each color channel to the given number of levels (2–255).
+            </p>
+          </div>
+        );
+
       case 'color_balance':
         const currentToneData = colorBalanceTone === 'shadows' ? cbShadows : colorBalanceTone === 'midtones' ? cbMidtones : cbHighlights;
 
@@ -1625,6 +1674,8 @@ export const AdjustmentDialog: React.FC = () => {
         return 'Exposure';
       case 'vibrance':
         return 'Vibrance';
+      case 'posterize':
+        return 'Posterize';
       case 'color_balance':
         return 'Color Balance';
       case 'levels':

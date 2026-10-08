@@ -3,11 +3,12 @@ import * as LucideIcons from 'lucide-react';
 import './MenuBar.css';
 import { useStore } from '../../store/useStore';
 import { pasteFromClipboard } from '../../utils/clipboardUtils';
+import { convertTextLayerToPathAsync } from '../../utils/canvasUtils';
 
 interface MenuItem {
   label?: string;
   shortcut?: string;
-  action?: () => void;
+  action?: (state: ReturnType<typeof useStore.getState>) => void;
   subItems?: MenuItem[];
   divider?: boolean;
   disabled?: boolean;
@@ -31,6 +32,7 @@ interface MenuBarProps {
   canRedo: boolean;
   onInvert?: () => void;
   onDuplicateLayer?: () => void;
+  onDuplicateImage?: () => void;
   onDeleteLayer?: () => void;
   onFillLayer?: () => void;
   onSelectSubject?: () => void;
@@ -44,9 +46,10 @@ interface MenuBarProps {
   onPaste?: () => void;
   onTransformLayer?: (type: string) => void;
   onTransformImage?: (type: string) => void;
-  onTransformMode?: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp') => void;
+  onTransformMode?: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp' | 'puppet') => void;
   onCanvasSize?: () => void;
   onImageSize?: () => void;
+  onVariables?: () => void;
   onAddEmptyLayer?: () => void;
   onSelectAll?: () => void;
   onDeselect?: () => void;
@@ -86,6 +89,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   canRedo,
   onInvert,
   onDuplicateLayer,
+  onDuplicateImage,
   onDeleteLayer,
   onFillLayer,
   onSelectSubject,
@@ -102,6 +106,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   onTransformMode,
   onCanvasSize,
   onImageSize,
+  onVariables,
   onAddEmptyLayer,
   onSelectAll,
   onDeselect,
@@ -155,6 +160,36 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const activeLayer = layers.find(l => l.id === activeLayerId);
   const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
 
+  // ---------- Combine Shapes helpers ----------
+
+  // The "Combine Shapes" submenu parent is only enabled when at least two
+  // shape layers are in the current selection (or the active layer plus one
+  // more shape, when only one is selected).
+  const canCombineShapes = (s: ReturnType<typeof useStore.getState>): boolean => {
+    const ids = s.selectedLayerIds.length > 0 ? s.selectedLayerIds : (s.activeLayerId ? [s.activeLayerId] : []);
+    const shapeCount = ids.filter((id: string) => {
+      const l = s.layers.find((x: any) => x.id === id);
+      return l && l.type === 'shape' && l.shapeData;
+    }).length;
+    return shapeCount >= 2 && typeof s.combineShapes === 'function';
+  };
+
+  const runCombine = (
+    s: ReturnType<typeof useStore.getState>,
+    op: 'union' | 'subtract' | 'intersect' | 'exclude'
+  ) => {
+    const ids = s.selectedLayerIds.length > 0 ? s.selectedLayerIds : (s.activeLayerId ? [s.activeLayerId] : []);
+    const shapeIds = ids.filter((id: string) => {
+      const l = s.layers.find((x: any) => x.id === id);
+      return l && l.type === 'shape' && l.shapeData;
+    });
+    if (shapeIds.length < 2) {
+      s.addAlert?.({ type: 'error', message: 'Select two or more shape layers to combine.' });
+      return;
+    }
+    s.combineShapes?.(shapeIds, op);
+  };
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -193,9 +228,6 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Share Canvas Link (URL)...', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'url') },
             { label: 'Live Collaboration (P2P WebRTC)...', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'webrtc') },
             { label: 'Public Host / OS Share...', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'public') },
-            { divider: true },
-            { label: 'Export PNG', action: () => onOpenExportDialog?.('png') },
-            { label: 'Export JPG', action: () => onOpenExportDialog?.('jpg') },
           ]
         },
         { divider: true },
@@ -260,7 +292,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Undo', shortcut: shortcuts.edit_undo || 'Ctrl+Z', action: undo, disabled: !canUndo },
         { label: 'Redo', shortcut: shortcuts.edit_redo || 'Shift+Ctrl+Z', action: redo, disabled: !canRedo },
         { divider: true },
-        { label: 'Fade...', shortcut: 'Shift+Ctrl+F' },
+        { label: 'Fade...', shortcut: 'Shift+Ctrl+F', disabled: true },
         { divider: true },
         { label: 'Cut', shortcut: shortcuts.edit_cut || 'Ctrl+X', action: onCut },
         { label: 'Copy', shortcut: shortcuts.edit_copy || 'Ctrl+C', action: onCopy },
@@ -278,8 +310,9 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Stroke...' },
         { divider: true },
         { label: 'Free Transform', shortcut: shortcuts.edit_free_transform || 'Ctrl+T', action: () => onTransformMode?.('free') },
+        { label: 'Perspective Warp', action: () => useStore.getState().setActiveTool('perspective_warp') },
+        { label: 'Puppet Warp', action: () => onTransformMode?.('puppet') },
         { label: 'Content-Aware Scale', action: () => setIsContentAwareScaleDialogOpen(true) },
-        { label: 'Puppet Warp', action: () => addAlert({ type: 'info', message: 'Puppet Warp is not implemented.' }) },
         {
           label: 'Transform',
           subItems: [
@@ -371,7 +404,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Color Lookup...', action: () => addAdjustmentLayer('color_lookup') },
             { divider: true },
             { label: 'Invert', shortcut: shortcuts.adjust_invert || 'Ctrl+I', action: onInvert },
-            { label: 'Posterize...' },
+            { label: 'Posterize...', action: () => addAdjustmentLayer('posterize') },
             { label: 'Threshold...' },
             { label: 'Gradient Map...' },
             { label: 'Selective Color...' },
@@ -404,8 +437,10 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Trim...' },
         { label: 'Reveal All' },
         { divider: true },
-        { label: 'Duplicate' },
+        { label: 'Duplicate', action: onDuplicateImage },
         { label: 'Apply Image...' },
+        { divider: true },
+        { label: 'Variables...', action: onVariables },
       ]
     },
     {
@@ -424,20 +459,59 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Delete Layer', shortcut: 'Del', action: onDeleteLayer },
         { divider: true },
         {
+          label: 'Text',
+          disabled: activeLayer?.type !== 'text',
+          subItems: [
+            {
+              label: 'Convert to Shape',
+              action: async (s) => {
+                const layer = s.layers.find((l) => l.id === s.activeLayerId);
+                if (!layer || layer.type !== 'text') return;
+                const svgPath = await convertTextLayerToPathAsync(layer as any);
+                if (!svgPath) {
+                  s.addAlert?.({ type: 'error', message: 'Could not convert this text layer to a shape.' });
+                  return;
+                }
+                s.addLayer({
+                  type: 'shape',
+                  name: `${layer.name || 'Text'} Shape`,
+                  position: { ...(layer.position || { x: 0, y: 0 }) },
+                  width: layer.width,
+                  height: layer.height,
+                  rotation: layer.rotation,
+                  shapeData: {
+                    type: 'path',
+                    svgPath,
+                    fill: layer.color || '#000000',
+                    stroke: layer.strokeColor || 'transparent',
+                    strokeWidth: layer.strokeWidth || 0,
+                    fillRule: 'evenodd',
+                  },
+                });
+                // Hide the original text layer: its glyphs would otherwise render
+                // underneath the new shape and fill in the evenodd holes (the
+                // counters in "A", "B", "P", "D"), making them look solid.
+                s.updateLayer(layer.id, { visible: false });
+              }
+            },
+          ]
+        },
+        { divider: true },
+        {
           label: 'Layer Style',
           subItems: [
-            { label: 'Blending Options...' },
+            { label: 'Blending Options...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('blending'); } },
             { divider: true },
-            { label: 'Drop Shadow...' },
-            { label: 'Inner Shadow...' },
-            { label: 'Outer Glow...' },
-            { label: 'Inner Glow...' },
-            { label: 'Bevel and Emboss...' },
-            { label: 'Satin...' },
-            { label: 'Color Overlay...' },
-            { label: 'Gradient Overlay...' },
-            { label: 'Pattern Overlay...' },
-            { label: 'Stroke...' },
+            { label: 'Drop Shadow...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('dropShadow'); } },
+            { label: 'Inner Shadow...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('innerShadow'); } },
+            { label: 'Outer Glow...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('outerGlow'); } },
+            { label: 'Inner Glow...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('innerGlow'); } },
+            { label: 'Bevel and Emboss...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('bevelAndEmboss'); } },
+            { label: 'Satin...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('satin'); } },
+            { label: 'Color Overlay...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('colorOverlay'); } },
+            { label: 'Gradient Overlay...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('gradientOverlay'); } },
+            { label: 'Pattern Overlay...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('patternOverlay'); } },
+            { label: 'Stroke...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('strokeStyle'); } },
             { divider: true },
             { label: 'Copy Layer Style' },
             { label: 'Paste Layer Style' },
@@ -467,7 +541,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Channel Mixer...', action: () => addAdjustmentLayer('channel_mixer') },
             { label: 'Color Lookup...', action: () => addAdjustmentLayer('color_lookup') },
             { label: 'Invert', action: onInvert },
-            { label: 'Posterize...' },
+            { label: 'Posterize...', action: () => addAdjustmentLayer('posterize') },
             { label: 'Threshold...' },
             { label: 'Gradient Map...' },
             { label: 'Selective Color...' },
@@ -511,10 +585,22 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Send to Back', shortcut: 'Shift+Ctrl+[' },
           ]
         },
+        {
+          label: 'Combine Shapes',
+          disabled: !canCombineShapes(useStore.getState()),
+          subItems: [
+            { label: 'Union',     action: (s) => runCombine(s, 'union') },
+            { label: 'Subtract',  action: (s) => runCombine(s, 'subtract') },
+            { label: 'Intersect', action: (s) => runCombine(s, 'intersect') },
+            { label: 'Exclude',   action: (s) => runCombine(s, 'exclude') },
+            { divider: true },
+            { label: 'Make Compound Shape', action: (s) => s.makeCompoundShape?.(s.selectedLayerIds) },
+          ]
+        },
         { divider: true },
-        { label: 'Merge Layers', shortcut: 'Ctrl+E' },
-        { label: 'Merge Visible', shortcut: 'Shift+Ctrl+E' },
-        { label: 'Flatten Image' },
+        { label: 'Merge Down', shortcut: 'Ctrl+E', action: (s) => s.mergeLayers?.() },
+        { label: 'Merge Visible', shortcut: 'Shift+Ctrl+E', action: (s) => s.mergeVisible?.() },
+        { label: 'Flatten Image', action: (s) => s.flattenImage?.() },
       ]
     },
     {
@@ -663,27 +749,27 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'AI & Generative',
           subItems: [
-            { label: 'Generative Fill...', action: () => addAlert({ type: 'info', message: '🧪 Generative Fill — coming soon!' }) },
-            { label: 'Remove Background (AI)', action: () => addAlert({ type: 'info', message: '🧪 AI Background Removal — coming soon!' }) },
-            { label: 'Upscale Image (AI)', action: () => addAlert({ type: 'info', message: '🧪 AI Upscaling — coming soon!' }) },
-            { label: 'Denoise (AI)', action: () => addAlert({ type: 'info', message: '🧪 AI Denoising — coming soon!' }) },
+            { label: 'Generative Fill...', disabled: true, action: () => {} },
+            { label: 'Remove Background (AI)', disabled: true, action: () => {} },
+            { label: 'Upscale Image (AI)', disabled: true, action: () => {} },
+            { label: 'Denoise (AI)', disabled: true, action: () => {} },
           ]
         },
         { divider: true },
         {
           label: 'Advanced Filters',
           subItems: [
-            { label: 'Halftone Effect', action: () => addAlert({ type: 'info', message: '🧪 Halftone Effect — coming soon!' }) },
-            { label: 'Duotone...', action: () => addAlert({ type: 'info', message: '🧪 Duotone — coming soon!' }) },
-            { label: 'Glitch Effect', action: () => addAlert({ type: 'info', message: '🧪 Glitch Effect — coming soon!' }) },
+            { label: 'Halftone Effect', action: () => applyFilterAction('halftone') },
+            { label: 'Duotone...', action: () => applyFilterAction('duotone') },
+            { label: 'Glitch Effect', action: () => applyFilterAction('glitch') },
           ]
         },
         {
           label: 'Smart Objects',
           subItems: [
-            { label: 'Convert to Smart Object', action: () => addAlert({ type: 'info', message: '🧪 Smart Objects — coming soon!' }) },
-            { label: 'Edit Contents', action: () => addAlert({ type: 'info', message: '🧪 Smart Object editing — coming soon!' }) },
-            { label: 'Rasterize Smart Object', action: () => addAlert({ type: 'info', message: '🧪 Rasterize — coming soon!' }) },
+            { label: 'Convert to Smart Object', disabled: true, action: () => {} },
+            { label: 'Edit Contents', disabled: true, action: () => {} },
+            { label: 'Rasterize Smart Object', disabled: true, action: () => {} },
           ]
         },
         { divider: true },
@@ -691,7 +777,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
           label: 'Collaboration',
           subItems: [
             { label: 'Share Canvas (Live)', action: () => useStore.getState().setIsServerlessShareDialogOpen(true, 'webrtc') },
-            { label: 'Comment on Layer', action: () => addAlert({ type: 'info', message: '🧪 Layer Comments — coming soon!' }) },
+            { label: 'Comment on Layer', disabled: true, action: () => {} },
           ]
         },
         { divider: true },
@@ -701,13 +787,6 @@ const MenuBar: React.FC<MenuBarProps> = ({
             {
               label: 'Log Store State',
               action: () => {
-                const s = useStore.getState();
-                console.group('[Pixelite] Store Snapshot');
-                console.log('documentSize:', s.documentSize);
-                console.log('zoom:', s.zoom);
-                console.log('activeLayerId:', s.activeLayerId);
-                console.log('layers:', s.layers);
-                console.groupEnd();
                 addAlert({ type: 'success', message: 'Store state logged to console (F12)' });
               }
             },
@@ -813,7 +892,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
             }));
           } else if (item.action) {
             e.stopPropagation();
-            item.action();
+            item.action(useStore.getState());
             setActiveMenu(null);
             setActiveSubmenus({});
             onCloseMobile?.();

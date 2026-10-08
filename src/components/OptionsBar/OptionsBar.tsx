@@ -3,16 +3,19 @@ import { createPortal } from 'react-dom';
 import { useStore } from '../../store/useStore';
 import { hexToRgba, loadGoogleFont } from '../../utils/canvasUtils';
 import { Z_INDEX } from '../../constants/zIndex';
+import SelectionModeIcon from './SelectionModeIcon';
+import { toolState } from '../../tools/toolState';
+import ColorPicker from '../shared/ColorPicker';
+import * as LucideIcons from 'lucide-react';
+import { recalculateTextLayerBounds } from '../Canvas/Core/textUtils';
+import { pwGetMode, pwSetMode, pwGetOp, pwSetOp, pwGetSnap, pwToggleSnap, pwResetMesh } from '../../tools/Transform/perspectiveWarpTool';
 
 const fallbackFont = {
   family: 'Noto Sans',
   category: 'sans-serif',
   variants: [{ id: '400', name: 'Regular 400', weight: '400', style: 'normal' }]
 };
-import { toolState } from '../../tools/toolState';
-import ColorPicker from '../shared/ColorPicker';
-import * as LucideIcons from 'lucide-react';
-import { recalculateTextLayerBounds } from '../Canvas/Core/textUtils';
+
 interface EditableValueProps {
   value: number;
   unit: string;
@@ -188,7 +191,7 @@ const OptionsBar: React.FC = () => {
     ambientColor, setAmbientColor,
     lightingDepthScale, showLightSource, updateLighting,
     documentSize,
-    transformMode, setTransformMode, layers,
+    transformMode, setTransformMode, puppetMode, setPuppetMode, puppetShowMesh, setPuppetShowMesh, layers,
     setIsWarpDialogOpen,
     brushPresets, customShapes, savedPatterns
   } = useStore();
@@ -211,12 +214,14 @@ const OptionsBar: React.FC = () => {
     }
   }, [activeLayerId, isVector, transformMode, setTransformMode]);
 
+
   const fonts = googleFonts.length > 0 ? googleFonts : [fallbackFont];
 
   const [isFontDropdownOpen, setIsFontDropdownOpen] = React.useState(false);
   const [fontSearchQuery, setFontSearchQuery] = React.useState('');
   const fontButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const [fontButtonCoords, setFontButtonCoords] = React.useState<{ top: number; left: number } | null>(null);
+  const [brushSmoothing, setBrushSmoothing] = React.useState<number>(toolState._brushSmoothing ?? 0);
 
   React.useEffect(() => {
     if (isFontDropdownOpen && fontButtonRef.current) {
@@ -289,18 +294,12 @@ const OptionsBar: React.FC = () => {
   // Sync options bar controls with active shape layer properties
   React.useEffect(() => {
     if (activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData) {
-      const { fill, stroke, strokeWidth: sw } = activeLayer.shapeData;
-      if (fill && fill !== 'transparent' && fill !== 'none' && fill !== brushColor) {
-        setBrushColor(fill);
-      }
-      if (stroke && stroke !== 'transparent' && stroke !== 'none' && stroke !== secondaryColor) {
-        setSecondaryColor(stroke);
-      }
+      const { strokeWidth: sw } = activeLayer.shapeData;
       if (sw !== undefined && sw !== strokeWidth) {
         setStrokeWidth(sw);
       }
     }
-  }, [activeLayerId, activeLayer?.shapeData?.fill, activeLayer?.shapeData?.stroke, activeLayer?.shapeData?.strokeWidth]);
+  }, [activeLayerId, activeLayer?.shapeData?.strokeWidth, strokeWidth]);
 
   // Load selected Google Font dynamically
   React.useEffect(() => {
@@ -446,10 +445,10 @@ const OptionsBar: React.FC = () => {
             <label>Mode</label>
             <div className="segmented-control" style={{ display: 'flex', background: '#1a1a1a', borderRadius: '4px', padding: '2px' }}>
               {[
-                { id: 'new', icon: LucideIcons.Square, label: 'New' },
-                { id: 'add', icon: LucideIcons.PlusSquare, label: 'Add' },
-                { id: 'subtract', icon: LucideIcons.MinusSquare, label: 'Subtract' },
-                { id: 'intersect', icon: LucideIcons.Layers, label: 'Intersect' }
+                { id: 'replace', label: 'Replace existing selection when new selection created' },
+                { id: 'unite', label: 'Unite / Merge Selection' },
+                { id: 'subtract', label: 'Subtract from Selection (+Alt)' },
+                { id: 'intersect', label: 'Intersect with Selection (+Shift+Alt)' }
               ].map(m => (
                 <button
                   key={m.id}
@@ -458,10 +457,15 @@ const OptionsBar: React.FC = () => {
                   style={{
                     padding: '4px', fontSize: '11px', border: 'none', borderRadius: '3px', cursor: 'pointer',
                     background: selectionMode === m.id ? '#444' : 'transparent', color: selectionMode === m.id ? '#fff' : '#888',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative'
                   }}
                 >
-                  <m.icon size={14} />
+                  <SelectionModeIcon mode={m.id as any} active={selectionMode === m.id} />
+                  {(m.id === 'subtract' || m.id === 'intersect') && (
+                    <span style={{ position: 'absolute', bottom: '-1px', right: '-1px', fontSize: '7px', lineHeight: 1, color: selectionMode === m.id ? '#aaa' : '#555' }}>
+                      {m.id === 'subtract' ? '⌥' : '⇧⌥'}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -557,6 +561,17 @@ const OptionsBar: React.FC = () => {
               Show Transform Controls
             </label>
           </div>
+          <div className="option-control">
+            <label style={{ marginRight: '6px' }}>Select:</label>
+            <select
+              value={useStore.getState().moveAutoSelectType || 'layer'}
+              onChange={(e) => useStore.getState().setMoveAutoSelectType?.(e.target.value as any)}
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
+            >
+              <option value="layer">Layer</option>
+              <option value="group">Group</option>
+            </select>
+          </div>
           <div className="options-divider" />
         </>
       )}
@@ -585,13 +600,56 @@ const OptionsBar: React.FC = () => {
               <option value="distort" disabled={!!isVector}>Distort</option>
               <option value="perspective" disabled={!!isVector}>Perspective</option>
               <option value="warp" disabled={!!isVector}>Warp</option>
+              <option value="puppet">Puppet Warp</option>
             </select>
           </div>
 
-          {(() => {
+          {(transformMode === 'puppet' || transformMode === 'warp') && (
+            <>
+              {transformMode === 'puppet' && (
+                <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '4px' }}>
+                  <label style={{ marginRight: '2px', fontSize: '11px', color: '#ccc' }}>Mode:</label>
+                  <select
+                    value={puppetMode}
+                    onChange={(e) => setPuppetMode(e.target.value as any)}
+                    style={{
+                      background: '#2b2b2b',
+                      color: '#fff',
+                      border: '1px solid #555',
+                      borderRadius: '4px',
+                      padding: '3px 8px',
+                      fontSize: '12px',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="rigid">Rigid</option>
+                    <option value="normal">Normal</option>
+                    <option value="distort">Distort</option>
+                  </select>
+                </div>
+              )}
+              {transformMode === 'puppet' && (
+                <>
+                  <div className="options-divider" />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={puppetShowMesh}
+                      onChange={(e) => setPuppetShowMesh(e.target.checked)}
+                      style={{ accentColor: '#0078d4', cursor: 'pointer' }}
+                    />
+                    Show Mesh
+                  </label>
+                </>
+              )}
+            </>
+          )}
+
+          {(transformMode !== 'puppet') && (() => {
             const activeLayer = layers.find(l => l.id === activeLayerId);
             if (!activeLayer) return null;
-            
+
             const px = Math.round(activeLayer.position?.x || 0);
             const py = Math.round(activeLayer.position?.y || 0);
             const wVal = Math.round(activeLayer.width || 0);
@@ -681,6 +739,69 @@ const OptionsBar: React.FC = () => {
               </>
             );
           })()}
+          <div className="options-divider" />
+        </>
+      )}
+      {activeTool === 'perspective_warp' && (
+        <>
+          <div className="option-control">
+            <label>Mode</label>
+            <div className="segmented-control" style={{ display: 'flex', background: '#1a1a1a', borderRadius: '4px', padding: '2px' }}>
+              {['layout', 'warp'].map(m => (
+                <button
+                  key={m}
+                  onClick={() => pwSetMode(m as any)}
+                  style={{
+                    padding: '2px 10px', fontSize: '11px', border: 'none', borderRadius: '3px', cursor: 'pointer',
+                    background: pwGetMode() === m ? '#444' : 'transparent', color: pwGetMode() === m ? '#fff' : '#888'
+                  }}
+                >
+                  {m === 'layout' ? 'Layout' : 'Warp'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="options-divider" />
+          <div className="option-control">
+            <label>Op</label>
+            <div className="segmented-control" style={{ display: 'flex', background: '#1a1a1a', borderRadius: '4px', padding: '2px', gap: '2px' }}>
+              {(pwGetMode() === 'layout'
+                ? ['select', 'add_vertex', 'connect', 'create_plane']
+                : ['select', 'move', 'scale', 'rotate', 'skew', 'perspective']
+              ).map(op => (
+                <button
+                  key={op}
+                  onClick={() => pwSetOp(op as any)}
+                  style={{
+                    padding: '2px 8px', fontSize: '11px', border: 'none', borderRadius: '3px', cursor: 'pointer',
+                    background: pwGetOp() === op ? '#0078d4' : 'transparent', color: pwGetOp() === op ? '#fff' : '#aaa'
+                  }}
+                >
+                  {op.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="option-control" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={pwGetSnap()}
+                onChange={() => pwToggleSnap()}
+              />
+              Snap
+            </label>
+          </div>
+          <button
+            className="premium-btn-sm"
+            onClick={() => {
+              const layer = layers.find(l => l.id === activeLayerId);
+              if (layer) pwResetMesh(layer);
+            }}
+            style={{ padding: '4px 10px', fontSize: '11px', background: '#444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Reset Mesh
+          </button>
           <div className="options-divider" />
         </>
       )}
@@ -1044,7 +1165,7 @@ const OptionsBar: React.FC = () => {
           <select
             className="preset-select"
             onChange={(e) => {
-              const pattern = savedPatterns.find(p => p.id === e.target.value);
+              const pattern = savedPatterns.find((p: { id: string }) => p.id === e.target.value);
               if (pattern) {
                 useStore.getState().setCustomPattern(pattern.dataUrl);
               }
@@ -1053,7 +1174,7 @@ const OptionsBar: React.FC = () => {
             value=""
           >
             <option value="" disabled>Select pattern...</option>
-            {savedPatterns.map(p => (
+            {savedPatterns.map((p: { id: string; name: string }) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
@@ -1087,7 +1208,7 @@ const OptionsBar: React.FC = () => {
           <select
             className="preset-select"
             onChange={(e) => {
-              const shape = customShapes.find(s => s.id === e.target.value);
+              const shape = customShapes.find((s: { id: string }) => s.id === e.target.value);
               if (shape) {
                 window.dispatchEvent(new CustomEvent('apply-custom-shape', { detail: shape.shapeData }));
               }
@@ -1096,7 +1217,7 @@ const OptionsBar: React.FC = () => {
             value=""
           >
             <option value="" disabled>Select shape...</option>
-            {customShapes.map(s => (
+            {customShapes.map((s: { id: string; name: string }) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
@@ -1231,10 +1352,271 @@ const OptionsBar: React.FC = () => {
           <div className="options-divider" />
         </>
       )}
+
+      {activeTool === 'gradient' && (
+        <>
+          <div className="option-control">
+            <label>Reverse</label>
+            <input
+              type="checkbox"
+              checked={toolState._gradientReverse || false}
+              onChange={(e) => { toolState._gradientReverse = e.target.checked; }}
+              style={{ accentColor: '#0078d4', cursor: 'pointer' }}
+            />
+          </div>
+          <div className="option-control">
+            <label>Dither</label>
+            <input
+              type="checkbox"
+              checked={toolState._gradientDither !== false}
+              onChange={(e) => { toolState._gradientDither = e.target.checked; }}
+              style={{ accentColor: '#0078d4', cursor: 'pointer' }}
+            />
+          </div>
+          <div className="option-control">
+            <label>Transparency</label>
+            <input
+              type="checkbox"
+              checked={toolState._gradientTransparency !== false}
+              onChange={(e) => { toolState._gradientTransparency = e.target.checked; }}
+              style={{ accentColor: '#0078d4', cursor: 'pointer' }}
+            />
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
+
+      {activeTool === 'eyedropper' && (
+        <>
+          <div className="option-control">
+            <label>Sample</label>
+            <select
+              value={toolState._eyedropperSampleSize || 'point'}
+              onChange={(e) => { toolState._eyedropperSampleSize = e.target.value; }}
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
+            >
+              <option value="point">Point Sample</option>
+              <option value="3x3">3 x 3</option>
+              <option value="5x5">5 x 5</option>
+              <option value="11x11">11 x 11</option>
+              <option value="31x31">31 x 31</option>
+              <option value="51x51">51 x 51</option>
+              <option value="101x101">101 x 101</option>
+            </select>
+          </div>
+          <div className="option-control">
+            <label>Source</label>
+            <select
+              value={toolState._eyedropperSampleSource || 'current_layer'}
+              onChange={(e) => { toolState._eyedropperSampleSource = e.target.value; }}
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
+            >
+              <option value="current_layer">Current Layer</option>
+              <option value="current_and_below">Current & Below</option>
+              <option value="all_layers">All Layers</option>
+            </select>
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
+
+      {activeTool === 'crop' && (
+        <>
+          <div className="option-control">
+            <label>Ratio</label>
+            <select
+              value={toolState._cropAspectRatio || 'original'}
+              onChange={(e) => { toolState._cropAspectRatio = e.target.value; }}
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
+            >
+              <option value="original">Original Ratio</option>
+              <option value="1:1">1 : 1</option>
+              <option value="4:3">4 : 3</option>
+              <option value="3:2">3 : 2</option>
+              <option value="16:9">16 : 9</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={toolState._cropDeleteCropped !== false}
+                onChange={(e) => { toolState._cropDeleteCropped = e.target.checked; }}
+              />
+              Delete Cropped Pixels
+            </label>
+          </div>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={toolState._cropContentAware === true}
+                onChange={(e) => { toolState._cropContentAware = e.target.checked; }}
+              />
+              Content-Aware
+            </label>
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
+
+      {['brush', 'pencil', 'color_replacement', 'mixer_brush'].includes(activeTool) && (
+        <div className="option-control">
+          <label>Smoothing</label>
+          <input
+            type="range" min="0" max="100"
+            value={brushSmoothing}
+            onChange={(e) => setBrushSmoothing(Number(e.target.value))}
+            onMouseUp={() => { toolState._brushSmoothing = brushSmoothing; }}
+            onTouchEnd={() => { toolState._brushSmoothing = brushSmoothing; }}
+          />
+          <EditableValue value={brushSmoothing} unit="%" onCommit={(v) => { setBrushSmoothing(v); toolState._brushSmoothing = v; }} />
+        </div>
+      )}
+
+      {activeTool === 'clone' && (
+        <>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={toolState._cloneAligned !== false}
+                onChange={(e) => { toolState._cloneAligned = e.target.checked; }}
+              />
+              Aligned
+            </label>
+          </div>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={toolState._cloneAllLayers === true}
+                onChange={(e) => { toolState._cloneAllLayers = e.target.checked; }}
+              />
+              Sample All Layers
+            </label>
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
+
+      {activeTool === 'eraser' && (
+        <>
+          <div className="option-control">
+            <label>Mode</label>
+            <select
+              value={toolState._eraserMode || 'brush'}
+              onChange={(e) => { toolState._eraserMode = e.target.value; }}
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
+            >
+              <option value="brush">Brush</option>
+              <option value="pencil">Pencil</option>
+              <option value="block">Block</option>
+            </select>
+          </div>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={toolState._eraserAirbrush === true}
+                onChange={(e) => { toolState._eraserAirbrush = e.target.checked; }}
+              />
+              Airbrush
+            </label>
+          </div>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={toolState._eraserToHistory === true}
+                onChange={(e) => { toolState._eraserToHistory = e.target.checked; }}
+              />
+              Erase to History
+            </label>
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
+
+      {['background_eraser', 'magic_eraser'].includes(activeTool) && (
+        <>
+          <div className="option-control">
+            <label>Sampling</label>
+            <select
+              value={toolState._eraserSampling || 'continuous'}
+              onChange={(e) => { toolState._eraserSampling = e.target.value; }}
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
+            >
+              <option value="continuous">Continuous</option>
+              <option value="once">Once</option>
+              <option value="backgroundSwatch">Background Swatch</option>
+            </select>
+          </div>
+          <div className="option-control">
+            <label>Limits</label>
+            <select
+              value={toolState._eraserLimits || 'contiguous'}
+              onChange={(e) => { toolState._eraserLimits = e.target.value; }}
+              style={{ background: '#1a1a1a', color: '#ccc', border: '1px solid #444', borderRadius: '3px', fontSize: '11px', padding: '2px' }}
+            >
+              <option value="contiguous">Contiguous</option>
+              <option value="discontiguous">Discontiguous</option>
+              <option value="findEdges">Find Edges</option>
+            </select>
+          </div>
+          <div className="option-control">
+            <label>Tolerance</label>
+            <input
+              type="range" min="1" max="255"
+              value={toolState._eraserTolerance || 32}
+              onChange={(e) => { toolState._eraserTolerance = Number(e.target.value); }}
+            />
+            <EditableValue value={toolState._eraserTolerance || 32} unit="" onCommit={(v) => { toolState._eraserTolerance = v; }} />
+          </div>
+          <div className="option-control">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={toolState._eraserProtectFG === true}
+                onChange={(e) => { toolState._eraserProtectFG = e.target.checked; }}
+              />
+              Protect Foreground Color
+            </label>
+          </div>
+          <div className="options-divider" />
+        </>
+      )}
+
+      {['dodge', 'burn'].includes(activeTool) && (
+        <div className="option-control">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={toolState._toningProtectTones !== false}
+              onChange={(e) => { toolState._toningProtectTones = e.target.checked; }}
+            />
+            Protect Tones
+          </label>
+        </div>
+      )}
+
+      {activeTool === 'sponge' && (
+        <div className="option-control">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={toolState._spongeVibrance === true}
+              onChange={(e) => { toolState._spongeVibrance = e.target.checked; }}
+            />
+            Vibrance
+          </label>
+        </div>
+      )}
       {(activeTool === 'text' || activeTool === 'vertical_text') && (() => {
-        const selectedFamilyData = fonts.find(f => f.family.toLowerCase() === textFontFamily.toLowerCase()) || fonts[0];
-        const nonItalicVariants = selectedFamilyData.variants.filter(v => v.style !== 'italic');
-        const activeVariantId = nonItalicVariants.find(v => v.weight === textFontWeight)?.id || nonItalicVariants[0]?.id || '400';
+        const selectedFamilyData = fonts.find((f: any) => f.family.toLowerCase() === textFontFamily.toLowerCase()) || fonts[0];
+        const nonItalicVariants = selectedFamilyData.variants.filter((v: any) => v.style !== 'italic');
+        const activeVariantId = nonItalicVariants.find((v: any) => v.weight === textFontWeight)?.id || nonItalicVariants[0]?.id || '400';
 
         return (
           <>
@@ -1329,7 +1711,7 @@ const OptionsBar: React.FC = () => {
                               setTextFontFamily(val);
                               loadGoogleFont(val);
                               
-                              const defaultVariant = f.variants.find(v => v.style !== 'italic') || f.variants[0];
+                              const defaultVariant = f.variants.find((v: any) => v.style !== 'italic') || f.variants[0];
                               if (defaultVariant) {
                                 setTextFontWeight(defaultVariant.weight);
                                 setTextFontStyle(defaultVariant.style);
@@ -1371,7 +1753,7 @@ const OptionsBar: React.FC = () => {
               <select
                 value={activeVariantId}
                 onChange={(e) => {
-                  const variant = selectedFamilyData.variants.find(v => v.id === e.target.value);
+                  const variant = selectedFamilyData.variants.find((v: any) => v.id === e.target.value);
                   if (variant) {
                     setTextFontWeight(variant.weight);
                     setTextFontStyle(variant.style);
@@ -1395,7 +1777,7 @@ const OptionsBar: React.FC = () => {
                 className="premium-select"
                 style={{ width: '110px' }}
               >
-                {nonItalicVariants.map(v => (
+                {nonItalicVariants.map((v: any) => (
                   <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
               </select>
@@ -1516,7 +1898,7 @@ const OptionsBar: React.FC = () => {
           <select
             className="preset-select"
             onChange={(e) => {
-              const preset = brushPresets.find(p => p.id === e.target.value);
+              const preset = brushPresets.find((p: any) => p.id === e.target.value);
               if (preset) {
                 setBrushSize(preset.size);
                 setBrushColor(preset.color);
@@ -1528,7 +1910,7 @@ const OptionsBar: React.FC = () => {
             value=""
           >
             <option value="" disabled>Select preset...</option>
-            {brushPresets.map(p => (
+            {brushPresets.map((p: any) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
@@ -1797,4 +2179,4 @@ const OptionsBar: React.FC = () => {
     </div>
   );
 };
-export default OptionsBar;
+export default React.memo(OptionsBar);

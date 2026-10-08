@@ -5,23 +5,29 @@ import React from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from './store/useStore';
 import { toolState } from './tools/toolState';
-import { hexToRgba } from './utils/canvasUtils';
+import { hexToRgba, parseSvgPathToVectorPaths } from './utils/canvasUtils';
+import { traceVectorPath } from './components/Canvas/Core/pathUtils';
 import Canvas from './components/Canvas/Canvas';
 import { GlobalRulers } from './components/Canvas/UI/GlobalRulers';
 import Toolbar from './components/Toolbar/Toolbar';
 import OptionsBar from './components/OptionsBar/OptionsBar';
 
 import { WelcomeOverlay } from './components/UI/WelcomeOverlay';
+import { DefineBrushDialog } from './components/Dialogs/DefineBrushDialog';
+import { DefineCustomShapeDialog } from './components/Dialogs/DefineCustomShapeDialog';
+import { EFFECT_LIST } from './components/Dialogs/LayerStyleDialog';
 
 import MenuBar from './components/MenuBar/MenuBar';
 import TabBar from './components/TabBar/TabBar';
 import { nanoid } from 'nanoid';
-import { uploadToImgur, uploadToImageBB, saveToGoogleDrive } from './utils/cloudServices';
+import { saveToGoogleDrive, uploadToPublicHost } from './utils/cloudServices';
 import { cutSelection, pasteFromClipboard } from './utils/clipboardUtils';
+import { rasterizeAllToDataUrl } from './utils/mergeUtils';
 import { AlertContainer } from './components/UI/AlertContainer';
 import { CollabPermissionPopup } from './components/Modals/CollabPermissionPopup';
 import { initCollaborationSync } from './services/collaboration/collaborationSync';
 import { initUrlStateLoader } from './utils/shareUtils';
+import { initWebMCP, isWebMCPAvailable } from './services/webmcp';
 import './App.css';
 import LayerContextMenu from './components/MenuSystem/LayerContextMenu';
 
@@ -36,6 +42,7 @@ const SignatureDialog = React.lazy(() => import('./components/Dialogs/SignatureD
 const CameraDialog = React.lazy(() => import('./components/Dialogs/CameraDialog').then(m => ({ default: m.CameraDialog })));
 const MobileCameraDialog = React.lazy(() => import('./components/Dialogs/MobileCameraDialog').then(m => ({ default: m.MobileCameraDialog })));
 const AdjustmentDialog = React.lazy(() => import('./components/Dialogs/AdjustmentDialog').then(m => ({ default: m.AdjustmentDialog })));
+const VariablesDialog = React.lazy(() => import('./components/Dialogs/VariablesDialog').then(m => ({ default: m.VariablesDialog })));
 const WarpDialog = React.lazy(() => import('./components/Dialogs/WarpDialog').then(m => ({ default: m.WarpDialog })));
 const OpenRecentDialog = React.lazy(() => import('./components/Dialogs/OpenRecentDialog').then(m => ({ default: m.OpenRecentDialog })));
 const PreferencesDialog = React.lazy(() => import('./components/Dialogs/PreferencesDialog').then(m => ({ default: m.PreferencesDialog })));
@@ -113,6 +120,19 @@ const App: React.FC = () => {
   const [newLayerName, setNewLayerName] = React.useState<string>('');
   const [longPressTimer, setLongPressTimer] = React.useState<NodeJS.Timeout | null>(null);
   const [longPressActiveLayerId, setLongPressActiveLayerId] = React.useState<string | null>(null);
+  const [effectsMenuOpen, setEffectsMenuOpen] = React.useState(false);
+  const effectsMenuRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!effectsMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (effectsMenuRef.current && !effectsMenuRef.current.contains(e.target as Node)) {
+        setEffectsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [effectsMenuOpen]);
 
   const clearLongPressTimer = () => {
     if (longPressTimer) {
@@ -234,7 +254,7 @@ const App: React.FC = () => {
 
               if (e.ctrlKey || e.metaKey) {
                 if (selectedLayerIds.includes(layer.id)) {
-                  setSelectedLayerIds(selectedLayerIds.filter(id => id !== layer.id));
+                  setSelectedLayerIds(selectedLayerIds.filter((id: string) => id !== layer.id));
                 } else {
                   setSelectedLayerIds([...selectedLayerIds, layer.id]);
                 }
@@ -408,6 +428,7 @@ const App: React.FC = () => {
     setIsMobileMenuOpen,
     setIsCanvasSizeDialogOpen,
     setIsImageSizeDialogOpen,
+    setIsVariablesDialogOpen,
     setDocumentSize,
     setActiveTool,
     setToolVariant,
@@ -422,6 +443,9 @@ const App: React.FC = () => {
     setActivePathIndex,
     brushColor,
     primaryOpacity,
+    brushSize,
+    setIsLayerStyleDialogOpen,
+    setLayerStyleActiveTab,
     // togglePanel
   } = useStore();
 
@@ -538,11 +562,14 @@ const App: React.FC = () => {
 
         const children = [];
         // Add metadata as a hidden layer for persistence
+        // ag-psd's Anno writer requires iconLocation/popupLocation rects on every
+        // annotation, so we provide valid (zero) rectangles to avoid a crash.
+        const zeroRect = { top: 0, left: 0, bottom: 0, right: 0 };
         children.push({
           name: '__pixelite_metadata__',
           canvas: document.createElement('canvas'), // Dummy canvas
           visible: false,
-          annotations: [{ type: 'text', data: JSON.stringify(metadata) }] // Custom metadata storage
+          annotations: [{ type: 'text', data: JSON.stringify(metadata), iconLocation: zeroRect, popupLocation: zeroRect }] // Custom metadata storage
         } as any);
 
         for (const layer of [...layers].reverse()) {
@@ -585,11 +612,12 @@ const App: React.FC = () => {
     };
 
     const children = [];
+    const zeroRect = { top: 0, left: 0, bottom: 0, right: 0 };
     children.push({
       name: '__pixelite_metadata__',
       canvas: document.createElement('canvas'),
       visible: false,
-      annotations: [{ type: 'text', data: JSON.stringify(metadata) }]
+      annotations: [{ type: 'text', data: JSON.stringify(metadata), iconLocation: zeroRect, popupLocation: zeroRect }]
     } as any);
 
     for (const layer of [...layers].reverse()) {
@@ -658,8 +686,48 @@ const App: React.FC = () => {
   const setBottomDockCollapsed = useStore(s => s.setBottomDockCollapsed);
 
 
-  const handleFade = () => { alert("Fade action triggered (Placeholder)"); };
-  const handleCopyMerged = () => { alert("Copy Merged action triggered (Placeholder)"); };
+  // Fade requires re-applying the last operation (filter/stroke/etc.) with an
+  // adjustable opacity and blend mode — a pipeline this app does not yet track.
+  // The "Fade..." menu item is gated (disabled) in MenuBar; this handler is a
+  // no-op kept only so the legacy shortcut binding stays wired.
+  const handleFade = () => {};
+  const handleCopyMerged = async () => {
+    if (layers.length === 0) return;
+
+    try {
+      const result = await rasterizeAllToDataUrl(layers, documentSize);
+      if (!result) {
+        addAlert({ type: 'warning', message: 'Nothing visible to copy.' });
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = result.size.w;
+      canvas.height = result.size.h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load composited image'));
+        img.src = result.dataUrl;
+      });
+      ctx.drawImage(img, 0, 0, result.size.w, result.size.h);
+
+      const blobPromise = new Promise<Blob>((resolve) => {
+        canvas.toBlob((b) => resolve(b || new Blob()), 'image/png');
+      });
+
+      const state = useStore.getState();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })]);
+      state.setClipboardDataUrl(canvas.toDataURL('image/png'));
+      state.setClipboardDataRect({ x: 0, y: 0, w: result.size.w, h: result.size.h });
+      addAlert({ type: 'info', message: 'Merged copy placed on clipboard.' });
+    } catch (err) {
+      console.warn('Could not copy merged image to system clipboard:', err);
+    }
+  };
   const handleFreeTransform = () => {
     if (!activeLayerId) {
       addAlert({ type: 'warning', message: 'Please select a layer to transform.' });
@@ -931,15 +999,22 @@ const App: React.FC = () => {
       }
       if (matchShortcut(e, shortcuts.layer_merge || 'Ctrl+E')) {
         e.preventDefault();
-        const selected = useStore.getState().selectedLayerIds.length > 0
-          ? useStore.getState().selectedLayerIds
-          : [useStore.getState().activeLayerId].filter(Boolean) as string[];
-        useStore.getState().mergeLayers?.(selected);
+        // Photoshop "Merge Down" targets the active layer (or the first
+        // selected layer when no active layer is set). Pass it explicitly
+        // so the right layer gets merged even if multiple are selected.
+        const st = useStore.getState();
+        const targetId = st.activeLayerId || st.selectedLayerIds[0] || null;
+        if (targetId) st.mergeLayers?.([targetId]);
         return;
       }
       if (matchShortcut(e, shortcuts.layer_flatten)) {
         e.preventDefault();
         useStore.getState().flattenImage?.();
+        return;
+      }
+      if (matchShortcut(e, shortcuts.layer_merge_visible || 'Shift+Ctrl+E')) {
+        e.preventDefault();
+        useStore.getState().mergeVisible?.();
         return;
       }
 
@@ -972,26 +1047,7 @@ const App: React.FC = () => {
         return;
       }
 
-      // Tools quick selection
-      if (matchShortcut(e, shortcuts.tool_move || 'V')) { e.preventDefault(); useStore.getState().setActiveTool('move'); return; }
-      if (matchShortcut(e, shortcuts.tool_marquee || 'M')) { e.preventDefault(); useStore.getState().setActiveTool('marquee'); return; }
-      if (matchShortcut(e, shortcuts.tool_lasso || 'L')) { e.preventDefault(); useStore.getState().setActiveTool('lasso'); return; }
-      if (matchShortcut(e, shortcuts.tool_quick_selection || 'W')) { e.preventDefault(); useStore.getState().setActiveTool('quick_selection'); return; }
-      if (matchShortcut(e, shortcuts.tool_crop || 'C')) { e.preventDefault(); useStore.getState().setActiveTool('crop'); return; }
-      if (matchShortcut(e, shortcuts.tool_eyedropper || 'I')) { e.preventDefault(); useStore.getState().setActiveTool('eyedropper'); return; }
-      if (matchShortcut(e, shortcuts.tool_healing || 'J')) { e.preventDefault(); useStore.getState().setActiveTool('healing'); return; }
-      if (matchShortcut(e, shortcuts.tool_brush || 'B')) { e.preventDefault(); useStore.getState().setActiveTool('brush'); return; }
-      if (matchShortcut(e, shortcuts.tool_clone || 'S')) { e.preventDefault(); useStore.getState().setActiveTool('clone'); return; }
-      if (matchShortcut(e, shortcuts.tool_eraser || 'E')) { e.preventDefault(); useStore.getState().setActiveTool('eraser'); return; }
-      if (matchShortcut(e, shortcuts.tool_gradient || 'G')) { e.preventDefault(); useStore.getState().setActiveTool('gradient'); return; }
-      if (matchShortcut(e, shortcuts.tool_dodge || 'O')) { e.preventDefault(); useStore.getState().setActiveTool('dodge'); return; }
-      if (matchShortcut(e, shortcuts.tool_pen || 'P')) { e.preventDefault(); useStore.getState().setActiveTool('pen'); return; }
-      if (matchShortcut(e, shortcuts.tool_text || 'T')) { e.preventDefault(); useStore.getState().setActiveTool('text'); return; }
-      if (matchShortcut(e, shortcuts.tool_shape || 'U')) { e.preventDefault(); useStore.getState().setActiveTool('shape'); return; }
-      if (matchShortcut(e, shortcuts.tool_hand || 'H')) { e.preventDefault(); useStore.getState().setActiveTool('hand'); return; }
-      if (matchShortcut(e, shortcuts.tool_zoom || 'Z')) { e.preventDefault(); useStore.getState().setActiveTool('zoom_tool'); return; }
-
-      // Tools shortcut groups cycling
+      // Tool cycling — runs first so it takes priority over individual shortcuts below
       const shortcutGroups: Record<string, string[]> = {
         'v': ['move', 'artboard'],
         'm': ['marquee', 'ellipse_marquee'],
@@ -1041,16 +1097,17 @@ const App: React.FC = () => {
         const tools = shortcutGroups[key];
         if (tools) {
           e.preventDefault();
+
           const currentActiveTool = useStore.getState().activeTool;
-          let nextTool = '';
           const activeIndex = tools.indexOf(currentActiveTool);
+          let nextTool = '';
 
           if (activeIndex !== -1) {
-            // Already active in this group, cycle to the next tool!
+            // Already in this group — cycle to next tool
             const nextIndex = (activeIndex + 1) % tools.length;
             nextTool = tools[nextIndex];
           } else {
-            // Not active in this group, check if we have a saved active variant for the group
+            // Not active in this group — select the saved variant or first tool
             const firstToolGroupId = toolToGroupMap[tools[0]];
             const savedVariant = useStore.getState().activeToolVariants[firstToolGroupId];
             if (savedVariant && tools.includes(savedVariant)) {
@@ -1062,12 +1119,31 @@ const App: React.FC = () => {
 
           if (nextTool) {
             const groupId = toolToGroupMap[nextTool];
-            setActiveTool(nextTool as any);
             setToolVariant(groupId, nextTool as any);
             toolState.currentTool = nextTool;
           }
+          return;
         }
       }
+
+      // Tools quick selection (only reached when not cycling above)
+      if (matchShortcut(e, shortcuts.tool_move || 'V')) { e.preventDefault(); useStore.getState().setActiveTool('move'); return; }
+      if (matchShortcut(e, shortcuts.tool_marquee || 'M')) { e.preventDefault(); useStore.getState().setActiveTool('marquee'); return; }
+      if (matchShortcut(e, shortcuts.tool_lasso || 'L')) { e.preventDefault(); useStore.getState().setActiveTool('lasso'); return; }
+      if (matchShortcut(e, shortcuts.tool_quick_selection || 'W')) { e.preventDefault(); useStore.getState().setActiveTool('quick_selection'); return; }
+      if (matchShortcut(e, shortcuts.tool_crop || 'C')) { e.preventDefault(); useStore.getState().setActiveTool('crop'); return; }
+      if (matchShortcut(e, shortcuts.tool_eyedropper || 'I')) { e.preventDefault(); useStore.getState().setActiveTool('eyedropper'); return; }
+      if (matchShortcut(e, shortcuts.tool_healing || 'J')) { e.preventDefault(); useStore.getState().setActiveTool('healing'); return; }
+      if (matchShortcut(e, shortcuts.tool_brush || 'B')) { e.preventDefault(); useStore.getState().setActiveTool('brush'); return; }
+      if (matchShortcut(e, shortcuts.tool_clone || 'S')) { e.preventDefault(); useStore.getState().setActiveTool('clone'); return; }
+      if (matchShortcut(e, shortcuts.tool_eraser || 'E')) { e.preventDefault(); useStore.getState().setActiveTool('eraser'); return; }
+      if (matchShortcut(e, shortcuts.tool_gradient || 'G')) { e.preventDefault(); useStore.getState().setActiveTool('gradient'); return; }
+      if (matchShortcut(e, shortcuts.tool_dodge || 'O')) { e.preventDefault(); useStore.getState().setActiveTool('dodge'); return; }
+      if (matchShortcut(e, shortcuts.tool_pen || 'P')) { e.preventDefault(); useStore.getState().setActiveTool('pen'); return; }
+      if (matchShortcut(e, shortcuts.tool_text || 'T')) { e.preventDefault(); useStore.getState().setActiveTool('text'); return; }
+      if (matchShortcut(e, shortcuts.tool_shape || 'U')) { e.preventDefault(); useStore.getState().setActiveTool('shape'); return; }
+      if (matchShortcut(e, shortcuts.tool_hand || 'H')) { e.preventDefault(); useStore.getState().setActiveTool('hand'); return; }
+      if (matchShortcut(e, shortcuts.tool_zoom || 'Z')) { e.preventDefault(); useStore.getState().setActiveTool('zoom_tool'); return; }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -1116,55 +1192,262 @@ const App: React.FC = () => {
       // Now handle the result by type:
       if (result.type === 'psd') {
         const { workerExportBridge } = await import('./services/export/WorkerExportBridge');
-        const psdData = await workerExportBridge.parsePSD(result.psdData);
-        // Extract lighting metadata if it exists
-        const metadataLayer = psdData.children?.find((c: any) => c.name === '__pixelite_metadata__');
-        let lightingMetadata: any = {};
 
-        if (metadataLayer) {
-          const meta = metadataLayer as any;
-          if (meta.annotations && meta.annotations[0]) {
-            try {
-              lightingMetadata = JSON.parse(meta.annotations[0].data);
-              console.log('[Lighting] Restored metadata from PSD:', lightingMetadata);
-            } catch (e) {
-              console.warn('[Lighting] Failed to parse PSD metadata', e);
-            }
+        // ag-psd attaches `annotations` to the document (Psd), not to individual layers.
+        // Pixelite writes its lighting metadata as the first annotation on save, so look there.
+        let psdData: any;
+        try {
+          psdData = await workerExportBridge.parsePSD(result.psdData);
+        } catch (parseErr) {
+          console.error('[PSD] Failed to parse file:', parseErr);
+          useStore.getState().addAlert({
+            type: 'error',
+            message: `Could not open PSD: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+          });
+          setIsProcessing(false);
+          setProcessingText('');
+          return;
+        }
+
+        let lightingMetadata: any = {};
+        const firstAnnotation = psdData?.annotations?.[0];
+        if (firstAnnotation && firstAnnotation.data) {
+          try {
+            const dataStr = typeof firstAnnotation.data === 'string'
+              ? firstAnnotation.data
+              : new TextDecoder().decode(firstAnnotation.data as Uint8Array);
+            lightingMetadata = JSON.parse(dataStr);
+            console.log('[Lighting] Restored metadata from PSD:', lightingMetadata);
+          } catch (e) {
+            console.warn('[Lighting] Failed to parse PSD metadata', e);
           }
         }
 
-        const loadedLayers: any[] = [];
-        const processPsdLayer = (child: any) => {
-          if (child.children) {
-            child.children.forEach(processPsdLayer);
-          } else if (child.dataUrl) {
-            loadedLayers.push({
-              id: nanoid(),
-              name: child.name || 'Layer',
-              type: 'image' as const,
-              dataUrl: child.dataUrl,
-              position: { x: child.left || 0, y: child.top || 0 },
-              visible: child.hidden !== true,
-              locked: false,
-              opacity: typeof child.opacity === 'number' ? child.opacity : 1,
-              blendMode: child.blendMode === 'pass through' || !child.blendMode ? 'source-over' : child.blendMode
-            });
-          } else if (child.canvas) {
-            loadedLayers.push({
-              id: nanoid(),
-              name: child.name || 'Layer',
-              type: 'image' as const,
-              dataUrl: child.canvas.toDataURL(),
-              position: { x: child.left || 0, y: child.top || 0 },
-              visible: child.visible !== false,
-              locked: false,
-              opacity: typeof child.opacity === 'number' ? child.opacity : 1,
-              blendMode: child.blendMode || 'normal'
-            });
-          }
+        // Build the layer tree. ag-psd returns layers top-to-bottom in `children`; Pixelite
+        // stores them bottom-to-top, so the outer list gets reversed at the end.
+
+        // ── Helpers for converting ag-psd vector shapes → Pixelite shape layers ──
+        // ag-psd stores shape geometry in `vectorMask.paths` (BezierKnot[] where each
+        // knot.points = [ax, ay, inX, inY, outX, outY], anchor + control handles, in
+        // document pixel space). It does NOT rasterize shapes to canvas/imageData, so
+        // these layers would otherwise be dropped. We convert them to editable shapes.
+        const psdColorToHex = (color: any): string => {
+          if (!color) return '#000000';
+          const r = color.r ?? 0, g = color.g ?? 0, b = color.b ?? 0;
+          const toHex = (c: number) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0');
+          return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
         };
-        if (psdData.children) psdData.children.forEach(processPsdLayer);
-        const layersToUse = loadedLayers.reverse();
+
+        const bezierPathsToSvg = (paths: any[], offsetX: number, offsetY: number): string => {
+          const d: string[] = [];
+          for (const path of paths) {
+            const knots = path.knots || [];
+            if (knots.length === 0) continue;
+            const toLocal = (x: number, y: number) => [x - offsetX, y - offsetY];
+            // First knot anchor → MoveTo
+            let [sx, sy] = toLocal(knots[0].points[0], knots[0].points[1]);
+            d.push(`M ${sx.toFixed(2)} ${sy.toFixed(2)}`);
+            const n = knots.length;
+            for (let i = 0; i < n; i++) {
+              const cur = knots[i];
+              const next = knots[(i + 1) % n];
+              // out-handle of current → in-handle of next → next anchor
+              const [outX, outY] = toLocal(cur.points[4], cur.points[5]);
+              const [inX, inY] = toLocal(next.points[2], next.points[3]);
+              const [nx, ny] = toLocal(next.points[0], next.points[1]);
+              if (i === n - 1 && path.open) {
+                // Open path: line/bezier to last anchor, no closing
+                d.push(`C ${outX.toFixed(2)} ${outY.toFixed(2)} ${inX.toFixed(2)} ${inY.toFixed(2)} ${nx.toFixed(2)} ${ny.toFixed(2)}`);
+              } else {
+                d.push(`C ${outX.toFixed(2)} ${outY.toFixed(2)} ${inX.toFixed(2)} ${inY.toFixed(2)} ${nx.toFixed(2)} ${ny.toFixed(2)}`);
+              }
+            }
+            if (!path.open) d.push('Z');
+          }
+          return d.join(' ');
+        };
+
+        // Compute the bounding box of a set of bezier knots (using anchor points only).
+        const knotBounds = (paths: any[]) => {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (const path of paths) {
+            for (const k of path.knots || []) {
+              const x = k.points[0], y = k.points[1];
+              if (x < minX) minX = x;
+              if (y < minY) minY = y;
+              if (x > maxX) maxX = x;
+              if (y > maxY) maxY = y;
+            }
+          }
+          if (minX === Infinity) return null;
+          return { minX, minY, maxX, maxY };
+        };
+
+        const psdLayerToAppLayer = (child: any): any | null => {
+          const hasChildren = Array.isArray(child.children) && child.children.length > 0;
+          // A layer is a "group" if it has child layers AND is not itself a leaf
+          // (shape/text/adjustment). ag-psd represents groups via `children`.
+          const isGroup = hasChildren && !child.vectorMask && !child.text && !child.adjustment;
+
+          // Recurse first so child group layers are processed.
+          let appChildren: any[] | undefined;
+          if (hasChildren) {
+            const converted = child.children!.map(psdLayerToAppLayer).filter(Boolean);
+            if (converted.length > 0) {
+              appChildren = converted;
+            }
+          }
+
+          // Resolve layer pixel data — ag-psd fills in `canvas` (default) or `imageData`
+          // (when ReadOptions.useImageData is true). Both branches set `dataUrl` for us.
+          let dataUrl: string | undefined = (child as any).dataUrl;
+          if (!dataUrl && child.canvas instanceof HTMLCanvasElement) {
+            try { dataUrl = child.canvas.toDataURL('image/png'); } catch (e) { /* tainted, skip */ }
+          }
+
+          const layerWidth = (typeof child.right === 'number' && typeof child.left === 'number')
+            ? Math.max(1, child.right - child.left) : undefined;
+          const layerHeight = (typeof child.bottom === 'number' && typeof child.top === 'number')
+            ? Math.max(1, child.bottom - child.top) : undefined;
+
+          // ── Vector shape layers (Photopea / Photoshop shape tools) ──
+          // ag-psd does NOT rasterize these; they come back with vectorMask + vectorFill
+          // but no canvas/imageData. Convert to a Pixelite `shape` layer.
+          if (!dataUrl && child.vectorMask && Array.isArray(child.vectorMask.paths) && child.vectorMask.paths.length > 0) {
+            const bounds = knotBounds(child.vectorMask.paths);
+            if (bounds) {
+              const w = Math.max(1, Math.ceil(bounds.maxX - bounds.minX));
+              const h = Math.max(1, Math.ceil(bounds.maxY - bounds.minY));
+              const svgPath = bezierPathsToSvg(child.vectorMask.paths, bounds.minX, bounds.minY);
+              const fill = child.vectorFill ? psdColorToHex((child.vectorFill as any).color) : '#000000';
+              const stroke = child.vectorStroke && (child.vectorStroke as any).content
+                ? psdColorToHex((child.vectorStroke as any).content.color)
+                : '#000000';
+              const strokeWidth = child.vectorStroke && (child.vectorStroke as any).lineWidth
+                ? ((child.vectorStroke as any).lineWidth.value ?? 0) : 0;
+              console.log(`[PSD] Converted shape layer "${child.name}": ${w}x${h} svg="${svgPath.slice(0, 60)}..."`);
+              return {
+                id: nanoid(),
+                name: child.name || 'Shape',
+                type: 'shape' as const,
+                position: { x: Math.round(bounds.minX), y: Math.round(bounds.minY) },
+                width: w,
+                height: h,
+                visible: child.hidden !== true,
+                locked: !!child.transparencyProtected,
+                opacity: typeof child.opacity === 'number' ? child.opacity : 1,
+                blendMode: child.blendMode === 'pass through' || !child.blendMode ? 'source-over' : child.blendMode,
+                shapeData: {
+                  type: 'path',
+                  svgPath,
+                  fill,
+                  stroke,
+                  strokeWidth,
+                  fillRule: (child.vectorMask.paths[0]?.fillRule === 'even-odd') ? 'evenodd' : 'nonzero',
+                  closed: !child.vectorMask.paths[0]?.open,
+                },
+                ...(appChildren ? { children: appChildren } : {}),
+              };
+            }
+          }
+
+          if (isGroup) {
+            // Group layer — preserve hierarchy, no own pixel content.
+            return {
+              id: nanoid(),
+              name: child.name || 'Group',
+              type: 'group' as const,
+              visible: child.hidden !== true,
+              locked: !!child.transparencyProtected,
+              opacity: typeof child.opacity === 'number' ? child.opacity : 1,
+              blendMode: child.blendMode === 'pass through' || !child.blendMode ? 'source-over' : child.blendMode,
+              children: appChildren,
+              collapsed: child.opened === false,
+              ...(layerWidth !== undefined ? { width: layerWidth } : {}),
+              ...(layerHeight !== undefined ? { height: layerHeight } : {}),
+              position: { x: child.left || 0, y: child.top || 0 },
+            };
+          }
+
+          if (!dataUrl) {
+            // Layer with neither pixels nor shape data (e.g. empty/adjustment) —
+            // keep it in the panel as a placeholder so nothing silently disappears.
+            console.warn(`[PSD] Layer "${child.name}" has no decodable pixels or shape; keeping as placeholder.`);
+            return {
+              id: nanoid(),
+              name: child.name || 'Layer',
+              type: 'image' as const,
+              visible: child.hidden !== true,
+              locked: !!child.transparencyProtected,
+              opacity: typeof child.opacity === 'number' ? child.opacity : 1,
+              blendMode: child.blendMode === 'pass through' || !child.blendMode ? 'source-over' : child.blendMode,
+              position: { x: child.left || 0, y: child.top || 0 },
+              ...(layerWidth !== undefined ? { width: layerWidth } : {}),
+              ...(layerHeight !== undefined ? { height: layerHeight } : {}),
+              ...(appChildren ? { children: appChildren } : {}),
+            };
+          }
+
+          return {
+            id: nanoid(),
+            name: child.name || 'Layer',
+            type: 'image' as const,
+            dataUrl,
+            position: { x: child.left || 0, y: child.top || 0 },
+            visible: child.hidden !== true,
+            locked: !!child.transparencyProtected,
+            opacity: typeof child.opacity === 'number' ? child.opacity : 1,
+            blendMode: child.blendMode === 'pass through' || !child.blendMode ? 'source-over' : child.blendMode,
+            ...(layerWidth !== undefined ? { width: layerWidth } : {}),
+            ...(layerHeight !== undefined ? { height: layerHeight } : {}),
+            ...(appChildren ? { children: appChildren } : {}),
+          };
+        };
+
+        const convertedTopLevel: any[] = (psdData.children || [])
+          .map(psdLayerToAppLayer)
+          .filter(Boolean);
+
+        // Fallback: if no per-layer pixels came through, use the document composite so the
+        // user at least sees *something* (Photoshop would show the flattened image).
+        if (convertedTopLevel.length === 0 && psdData.canvas instanceof HTMLCanvasElement) {
+          try {
+            const compositeUrl = psdData.canvas.toDataURL('image/png');
+            if (compositeUrl) {
+              convertedTopLevel.push({
+                id: nanoid(),
+                name: 'Background',
+                type: 'image' as const,
+                dataUrl: compositeUrl,
+                position: { x: 0, y: 0 },
+                visible: true,
+                locked: false,
+                opacity: 1,
+                blendMode: 'source-over',
+                width: psdData.width,
+                height: psdData.height,
+              });
+              useStore.getState().addAlert({
+                type: 'warning',
+                message: 'PSD opened as a flattened image — per-layer data was not available.',
+              });
+            }
+          } catch (e) {
+            console.warn('[PSD] Composite fallback also failed', e);
+          }
+        }
+
+        if (convertedTopLevel.length === 0) {
+          useStore.getState().addAlert({
+            type: 'error',
+            message: 'PSD contains no decodable layers or composite image.',
+          });
+          setIsProcessing(false);
+          setProcessingText('');
+          return;
+        }
+
+        const layersToUse = convertedTopLevel.reverse();
 
         const projectState = {
           layers: layersToUse,
@@ -1180,6 +1463,10 @@ const App: React.FC = () => {
             canvasOffset: { x: 0, y: 0 },
             history: [{ name: 'Open PSD', state: projectState }],
             historyIndex: 0
+          });
+          useStore.getState().addAlert({
+            type: 'success',
+            message: `Opened PSD: ${convertedTopLevel.length} layer${convertedTopLevel.length === 1 ? '' : 's'} • ${psdData.width}×${psdData.height}`,
           });
         } else {
           const offsetLayers = layersToUse.map((pg) => ({
@@ -1903,6 +2190,41 @@ const App: React.FC = () => {
     addDocument();
   };
 
+  const handleDuplicateImage = () => {
+    const currentLayers = useStore.getState().layers;
+    const currentSize = useStore.getState().documentSize;
+    const currentName = useStore.getState().activeDocumentName || 'Untitled';
+
+    // Deep clone layers to ensure the duplicate is fully independent
+    const clonedLayers = JSON.parse(JSON.stringify(currentLayers));
+
+    // If layers have dataUrl (canvas pixels), strip them so layers render
+    // with their position/size instead of immediately stamping a full-image
+    // canvas on top of each other at (0,0).
+    const cleanLayers = clonedLayers.map((layer: any) => {
+      if (!layer.dataUrl) return layer;
+      const restored = { ...layer, dataUrl: undefined };
+      // Ensure non-background layers keep their explicit position/size so
+      // positioned objects don't all collapse to the origin.
+      if (layer.type !== 'paint' || layer.name !== 'Background') {
+        restored.position = layer.position ?? { x: 0, y: 0 };
+        restored.width = layer.width ?? currentSize.w;
+        restored.height = layer.height ?? currentSize.h;
+      }
+      return restored;
+    });
+
+    const docState = {
+      layers: cleanLayers,
+      documentSize: { ...currentSize },
+      activeLayerId: cleanLayers[0]?.id ?? null,
+      history: [],
+      historyIndex: 0,
+    };
+
+    addDocument(`${currentName} copy`, currentSize, docState);
+  };
+
   const handleExport = async (format: string) => {
     if (format === 'psd') {
       try {
@@ -2345,6 +2667,22 @@ const App: React.FC = () => {
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Register the editor's functions as WebMCP tools so an in-browser agent
+  // (e.g. Chrome's Gemini agent mode) can drive the app. No-op when the
+  // runtime does not expose `document.modelContext`.
+  React.useEffect(() => {
+    if (!isWebMCPAvailable()) return;
+    initWebMCP().then((res) => {
+      if (res.ok) {
+        // eslint-disable-next-line no-console
+        console.info(`[WebMCP] init complete: ${res.count} tools registered.`);
+      }
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[WebMCP] init failed:', err);
+    });
   }, []);
 
   const handleCopy = async () => {
@@ -2932,6 +3270,28 @@ const App: React.FC = () => {
     recordHistory('Deselect');
   };
 
+  // Expose a stable bridge of app-level handlers for non-store consumers
+  // (notably the WebMCP service, which runs in the page context and prefers
+  // calling real handlers over re-implementing their logic).
+  React.useEffect(() => {
+    (window as any).__pixelite = {
+      openFile: () => document.getElementById('global-file-input')?.click(),
+      openURL: handleOpenURL,
+      takeSnapshot: handleTakeSnapshot,
+      save: handleSave,
+      print: handlePrint,
+      cut: handleCut,
+      copy: handleCopy,
+      fillLayer: () => useStore.getState().setIsPrecisionFillDialogOpen(true),
+      selectAll: handleSelectAll,
+      deselect: handleDeselect,
+      selectSubject: handleSelectSubject,
+      removeBackground: handleRemoveBackground,
+      freeTransform: handleFreeTransform,
+      grayscale: handleGrayscale,
+    };
+  }, [handleOpenURL, handleTakeSnapshot, handleSave, handlePrint, handleCut, handleCopy, handleSelectAll, handleDeselect, handleSelectSubject, handleRemoveBackground, handleFreeTransform, handleGrayscale]);
+
   const renderHeader = () => {
     return (
       <header className="app-header">
@@ -2964,6 +3324,7 @@ const App: React.FC = () => {
           canRedo={historyIndex < history.length - 1}
           onInvert={handleInvert}
           onDuplicateLayer={() => activeLayerId && duplicateLayer(activeLayerId)}
+          onDuplicateImage={handleDuplicateImage}
           onDeleteLayer={() => activeLayerId && removeLayer(activeLayerId)}
           onFillLayer={() => setIsFillPickerOpen(true)}
           onSelectSubject={handleSelectSubject}
@@ -2990,6 +3351,9 @@ const App: React.FC = () => {
           }}
           onImageSize={() => {
             setIsImageSizeDialogOpen(true);
+          }}
+          onVariables={() => {
+            setIsVariablesDialogOpen(true);
           }}
           onAddEmptyLayer={() => addLayer({ name: `Layer ${layers.length + 1}` })}
           onSelectAll={handleSelectAll}
@@ -3025,16 +3389,7 @@ const App: React.FC = () => {
             store.setIsExportDialogOpen(true);
           }}
           onDefineBrush={() => {
-            const name = prompt('Brush Preset Name:');
-            if (!name) return;
-            const state = useStore.getState();
-            state.addBrushPreset({
-              name,
-              size: state.brushSize,
-              color: state.brushColor,
-              hardness: state.toolHardness,
-              opacity: state.primaryOpacity,
-            });
+            useStore.getState().setIsDefineBrushDialogOpen(true);
           }}
           onDefinePattern={() => {
             const state = useStore.getState();
@@ -3052,21 +3407,7 @@ const App: React.FC = () => {
             }
           }}
           onDefineCustomShape={() => {
-            const state = useStore.getState();
-            const layer = state.layers.find(l => l.id === state.activeLayerId);
-            if (!layer || layer.type !== 'shape' || !layer.shapeData?.points) {
-              alert('Please select a shape layer first to define a custom shape.');
-              return;
-            }
-            const name = prompt('Custom Shape Name:');
-            if (!name) return;
-            state.addCustomShapePreset({
-              name,
-              shapeData: {
-                points: layer.shapeData.points,
-                closed: layer.shapeData.closed ?? true,
-              },
-            });
+            useStore.getState().setIsDefineCustomShapeDialogOpen(true);
           }}
           onAssignProfile={(profile) => useStore.getState().setIccProfile(profile)}
           onConvertToProfile={(profile) => useStore.getState().setIccProfile(profile)}
@@ -3134,6 +3475,9 @@ const App: React.FC = () => {
           <OpenRecentDialog />
           <PreferencesDialog />
           <KeyboardShortcutsDialog />
+          <DefineBrushDialog />
+          <DefineCustomShapeDialog />
+          <VariablesDialog />
           <ServerlessShareModal />
         </React.Suspense>
         <AlertContainer />
@@ -3353,7 +3697,7 @@ const App: React.FC = () => {
                       { icon: <LucideIcons.Sliders size={16} />, label: 'Ch. Mixer', action: 'channel_mixer' },
                       { icon: <LucideIcons.Layers size={16} />, label: 'Color Lkp', action: 'color_lookup' },
                       { icon: <LucideIcons.RefreshCw size={16} />, label: 'Invert' },
-                      { icon: <LucideIcons.BarChart2 size={16} />, label: 'Posterize' },
+                      { icon: <LucideIcons.BarChart2 size={16} />, label: 'Posterize', action: 'posterize' },
                       { icon: <LucideIcons.Triangle size={16} />, label: 'Threshold' },
                       { icon: <LucideIcons.Map size={16} />, label: 'Grad Map' },
                       { icon: <LucideIcons.Filter size={16} />, label: 'Sel. Color' },
@@ -3437,7 +3781,7 @@ const App: React.FC = () => {
                             value={activeLayer.blendMode || 'source-over'}
                             onChange={(e) => {
                               const mode = e.target.value as any;
-                              targetIds.forEach(id => updateLayer(id, { blendMode: mode }));
+                              targetIds.forEach((id: string) => updateLayer(id, { blendMode: mode }));
                             }}
                           >
                              <option value="source-over">Normal</option>
@@ -3476,7 +3820,7 @@ const App: React.FC = () => {
                               value={activeLayer.opacity || 0}
                               onChange={(e) => {
                                 const val = parseFloat(e.target.value);
-                                targetIds.forEach(id => updateLayer(id, { opacity: val }));
+                                targetIds.forEach((id: string) => updateLayer(id, { opacity: val }));
                               }}
                             />
                             {isEditingOpacity ? (
@@ -3493,7 +3837,7 @@ const App: React.FC = () => {
                                   const val = parseInt(tempOpacityValue);
                                   if (!isNaN(val)) {
                                     const opacityVal = Math.max(0, Math.min(1, val / 100));
-                                    targetIds.forEach(id => updateLayer(id, { opacity: opacityVal }));
+                                    targetIds.forEach((id: string) => updateLayer(id, { opacity: opacityVal }));
                                   }
                                 }}
                                 onKeyDown={(e) => {
@@ -3524,7 +3868,7 @@ const App: React.FC = () => {
                               disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockTransparent;
-                                targetIds.forEach(id => updateLayer(id, { lockTransparent: newVal }));
+                                targetIds.forEach((id: string) => updateLayer(id, { lockTransparent: newVal }));
                                 recordHistory(`Toggle Lock Transparency`);
                               }}
                               title="Lock transparent pixels"
@@ -3536,7 +3880,7 @@ const App: React.FC = () => {
                               disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockPixels;
-                                targetIds.forEach(id => updateLayer(id, { lockPixels: newVal }));
+                                targetIds.forEach((id: string) => updateLayer(id, { lockPixels: newVal }));
                                 recordHistory(`Toggle Lock Pixels`);
                               }}
                               title="Lock image pixels"
@@ -3548,7 +3892,7 @@ const App: React.FC = () => {
                               disabled={isLayerOrDescendantsLocked(activeLayer)}
                               onClick={() => {
                                 const newVal = !activeLayer.lockPosition;
-                                targetIds.forEach(id => updateLayer(id, { lockPosition: newVal }));
+                                targetIds.forEach((id: string) => updateLayer(id, { lockPosition: newVal }));
                                 recordHistory(`Toggle Lock Position`);
                               }}
                               title="Lock position"
@@ -3559,7 +3903,7 @@ const App: React.FC = () => {
                               className={`lock-btn ${isLayerOrDescendantsLocked(activeLayer) ? 'active' : ''}`}
                               onClick={() => {
                                 const newVal = !isLayerOrDescendantsLocked(activeLayer);
-                                targetIds.forEach(id => updateLayer(id, { locked: newVal }));
+                                targetIds.forEach((id: string) => updateLayer(id, { locked: newVal }));
                                 recordHistory(newVal ? `Toggle Lock All` : `Toggle Unlock All`);
                               }}
                               title="Lock all"
@@ -3576,7 +3920,7 @@ const App: React.FC = () => {
                               value={activeLayer.fill !== undefined ? activeLayer.fill : 1}
                               onChange={(e) => {
                                 const val = parseFloat(e.target.value);
-                                targetIds.forEach(id => updateLayer(id, { fill: val }));
+                                targetIds.forEach((id: string) => updateLayer(id, { fill: val }));
                               }}
                             />
                             {isEditingFill ? (
@@ -3593,7 +3937,7 @@ const App: React.FC = () => {
                                   const val = parseInt(tempFillValue);
                                   if (!isNaN(val)) {
                                     const fillVal = Math.max(0, Math.min(1, val / 100));
-                                    targetIds.forEach(id => updateLayer(id, { fill: fillVal }));
+                                    targetIds.forEach((id: string) => updateLayer(id, { fill: fillVal }));
                                   }
                                 }}
                                 onKeyDown={(e) => {
@@ -3635,9 +3979,59 @@ const App: React.FC = () => {
                     <button title="Link Layers" className="layers-footer-btn">
                       <LucideIcons.Link size={13} />
                     </button>
-                    <button title="Layer Effects" className="layers-footer-btn">
-                      <LucideIcons.Wand2 size={13} />
-                    </button>
+                    <div className="effects-menu-wrap" ref={effectsMenuRef} style={{ position: 'relative' }}>
+                      <button
+                        title="Layer Effects"
+                        className="layers-footer-btn"
+                        disabled={!activeLayerId}
+                        onClick={() => setEffectsMenuOpen(o => !o)}
+                      >
+                        <LucideIcons.Wand2 size={13} />
+                      </button>
+                      {effectsMenuOpen && (
+                        <div className="effects-dropdown" style={{
+                          position: 'absolute',
+                          bottom: '100%',
+                          left: 0,
+                          marginBottom: 4,
+                          background: '#1e1e1e',
+                          border: '1px solid #3a3a3a',
+                          borderRadius: 4,
+                          padding: 4,
+                          minWidth: 160,
+                          zIndex: 50,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                        }}>
+                          {EFFECT_LIST.map((eff) => (
+                            <button
+                              key={eff.key}
+                              className="effects-dropdown-item"
+                              style={{
+                                display: 'block',
+                                width: '100%',
+                                textAlign: 'left',
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#ddd',
+                                padding: '5px 8px',
+                                fontSize: 12,
+                                borderRadius: 3,
+                                cursor: 'pointer',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = '#333')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                              onClick={() => {
+                                setLayerStyleActiveTab(eff.key as any);
+                                setIsLayerStyleDialogOpen(true);
+                                setEffectsMenuOpen(false);
+                              }}
+                            >
+                              {eff.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <button title="Add Layer Mask" className="layers-footer-btn">
                       <LucideIcons.Square size={13} />
                     </button>
@@ -3735,12 +4129,20 @@ const App: React.FC = () => {
                       const shapePathEntry = activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData ? {
                         name: `${activeLayer.name} Vector Mask`,
                         points: activeLayer.shapeData.points || (
-                          activeLayer.shapeData.type === 'rect' ? [
-                            { x: 0, y: 0 },
-                            { x: activeLayer.shapeData.w, y: 0 },
-                            { x: activeLayer.shapeData.w, y: activeLayer.shapeData.h },
-                            { x: 0, y: activeLayer.shapeData.h }
-                          ] : []
+                          activeLayer.shapeData.type === 'path' && activeLayer.shapeData.svgPath
+                            ? (() => {
+                                // Parse the rasterized/converted svgPath into editable subpaths
+                                // in document space so the Paths panel can describe and act on it.
+                                const offset = activeLayer.position || { x: 0, y: 0 };
+                                const parsed = parseSvgPathToVectorPaths(activeLayer.shapeData.svgPath, offset);
+                                return parsed.flatMap(p => p.points);
+                              })()
+                            : activeLayer.shapeData.type === 'rect' ? [
+                                { x: 0, y: 0 },
+                                { x: activeLayer.shapeData.w, y: 0 },
+                                { x: activeLayer.shapeData.w, y: activeLayer.shapeData.h },
+                                { x: 0, y: activeLayer.shapeData.h }
+                              ] : []
                         ),
                         closed: activeLayer.shapeData.closed !== false,
                         smooth: activeLayer.shapeData.type === 'ellipse' || activeLayer.shapeData.smooth
@@ -3802,12 +4204,18 @@ const App: React.FC = () => {
                       const shapePathEntry = activeLayer && activeLayer.type === 'shape' && activeLayer.shapeData ? {
                         name: `${activeLayer.name} Vector Mask`,
                         points: activeLayer.shapeData.points || (
-                          activeLayer.shapeData.type === 'rect' ? [
-                            { x: 0, y: 0 },
-                            { x: activeLayer.shapeData.w, y: 0 },
-                            { x: activeLayer.shapeData.w, y: activeLayer.shapeData.h },
-                            { x: 0, y: activeLayer.shapeData.h }
-                          ] : []
+                          activeLayer.shapeData.type === 'path' && activeLayer.shapeData.svgPath
+                            ? (() => {
+                                const offset = activeLayer.position || { x: 0, y: 0 };
+                                const parsed = parseSvgPathToVectorPaths(activeLayer.shapeData.svgPath, offset);
+                                return parsed.flatMap(p => p.points);
+                              })()
+                            : activeLayer.shapeData.type === 'rect' ? [
+                                { x: 0, y: 0 },
+                                { x: activeLayer.shapeData.w, y: 0 },
+                                { x: activeLayer.shapeData.w, y: activeLayer.shapeData.h },
+                                { x: 0, y: activeLayer.shapeData.h }
+                              ] : []
                         ),
                         closed: activeLayer.shapeData.closed !== false,
                         smooth: activeLayer.shapeData.type === 'ellipse' || activeLayer.shapeData.smooth
@@ -3827,21 +4235,34 @@ const App: React.FC = () => {
                                 const shapeData = activeLayer.shapeData;
                                 let pts = shapeData.points;
                                 if (!pts || pts.length === 0) {
+                                  const w = shapeData.w || 0;
+                                  const h = shapeData.h || 0;
                                   if (shapeData.type === 'rect') {
                                     pts = [
                                       { x: 0, y: 0 },
-                                      { x: shapeData.w, y: 0 },
-                                      { x: shapeData.w, y: shapeData.h },
-                                      { x: 0, y: shapeData.h }
+                                      { x: w, y: 0 },
+                                      { x: w, y: h },
+                                      { x: 0, y: h }
                                     ];
+                                  } else if (shapeData.type === 'path' && shapeData.svgPath) {
+                                    // Converted text shape or any svgPath-based shape:
+                                    // expose its (possibly multi-subpath) geometry as a
+                                    // selection. For now, use the first subpath's outer
+                                    // points; holes (additional closed subpaths) are
+                                    // preserved below as additional lasso paths.
+                                    const offset = activeLayer.position || { x: 0, y: 0 };
+                                    const parsed = parseSvgPathToVectorPaths(shapeData.svgPath, offset);
+                                    if (parsed.length > 0) {
+                                      pts = parsed[0].points;
+                                    }
                                   } else if (shapeData.type === 'ellipse') {
                                     pts = [];
                                     const steps = 36;
                                     for (let i = 0; i < steps; i++) {
                                       const angle = (i / steps) * Math.PI * 2;
                                       pts.push({
-                                        x: shapeData.w / 2 + Math.cos(angle) * (shapeData.w / 2),
-                                        y: shapeData.h / 2 + Math.sin(angle) * (shapeData.h / 2)
+                                        x: w / 2 + Math.cos(angle) * (w / 2),
+                                        y: h / 2 + Math.sin(angle) * (h / 2)
                                       });
                                     }
                                   }
@@ -3902,6 +4323,31 @@ const App: React.FC = () => {
                             <LucideIcons.CircleDashed size={13} />
                           </button>
                           <button
+                            title="Stroke Path"
+                            className="layers-footer-btn"
+                            disabled={!hasActivePath || shapePathEntry !== null || !activeLayerId || !layers.find((l: any) => l.id === activeLayerId && l.type === 'paint')}
+                            onClick={() => {
+                              if (activePathIndex !== null && vectorPaths[activePathIndex] && activeLayerId) {
+                                const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+                                const ctx = canvas?.getContext('2d');
+                                if (ctx && canvas) {
+                                  ctx.save();
+                                  ctx.strokeStyle = hexToRgba(brushColor, primaryOpacity);
+                                  ctx.lineWidth = brushSize || 1;
+                                  ctx.lineCap = 'round';
+                                  ctx.lineJoin = 'round';
+                                  traceVectorPath(ctx, vectorPaths[activePathIndex]);
+                                  ctx.stroke();
+                                  ctx.restore();
+                                  updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+                                  recordHistory('Stroke Path');
+                                }
+                              }
+                            }}
+                          >
+                            <LucideIcons.PenLine size={13} />
+                          </button>
+                          <button
                             title="Fill Path"
                             className="layers-footer-btn"
                             disabled={!hasActivePath || shapePathEntry !== null || !activeLayerId || !layers.find((l: any) => l.id === activeLayerId && l.type === 'paint')}
@@ -3912,16 +4358,8 @@ const App: React.FC = () => {
                                 if (ctx && canvas) {
                                   ctx.save();
                                   ctx.fillStyle = hexToRgba(brushColor, primaryOpacity);
-                                  ctx.beginPath();
-                                  const path = vectorPaths[activePathIndex];
-                                  if (path.points.length > 0) {
-                                    ctx.moveTo(path.points[0].x, path.points[0].y);
-                                    for (let j = 1; j < path.points.length; j++) {
-                                      ctx.lineTo(path.points[j].x, path.points[j].y);
-                                    }
-                                    if (path.closed) ctx.closePath();
-                                    ctx.fill();
-                                  }
+                                  traceVectorPath(ctx, vectorPaths[activePathIndex]);
+                                  ctx.fill();
                                   ctx.restore();
                                   updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
                                   recordHistory('Fill Path');
@@ -4008,19 +4446,14 @@ const App: React.FC = () => {
             isOpen={true}
             onClose={() => setSaveModal({ type: null })}
             service={saveModal.provider}
-            onUpload={async (service) => {
+            onUpload={async (service, customKeys) => {
               const dataUrl = getMergedImageData();
-              if (!dataUrl) throw new Error('No image data');
+              if (!dataUrl) throw new Error('No canvas image data');
 
-              if (service === 'imgur') {
-                return await uploadToImgur(dataUrl);
-              } else if (service === 'imagebb') {
-                return await uploadToImageBB(dataUrl);
-              } else {
-                // Fallback for others
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                return `https://${service}.com/share/a7b2c9d${Math.floor(Math.random() * 10000)}`;
-              }
+              return await uploadToPublicHost(dataUrl, service, {
+                customImgurClientId: customKeys?.imgurKey,
+                customImageBBKey: customKeys?.imageBBKey,
+              });
             }}
           />
         )}
@@ -4050,7 +4483,11 @@ const App: React.FC = () => {
             useStore.getState().duplicateLayer(id);
           }}
           onMergeDown={(id) => {
-            useStore.getState().mergeLayers?.([id]);
+            // Set the right-clicked layer as the active layer first so the
+            // store's "active layer" target matches the user's intent.
+            const st = useStore.getState();
+            st.setActiveLayer(id);
+            st.mergeLayers?.([id]);
           }}
           onSetAsCanvas={(id) => {
             const st = useStore.getState();
@@ -4114,6 +4551,10 @@ const App: React.FC = () => {
         <PreferencesDialog />
         <KeyboardShortcutsDialog />
         <PrecisionFillDialog />
+        <DefineCustomShapeDialog />
+        <VariablesDialog />
+        <DefineBrushDialog />
+        <ServerlessShareModal />
       </React.Suspense>
       <AlertContainer />
       <CollabPermissionPopup />

@@ -9,6 +9,10 @@ export const editTransformMenu: MenuItem[] = [
   ] },
   { divider: true },
   { label: 'Free Transform', shortcut: 'Ctrl+T', action: (s) => s.setActiveTool?.('transform') },
+  { label: 'Perspective Warp', action: (s) => s.setActiveTool('perspective_warp') },
+  { label: 'Puppet Warp', action: (s) => {
+    s.setTransformMode('puppet');
+    s.setActiveTool('transform');
+  } },
   { label: 'Content-Aware Scale', action: (s) => s.setIsContentAwareScaleDialogOpen(true) },
-  { label: 'Puppet Warp', action: (s) => s.setActiveTool?.('puppet_warp') },
 ];

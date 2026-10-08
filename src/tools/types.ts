@@ -15,7 +15,7 @@ export interface ToolContext {
   strokeWidth: number;
   activeLayerId: string | null;
   layers: any[];
-  selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
+  selectionMode: 'replace' | 'subtract' | 'intersect' | 'unite';
   selectionTolerance: number;
   selectionContiguous: boolean;
   selectionRect: { x: number, y: number, w: number, h: number } | null;

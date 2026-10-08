@@ -8,19 +8,25 @@ interface ToolButtonProps {
   label: string;
   shortcut: string;
   hasVariants?: boolean;
+  variantCount?: number;
   onClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
 
-const ToolButton: React.FC<ToolButtonProps> = ({ 
-  active, 
-  icon: Icon, 
-  label, 
-  shortcut, 
-  hasVariants, 
-  onClick, 
-  onContextMenu 
+const ToolButton: React.FC<ToolButtonProps> = ({
+  active,
+  icon: Icon,
+  label,
+  shortcut,
+  hasVariants,
+  variantCount,
+  onClick,
+  onContextMenu
 }) => {
+  const tooltip = hasVariants && variantCount && variantCount > 1
+    ? `${label} (${shortcut.toUpperCase()}) — Click to cycle (${variantCount} tools)`
+    : `${label} (${shortcut.toUpperCase()})`;
+
   return (
     <button
       className={`tool-btn ${active ? 'active' : ''}`}
@@ -29,10 +35,10 @@ const ToolButton: React.FC<ToolButtonProps> = ({
         e.preventDefault();
         onContextMenu(e);
       }}
-      title={`${label} (${shortcut.toUpperCase()})`}
+      title={tooltip}
     >
       <Icon size={20} />
-      {hasVariants && <div className="variant-indicator" />}
+      {hasVariants && variantCount && variantCount > 1 && <div className="variant-indicator" />}
     </button>
   );
 };

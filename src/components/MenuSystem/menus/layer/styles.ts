@@ -21,6 +21,6 @@ export const layerStylesMenu: MenuItem[] = [
     { label: 'Send Backward', action: (s) => s.activeLayerId && s.moveLayer?.(s.activeLayerId, 'down') },
     { label: 'Send to Back', action: (s) => s.activeLayerId && s.reorderLayers?.(s.layers.findIndex(l => l.id === s.activeLayerId), s.layers.length - 1) }
   ] },
-  { label: 'Merge Layers', action: (s) => s.mergeLayers?.(s.layers.map(l => l.id)) },
+  { label: 'Merge Down', action: (s) => s.mergeLayers?.() },
   { label: 'Flatten Image', action: (s) => s.flattenImage?.() },
 ];

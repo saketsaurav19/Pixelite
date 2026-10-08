@@ -7,7 +7,7 @@ export type Tool =
   | 'blur' | 'sharpen' | 'smudge' | 'dodge' | 'burn' | 'sponge' | 'text' | 'vertical_text' | 'pen' | 'free_pen'
   | 'curvature_pen' | 'add_anchor' | 'delete_anchor' | 'convert_point' | 'path_select' | 'direct_select'
   | 'shape' | 'ellipse_shape' | 'triangle_shape' | 'polygon_shape' | 'line_shape' | 'custom_shape'
-  | 'hand' | 'rotate_view' | 'zoom_tool' | 'lighting' | 'transform';
+  | 'hand' | 'rotate_view' | 'zoom_tool' | 'lighting' | 'transform' | 'perspective_warp' | 'mesh_warp';
 
 export type BlendMode = GlobalCompositeOperation | 'pass through' | 'dissolve' | 'linear-burn' | 'darker-color' | 'linear-dodge' | 'lighter-color' | 'vivid-light' | 'linear-light' | 'pin-light' | 'hard-mix' | 'subtract' | 'divide';
 
@@ -69,6 +69,33 @@ export interface AnnotationData {
   exportValue?: string;
 }
 
+/* ==========================================================================
+   Image > Variables — template / data-binding system (Photopea-style)
+   ========================================================================== */
+
+export type VariableType = 'visibility' | 'text_content' | 'pixel_content';
+
+/** A variable links a layer property to a named column in the dataset table. */
+export interface DocumentVariable {
+  id: string;
+  layerId: string;
+  type: VariableType;
+  /** Column key — must match a dataset column header (unique across variables). */
+  name: string;
+}
+
+/** One row of the dataset table = one exported variant. */
+export interface DataSet {
+  id: string;
+  /** Column name -> cell value. */
+  values: Record<string, string>;
+}
+
+export interface VariablesState {
+  variables: DocumentVariable[];
+  dataSets: DataSet[];
+}
+
 export type Layer = BaseLayer & {
   type: 'image' | 'paint' | 'text' | 'shape' | 'group' | 'artboard' | 'table' | 'adjustment';
   width?: number;
@@ -79,7 +106,7 @@ export type Layer = BaseLayer & {
   /** For PDF background layers in vector mode: raw SVG markup string */
   svgMarkup?: string;
   adjustmentData?: {
-    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup';
+    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize';
     settings: {
       brightness?: number;
       contrast?: number;
@@ -124,6 +151,9 @@ export type Layer = BaseLayer & {
         size?: number;
         fileName?: string;
       };
+      posterize?: {
+        levels: number;
+      };
     };
   };
 
@@ -145,7 +175,7 @@ export type Layer = BaseLayer & {
   isVertical?: boolean;
   textAlign?: 'left' | 'center' | 'right';
   shapeData?: {
-    type: 'rect' | 'path' | 'ellipse';
+    type: 'rect' | 'path' | 'ellipse' | 'compound';
     w?: number; h?: number;
     points?: { x: number; y: number }[];
     fill: string; stroke: string; strokeWidth: number;
@@ -153,6 +183,11 @@ export type Layer = BaseLayer & {
     closed?: boolean;
     cornerRadius?: number;
     svgPath?: string;
+    fillRule?: 'nonzero' | 'evenodd';
+    /** Compound-shape children (only when type === 'compound'). */
+    childIds?: string[];
+    /** Compound boolean op (default: 'union'). */
+    booleanOp?: 'union' | 'subtract' | 'intersect' | 'exclude';
   };
   thumbnail?: string;
   depthMap?: string;
@@ -199,9 +234,22 @@ export type Layer = BaseLayer & {
     }>;
   };
   corners?: { x: number; y: number }[];
-  warpGrid?: { x: number; y: number }[];
-  warpGridSize?: { rows: number; cols: number };
+  puppetPins?: { x: number; y: number }[];
+  /** Original placement positions of `puppetPins` (layer-local) — the rest anchors
+   *  the MLS deformation always solves from, so repeated drags don't accumulate. */
+  puppetRestPins?: { x: number; y: number }[];
+  /** Version of the mesh algorithm that built `puppetTriangles`/`warpGrid`, so old
+   *  meshes (e.g. a plain grid from a previous algorithm) are rebuilt on re-entry. */
+  puppetMeshVersion?: number;
+  puppetTriangles?: number[];
+  puppetRestPoints?: { x: number; y: number }[];
   textWarp?: TextWarp;
+  warpGrid?: { x: number; y: number }[];
+
+  // Perspective Warp mesh (stored on layer for persistence, managed by toolState during editing)
+  warpMesh?: { vertices: any[]; edges: any[]; faces: any[] };
+  warpMeshSelection?: { vertexIds: string[]; edgeIds: string[]; faceIds: string[] };
+  warpMeshRest?: { vertices: any[]; edges: any[]; faces: any[] };
 };
 
 export interface Light {
@@ -236,7 +284,7 @@ export interface DocumentSpecificState {
   slices: { id: string; rect: { x: number; y: number; w: number; h: number } }[];
   colorSamplers: { id: string; x: number; y: number; color: string }[];
   rulerData: { start: { x: number; y: number }; end: { x: number; y: number } } | null;
-  vectorPaths: { points: { x: number; y: number }[]; closed: boolean; smooth?: boolean }[];
+  vectorPaths: { id?: string; points: { x: number; y: number; handleIn?: { x: number; y: number }; handleOut?: { x: number; y: number } }[]; closed: boolean; smooth?: boolean }[];
   activePathIndex: number | null;
   penMode: 'path' | 'shape';
   cloneSource: { x: number; y: number } | null;
@@ -319,8 +367,10 @@ export interface EditorState extends DocumentSpecificState {
   textFontStyle: string;
   textAlign: 'left' | 'center' | 'right';
   textEditor: { x: number; y: number; value: string; layerId?: string } | null;
+  transformMode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp' | 'puppet';
+  setTransformMode: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp' | 'puppet') => void;
   selectionShape: 'rect' | 'ellipse' | 'lasso';
-  selectionMode: 'new' | 'add' | 'subtract' | 'intersect';
+  selectionMode: 'replace' | 'subtract' | 'intersect' | 'unite';
 
   clipboardDataUrl: string | null;
   clipboardLayer: any | null;
@@ -340,7 +390,7 @@ export interface EditorState extends DocumentSpecificState {
   isFilterGalleryDialogOpen: boolean;
   filterGallerySelectedType: string;
   isLayerStyleDialogOpen: boolean;
-  layerStyleActiveTab: 'blending' | 'shadow' | 'stroke';
+  layerStyleActiveTab: 'blending' | 'shadow' | 'stroke' | 'dropShadow' | 'innerShadow' | 'innerGlow' | 'outerGlow' | 'bevelAndEmboss' | 'contour' | 'texture' | 'satin' | 'colorOverlay' | 'gradientOverlay' | 'patternOverlay' | 'strokeStyle' | 'd3d';
   isColorRangeDialogOpen: boolean;
   isTransformSelectionDialogOpen: boolean;
   documentLayout: 'tabs' | 'cascade' | 'tile' | 'float';
@@ -368,8 +418,8 @@ export interface EditorState extends DocumentSpecificState {
   isSignatureDialogOpen: boolean;
   mobileCapturedImage: string | null;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null) => void;
   adjustmentSourceLayerId: string | null;
   setAdjustmentSourceLayerId: (id: string | null) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
@@ -381,7 +431,7 @@ export interface EditorState extends DocumentSpecificState {
   setIsFilterGalleryDialogOpen: (isOpen: boolean) => void;
   setFilterGallerySelectedType: (type: string) => void;
   setIsLayerStyleDialogOpen: (isOpen: boolean) => void;
-  setLayerStyleActiveTab: (tab: 'blending' | 'shadow' | 'stroke') => void;
+  setLayerStyleActiveTab: (tab: 'blending' | 'shadow' | 'stroke' | 'dropShadow' | 'innerShadow' | 'innerGlow' | 'outerGlow' | 'bevelAndEmboss' | 'contour' | 'texture' | 'satin' | 'colorOverlay' | 'gradientOverlay' | 'patternOverlay' | 'strokeStyle' | 'd3d') => void;
   setIsColorRangeDialogOpen: (isOpen: boolean) => void;
   setIsTransformSelectionDialogOpen: (isOpen: boolean) => void;
   setDocumentLayout: (layout: 'tabs' | 'cascade' | 'tile' | 'float') => void;

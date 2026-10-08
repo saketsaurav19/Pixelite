@@ -90,6 +90,9 @@ export interface AdjustmentSettings {
     size?: number;
     fileName?: string;
   };
+  posterize?: {
+    levels: number; // 2..255
+  };
 }
 
 /**
@@ -895,6 +898,37 @@ export async function applyPixiAdjustments(
 
     // Extract base64 representation
     resultDataUrl = await app.renderer.extract.base64(app.stage);
+
+    // Posterize: quantize each color channel to N levels.
+    // Applied as a 2D canvas post-pass — keeps the WebGL pipeline untouched
+    // and matches how the dialog re-runs the whole adjustment on each tick.
+    if (settings.posterize) {
+      const n = Math.max(2, Math.min(255, Math.round(settings.posterize.levels)));
+      const posterizeImg = new Image();
+      posterizeImg.src = resultDataUrl;
+      await new Promise<void>((resolve) => {
+        if (posterizeImg.complete) return resolve();
+        posterizeImg.onload = () => resolve();
+        posterizeImg.onerror = () => resolve();
+      });
+      const postCanvas = document.createElement('canvas');
+      postCanvas.width = posterizeImg.naturalWidth || width;
+      postCanvas.height = posterizeImg.naturalHeight || height;
+      const postCtx = postCanvas.getContext('2d');
+      if (postCtx) {
+        postCtx.drawImage(posterizeImg, 0, 0);
+        const postData = postCtx.getImageData(0, 0, postCanvas.width, postCanvas.height);
+        const px = postData.data;
+        const step = 255 / (n - 1);
+        for (let i = 0; i < px.length; i += 4) {
+          px[i]     = Math.round(Math.round(px[i]     / step) * step);
+          px[i + 1] = Math.round(Math.round(px[i + 1] / step) * step);
+          px[i + 2] = Math.round(Math.round(px[i + 2] / step) * step);
+        }
+        postCtx.putImageData(postData, 0, 0);
+        resultDataUrl = postCanvas.toDataURL('image/png');
+      }
+    }
   } catch (error) {
     throw error;
   } finally {

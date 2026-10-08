@@ -49,6 +49,7 @@ export const startAction = (
     setVectorPaths: (val: any) => void;
     setActivePathIndex: (val: number | null) => void;
     setSelectedPoint: (val: any) => void;
+    setCurrentMousePos?: (val: Point) => void;
     recordHistory: (label: string) => void;
     handleEyedropper: (x: number, y: number) => void;
   },
@@ -87,12 +88,10 @@ export const startAction = (
   }
 
   const isAltPressedLocal = (e as any).altKey || context.isAlt;
-  const isCtrlPressedLocal = (e as any).ctrlKey || (e as any).metaKey || context.isCtrl;
   let currentTool = activeTool;
 
   if (['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor'].includes(activeTool as string)) {
-    if (isCtrlPressedLocal) currentTool = 'direct_select' as any;
-    else if (isAltPressedLocal) currentTool = 'convert_point' as any;
+    if (isAltPressedLocal) currentTool = 'convert_point' as any;
   }
 
   // Perspective Crop special handling (if inside quad)
@@ -119,12 +118,31 @@ export const startAction = (
   }
 
   const activeToolModule = getToolModule(currentTool);
-  // Allow start without ctx for tools that don't need it (crop, hand, etc)
   if (activeToolModule?.start) {
-    activeToolModule.start(context as any);
+    const storeState = useStore.getState();
+    const liveVectorPaths = storeState.vectorPaths ?? [];
+    const liveActivePathIndex = storeState.activePathIndex;
+
+    const enrichedContext = {
+      ...context,
+      setVectorPaths: handlers.setVectorPaths,
+      setActivePathIndex: handlers.setActivePathIndex,
+      setCurrentMousePos: handlers.setCurrentMousePos,
+      setSelectedPoint: handlers.setSelectedPoint,
+      penMode: storeState.penMode,
+      selectedPoint: context.selectedPoint,
+      vectorPaths: liveVectorPaths,
+      activePathIndex: liveActivePathIndex,
+    };
+    activeToolModule.start(enrichedContext as any);
+
     refs.lastPointRef.current = coords;
     refs.startMouseRef.current = { x: clientX, y: clientY };
     refs.startOffsetRef.current = { ...canvasOffset };
+
+    if (['free_pen', 'direct_select', 'path_select', 'convert_point', 'add_anchor', 'delete_anchor', 'pen', 'curvature_pen'].includes(currentTool)) {
+      handlers.setIsInteracting(true);
+    }
     return;
   }
 
@@ -213,8 +231,9 @@ export const moveAction = (
     activePathIndex: number | null;
   }
 ) => {
-  const { coords, activeTool, zoom, isAlt, isCtrl } = context;
-  
+  const { coords, activeTool, zoom, isAlt } = context;
+  const isAltPressedLocal = isAlt;
+
   const toolsNeedingMousePos = ['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor', 'convert_point', 'path_select', 'direct_select', 'lasso', 'polygonal_lasso', 'magnetic_lasso', 'gradient'];
   if (toolsNeedingMousePos.includes(activeTool as string)) {
     handlers.setCurrentMousePos(coords);
@@ -237,13 +256,19 @@ export const moveAction = (
 
   let currentTool = activeTool;
   if (['pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor'].includes(activeTool as string)) {
-    if (isCtrl) currentTool = 'direct_select' as any;
-    else if (isAlt) currentTool = 'convert_point' as any;
+    if (isAltPressedLocal) currentTool = 'convert_point' as any;
   }
 
   const toolModule = getToolModule(currentTool);
   if (toolModule?.move) {
-    toolModule.move(context as any);
+    const liveVectorPaths = useStore.getState().vectorPaths ?? [];
+    const enrichedMoveContext = {
+      ...(context as any),
+      lastPoint: refs.lastPointRef.current,
+      vectorPaths: liveVectorPaths,
+      selectedPoint: state.selectedPoint,
+    };
+    toolModule.move(enrichedMoveContext as any);
     refs.lastPointRef.current = coords;
     return;
   }

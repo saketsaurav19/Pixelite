@@ -16,7 +16,8 @@ import { startAction as startActionHandler, moveAction as moveActionHandler, end
 import { handleTouchStart as handleTouchStartUtil, handleTouchMove as handleTouchMoveUtil } from './Events/touchHandlers';
 import { BRUSH_TOOLS } from './Core/toolUtils';
 import { toolState } from '../../tools/toolState';
-import { warpQuad, drawTrianglesWarp } from '../../utils/canvasUtils';
+import { warpQuad, drawTrianglesWarp, parseSvgPathToVectorPaths } from '../../utils/canvasUtils';
+import { renderDelaunayMesh } from '../../utils/puppetWarpUtils';
 import { useLayerRendering } from './Rendering/useLayerRendering';
 import { useThumbnailGeneration } from './Rendering/useThumbnailGeneration';
 import { useSelectionAnimation } from './Rendering/useSelectionAnimation';
@@ -123,7 +124,6 @@ const Canvas: React.FC = () => {
   const startMouseRef = useRef<{ x: number; y: number } | null>(null); // Coordinate where the current action began
   const startOffsetRef = useRef<{ x: number, y: number } | null>(null); // Canvas offset when drag began
   const draftTextCanvasRef = useRef<HTMLCanvasElement>(null); // Overlay for live text preview
-  const selectionCanvasRef = useRef<HTMLCanvasElement>(null); // Overlay for animated selection (marching ants)
   const stackRef = useRef<HTMLDivElement>(null); // The scaled/rotated container of all canvases
   const hiddenTextInputRef = useRef<HTMLTextAreaElement>(null); // Hidden input to capture keyboard events for text tool
 
@@ -164,6 +164,139 @@ const Canvas: React.FC = () => {
     lastActiveToolRef.current = activeTool as string;
     lastActiveLayerIdRef.current = activeLayerId;
   }, [activeTool, activeLayerId, layers, documentSize, setCropRect]);
+
+  // ---- Shape <-> vectorPaths round-trip ----
+  // Path-class tools only see vectorPaths (a transient editing workspace). Shape
+  // layers (e.g. a text layer converted via "Layer > Text > Convert to Shape")
+  // store their geometry in shapeData.svgPath. This effect bridges the two:
+  // when a path tool is activated on a shape layer whose path lives in svgPath,
+  // we parse it into vectorPaths so the tools/VectorOverlay can edit it; on exit
+  // (tool change, layer change, or drag release) we serialize vectorPaths back
+  // into shapeData.svgPath. editingShapeIdRef tracks which shape was loaded so
+  // unrelated Pen-drawn paths never get written into a shape layer.
+  const editingShapeIdRef = useRef<string | null>(null);
+  const wasInteractingRef = useRef(false);
+
+  const PATH_TOOLS = [
+    'pen', 'curvature_pen', 'free_pen', 'add_anchor', 'delete_anchor',
+    'convert_point', 'path_select', 'direct_select',
+  ];
+
+  // Convert a vectorPaths[] (document space) into a SVG-path string in shape-local
+  // space (subtract layer position). Each subpath re-emits as M + a mix of
+  // C/Q/L segments based on the handles each anchor carries, closed with Z.
+  // Holes are preserved because each subpath stays separate and the shape
+  // uses fillRule: 'evenodd'.
+  //
+  // Per-anchor emission rules (matches what `parseSvgPathToVectorPaths` produces
+  // from fontkit output, so the round-trip is faithful):
+  //   - both handleIn and handleOut set           -> emit C (cp1 = prev.handleOut, cp2 = this.handleIn)
+  //   - handleIn == handleOut (degenerate Q)      -> emit Q (cp = this.handleIn)
+  //   - neither handle set                        -> emit L
+  //   - only one of the two                       -> emit L (we can't faithfully round-trip a half-set)
+  const vectorPathsToSvgPath = (
+    paths: {
+      points: { x: number; y: number; handleIn?: { x: number; y: number }; handleOut?: { x: number; y: number } }[];
+      closed: boolean;
+      smooth?: boolean;
+    }[],
+    offset: { x: number; y: number }
+  ): string => {
+    const ox = offset.x || 0;
+    const oy = offset.y || 0;
+    const round = (n: number) => Math.round(n * 100) / 100;
+    const eq = (a: { x: number; y: number } | undefined, b: { x: number; y: number } | undefined) =>
+      !!a && !!b && Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
+    let d = '';
+    paths.forEach((p) => {
+      if (!p.points || p.points.length < 2) return;
+      const local = p.points.map((pt) => ({
+        x: pt.x - ox,
+        y: pt.y - oy,
+        handleIn: pt.handleIn ? { x: pt.handleIn.x - ox, y: pt.handleIn.y - oy } : undefined,
+        handleOut: pt.handleOut ? { x: pt.handleOut.x - ox, y: pt.handleOut.y - oy } : undefined,
+      }));
+      d += `M ${round(local[0].x)} ${round(local[0].y)} `;
+      for (let i = 1; i < local.length; i++) {
+        const prev = local[i - 1];
+        const cur = local[i];
+        if (prev.handleOut && cur.handleIn) {
+          if (eq(prev.handleOut, cur.handleIn)) {
+            // Degenerate Q: both handles point to the same spot.
+            d += `Q ${round(cur.handleIn.x)} ${round(cur.handleIn.y)} ${round(cur.x)} ${round(cur.y)} `;
+          } else {
+            d += `C ${round(prev.handleOut.x)} ${round(prev.handleOut.y)} ${round(cur.handleIn.x)} ${round(cur.handleIn.y)} ${round(cur.x)} ${round(cur.y)} `;
+          }
+        } else {
+          d += `L ${round(cur.x)} ${round(cur.y)} `;
+        }
+      }
+      if (p.closed) d += 'Z ';
+    });
+    return d.trim();
+  };
+
+  const writeBackShape = (layerId: string, currentVectorPaths: any[]) => {
+    const layer = findLayerById(layers, layerId);
+    if (!layer || layer.type !== 'shape' || !layer.shapeData) return;
+    if (layer.shapeData.type !== 'path') return;
+    const offset = layer.position || { x: 0, y: 0 };
+    const svgPath = vectorPathsToSvgPath(currentVectorPaths, offset);
+    if (!svgPath) return;
+    updateLayer(layerId, {
+      shapeData: { ...layer.shapeData, svgPath, fillRule: layer.shapeData.fillRule || 'evenodd' },
+    });
+  };
+
+  // Load on tool/layer change.
+  useEffect(() => {
+    const isPathTool = PATH_TOOLS.includes(activeTool as string);
+    const editingId = editingShapeIdRef.current;
+
+    // If we were editing a shape and the user moved away (tool or layer) -> write back.
+    if (editingId && (editingId !== activeLayerId || !isPathTool)) {
+      writeBackShape(editingId, vectorPaths);
+      editingShapeIdRef.current = null;
+      setVectorPaths([]);
+      setActivePathIndex(null);
+    }
+
+    // If the user is on a path tool and the active layer is a shape with svgPath
+    // (and no points) and we are not already editing it -> load it.
+    if (isPathTool && activeLayerId) {
+      if (editingShapeIdRef.current !== activeLayerId) {
+        const layer = findLayerById(layers, activeLayerId);
+        if (layer && layer.type === 'shape' && layer.shapeData && layer.shapeData.type === 'path') {
+          const offset = layer.position || { x: 0, y: 0 };
+          if (layer.shapeData.svgPath && (!layer.shapeData.points || layer.shapeData.points.length === 0)) {
+            const parsed = parseSvgPathToVectorPaths(layer.shapeData.svgPath, offset);
+            if (parsed.length > 0) {
+              editingShapeIdRef.current = activeLayerId;
+              setVectorPaths(parsed as any);
+              setActivePathIndex(0);
+            }
+          } else if (layer.shapeData.points && layer.shapeData.points.length > 0) {
+            // Shape already has editable points in document space.
+            editingShapeIdRef.current = activeLayerId;
+            setVectorPaths([{ points: layer.shapeData.points, closed: layer.shapeData.closed !== false } as any]);
+            setActivePathIndex(0);
+          }
+        }
+      }
+    }
+    // We intentionally exclude `vectorPaths` from deps — loading is keyed on
+    // tool/layer identity only; the next effect re-runs on vectorPaths to write
+    // back at interaction end.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTool, activeLayerId, layers]);
+
+  // Write back when an interaction (drag) ends while editing a shape.
+  useEffect(() => {
+    if (wasInteractingRef.current && !isInteracting && editingShapeIdRef.current) {
+      writeBackShape(editingShapeIdRef.current, vectorPaths);
+    }
+    wasInteractingRef.current = isInteracting;
+  }, [isInteracting, vectorPaths]);
 
   useEffect(() => {
     const currentEditor = useStore.getState().textEditor;
@@ -249,8 +382,9 @@ const Canvas: React.FC = () => {
   // Asynchronously generates layer thumbnails for the sidebar
   useThumbnailGeneration(layers, documentSize, canvasRefs, updateLayer);
 
-  // Manages the high-performance animation frame for selection "marching ants"
-  useSelectionAnimation(selectionCanvasRef, {
+  // Retained hook to preserve any selection-related re-render wiring;
+  // actual selection visuals are now rendered by SelectionOverlay / VectorOverlay.
+  useSelectionAnimation({
     lassoPaths, vectorPaths, selectionRect, isInverseSelection,
     isInteracting, activeTool, currentMousePos, zoom,
     selectionShape: store.selectionShape, activePathIndex, penMode,
@@ -507,37 +641,22 @@ const Canvas: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Backspace' || e.key === 'Delete') {
-        if (activeTool === 'polygonal_lasso' || activeTool === 'magnetic_lasso') {
-          if (lassoPaths.length > 0) {
-            setLassoPaths((prev: { x: number; y: number }[][]) => {
-              const next = [...prev];
-              const currentPath = [...next[next.length - 1]];
-              if (currentPath.length > 1) {
-                currentPath.pop();
-                next[next.length - 1] = currentPath;
-              } else {
-                next.pop();
-                setIsInteracting(false);
-              }
-              return next;
-            });
-          }
-        } else {
-          const isTyping = document.activeElement?.tagName === 'INPUT' || 
-                            document.activeElement?.tagName === 'TEXTAREA' || 
-                            (document.activeElement as HTMLElement)?.contentEditable === 'true';
-          if (!textEditor && !isTyping && activeLayerId) {
-            const hasSelection = selectionRect || (lassoPaths && lassoPaths.length > 0);
-            if (hasSelection) {
+        const isTyping =
+          !!textEditor ||
+          document.activeElement?.tagName === 'INPUT' ||
+          document.activeElement?.tagName === 'TEXTAREA' ||
+          (document.activeElement as HTMLElement)?.contentEditable === 'true';
+        if (!isTyping && activeLayerId) {
+          const hasSelection = selectionRect || (lassoPaths && lassoPaths.length > 0);
+          if (hasSelection) {
+            e.preventDefault();
+            clearSelection();
+          } else {
+            const currentLayers = useStore.getState().layers;
+            if (flattenTree(currentLayers).length > 1) {
               e.preventDefault();
-              clearSelection();
-            } else {
-              const currentLayers = useStore.getState().layers;
-              if (flattenTree(currentLayers).length > 1) {
-                e.preventDefault();
-                removeLayer(activeLayerId);
-                recordHistory('Delete Layer');
-              }
+              removeLayer(activeLayerId);
+              recordHistory('Delete Layer');
             }
           }
         }
@@ -747,7 +866,48 @@ const Canvas: React.FC = () => {
           let ys: number[] = [];
           let bakedCanvas: HTMLCanvasElement | null = null;
           
-          if (mode === 'warp' && layer.warpGrid) {
+          if (mode === 'puppet' && layer.warpGrid && layer.puppetRestPoints && layer.puppetTriangles) {
+            const layerX = layer.position?.x || 0;
+            const layerY = layer.position?.y || 0;
+            xs = layer.warpGrid.map(p => p.x + layerX);
+            ys = layer.warpGrid.map(p => p.y + layerY);
+
+            if (xs.length > 0) {
+              const xMin = Math.min(...xs);
+              const xMax = Math.max(...xs);
+              const yMin = Math.min(...ys);
+              const yMax = Math.max(...ys);
+              const wBbox = Math.max(1, Math.round(xMax - xMin));
+              const hBbox = Math.max(1, Math.round(yMax - yMin));
+
+              bakedCanvas = document.createElement('canvas');
+              bakedCanvas.width = wBbox;
+              bakedCanvas.height = hBbox;
+              const ctx = bakedCanvas.getContext('2d')!;
+
+              const dstPoints = layer.warpGrid.map(p => ({
+                x: p.x + layerX - xMin,
+                y: p.y + layerY - yMin
+              }));
+
+              renderDelaunayMesh(ctx, origCanvas, layer.puppetRestPoints, dstPoints, layer.puppetTriangles);
+
+              updateLayer(activeLayerId, {
+                dataUrl: bakedCanvas.toDataURL(),
+                position: { x: xMin, y: yMin },
+                width: wBbox,
+                height: hBbox,
+                rotation: 0,
+                corners: undefined,
+                warpGrid: undefined,
+                puppetPins: undefined,
+                puppetRestPins: undefined,
+                puppetRestPoints: undefined,
+                puppetTriangles: undefined,
+                puppetMeshVersion: undefined
+              });
+            }
+          } else if (mode === 'warp' && layer.warpGrid) {
             xs = layer.warpGrid.map(p => p.x);
             ys = layer.warpGrid.map(p => p.y);
             
@@ -871,7 +1031,12 @@ const Canvas: React.FC = () => {
         updateLayer(orig.id, {
           ...toolState._transformOriginalLayer,
           corners: undefined,
-          warpGrid: undefined
+          warpGrid: undefined,
+          puppetPins: undefined,
+          puppetRestPins: undefined,
+          puppetRestPoints: undefined,
+          puppetTriangles: undefined,
+          puppetMeshVersion: undefined
         });
       } else {
         updateLayer(orig.id, {
@@ -880,7 +1045,12 @@ const Canvas: React.FC = () => {
           height: orig.height,
           rotation: orig.rotation,
           corners: undefined,
-          warpGrid: undefined
+          warpGrid: undefined,
+          puppetPins: undefined,
+          puppetRestPins: undefined,
+          puppetRestPoints: undefined,
+          puppetTriangles: undefined,
+          puppetMeshVersion: undefined
         });
       }
     }

@@ -13,6 +13,7 @@ export const imageAdjustmentMenu: MenuItem[] = [
     { label: 'Color Balance', action: (store) => store.addAdjustmentLayer('color_balance') },
     { label: 'Channel Mixer', action: (store) => store.addAdjustmentLayer('channel_mixer') },
     { label: 'Color Lookup', action: (store) => store.addAdjustmentLayer('color_lookup') },
+    { label: 'Posterize', action: (store) => store.addAdjustmentLayer('posterize') },
   ] },
   { label: 'Auto Tone', action: (store) => store.autoTone() },
   { label: 'Auto Contrast', action: (store) => store.autoContrast() },

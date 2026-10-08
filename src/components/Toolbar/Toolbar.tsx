@@ -23,6 +23,8 @@ interface ToolGroup {
   tools: ToolInfo[];
 }
 
+const SELECTION_GROUP_IDS = new Set(['marquee', 'lasso', 'selection']);
+
 const TOOL_GROUPS: ToolGroup[] = [
   {
     id: 'move',
@@ -174,6 +176,13 @@ const TOOL_GROUPS: ToolGroup[] = [
     ],
   },
   {
+    id: 'transform',
+    tools: [
+      { id: 'transform', icon: LucideIcons.Crop, label: 'Transform', shortcut: 'Ctrl+T' },
+      { id: 'mesh_warp', icon: LucideIcons.MoveDiagonal2, label: 'Mesh Warp', shortcut: 'Ctrl+Alt+T' },
+    ],
+  },
+  {
     id: 'hand',
     tools: [
       { id: 'hand', icon: LucideIcons.Hand, label: 'Hand Tool', shortcut: 'H' },
@@ -195,11 +204,23 @@ const TOOL_GROUPS: ToolGroup[] = [
 ];
 
 const Toolbar: React.FC<ToolbarProps> = ({ onAction }) => {
-  const { activeTool, setActiveTool, activeToolVariants, setToolVariant } = useStore();
+  const { activeTool, activeToolVariants, setToolVariant } = useStore();
   const [contextMenu, setContextMenu] = React.useState<{ groupId: string; x: number; y: number } | null>(null);
 
-  const handleToolClick = (_groupId: string, toolId: Tool) => {
-    setActiveTool(toolId);
+  const handleToolClick = (groupId: string, toolId: Tool) => {
+    const group = TOOL_GROUPS.find(g => g.id === groupId);
+    if (!group) return;
+    const isSelectionGroup = SELECTION_GROUP_IDS.has(groupId);
+    const currentVariant = activeToolVariants[groupId] || group.tools[0].id;
+    if (isSelectionGroup && toolId === currentVariant && group.tools.length > 1) {
+      // Cycle to the next variant in the group
+      const currentIndex = group.tools.findIndex(t => t.id === toolId);
+      const nextIndex = (currentIndex + 1) % group.tools.length;
+      const nextTool = group.tools[nextIndex].id;
+      setToolVariant(groupId, nextTool);
+    } else {
+      setToolVariant(groupId, toolId);
+    }
     onAction?.();
   };
 
@@ -228,6 +249,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onAction }) => {
               label={activeVariant.label}
               shortcut={activeVariant.shortcut}
               hasVariants={group.tools.length > 1}
+              variantCount={group.tools.length}
               onClick={() => handleToolClick(group.id, activeVariant.id)}
               onContextMenu={(e) => handleContextMenu(e, group.id)}
             />

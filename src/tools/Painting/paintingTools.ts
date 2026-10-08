@@ -335,6 +335,13 @@ export const paintingTools: ToolModule[] = [
         sourceLayer = history[prevIdx].state.layers.find((l: any) => l.id === activeLayerId);
       }
 
+      // Remember where the source layer sat in the document so move() can sample
+      // the snapshot at the correct world position (handles layers whose position
+      // is not (0,0) — without this the restore drifts off the cursor).
+      toolState._historySourcePos = sourceLayer?.position
+        ? { x: sourceLayer.position.x || 0, y: sourceLayer.position.y || 0 }
+        : { x: 0, y: 0 };
+
       const setupSnapshot = (source: HTMLCanvasElement | HTMLImageElement | null) => {
         const snapshot = document.createElement('canvas');
         snapshot.width = canvas.width;
@@ -356,33 +363,59 @@ export const paintingTools: ToolModule[] = [
         setupSnapshot(null);
       }
     },
-    move: ({ coords, lastPoint, ctx, brushSize }) => {
+    move: ({ coords, lastPoint, ctx, brushSize, layers, activeLayerId }) => {
       const snapshot = toolState._historySnapshot;
       if (!snapshot || !ctx || !lastPoint) return;
-      
+
+      const sCtx = snapshot.getContext('2d');
+      if (!sCtx) return;
+
+      // Resolve the layer positions so we can convert document-space coords to
+      // (a) the current layer's local canvas and (b) the source layer's local
+      // snapshot, and so we paint under the cursor with the historically correct
+      // pixel regardless of the layer's offset.
+      const activeLayer = layers?.find((l: any) => l.id === activeLayerId);
+      const curPos = activeLayer?.position
+        ? { x: activeLayer.position.x || 0, y: activeLayer.position.y || 0 }
+        : { x: 0, y: 0 };
+      const srcPos = toolState._historySourcePos || { x: 0, y: 0 };
+
       const dist = Math.hypot(coords.x - lastPoint.x, coords.y - lastPoint.y);
       const steps = Math.max(1, Math.ceil(dist / (brushSize / 4)));
+      const r = brushSize / 2;
 
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const x = lastPoint.x + (coords.x - lastPoint.x) * t;
-        const y = lastPoint.y + (coords.y - lastPoint.y) * t;
+        const wx = lastPoint.x + (coords.x - lastPoint.x) * t;
+        const wy = lastPoint.y + (coords.y - lastPoint.y) * t;
+
+        // Where to paint on the current layer (layer-local) and where to sample
+        // on the snapshot (source-layer local).
+        const px = wx - curPos.x;
+        const py = wy - curPos.y;
+        const sx = Math.max(0, Math.min(snapshot.width - 1, Math.round(wx - srcPos.x)));
+        const sy = Math.max(0, Math.min(snapshot.height - 1, Math.round(wy - srcPos.y)));
+
+        const pixel = sCtx.getImageData(sx, sy, 1, 1).data;
+        if (pixel[3] === 0) continue;
+
+        const opacity = (pixel[3] / 255) * (toolState._historyOpacity || 1.0);
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, r);
+        grad.addColorStop(0, `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, ${opacity})`);
+        grad.addColorStop(1, `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, 0)`);
 
         ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.clearRect(x - brushSize / 2, y - brushSize / 2, brushSize, brushSize);
-
-        const prevAlpha = ctx.globalAlpha;
-        ctx.globalAlpha = toolState._historyOpacity || 1.0;
-        ctx.drawImage(snapshot, 0, 0);
-        ctx.globalAlpha = prevAlpha;
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
     },
     end: () => {
       delete toolState._historySnapshot;
+      delete toolState._historySourcePos;
     }
   },
   {
@@ -403,6 +436,14 @@ export const paintingTools: ToolModule[] = [
         const prevIdx = Math.max(0, history.length - 2);
         sourceLayer = history[prevIdx].state.layers.find((l: any) => l.id === activeLayerId);
       }
+
+      // Remember the source layer's world position so move() can sample the
+      // snapshot at the correct document coordinate and place each dab on the
+      // current layer's local canvas — without this the restore drifts on
+      // layers whose position is not (0,0).
+      toolState._artHistorySourcePos = sourceLayer?.position
+        ? { x: sourceLayer.position.x || 0, y: sourceLayer.position.y || 0 }
+        : { x: 0, y: 0 };
 
       const setupSnapshot = (source: HTMLCanvasElement | HTMLImageElement | null) => {
         const snapshot = document.createElement('canvas');
@@ -425,12 +466,21 @@ export const paintingTools: ToolModule[] = [
         setupSnapshot(null);
       }
     },
-    move: ({ coords, lastPoint, ctx, brushSize }) => {
+    move: ({ coords, lastPoint, ctx, brushSize, layers, activeLayerId }) => {
       const snapshot = toolState._artHistorySnapshot;
       if (!snapshot || !ctx || !lastPoint) return;
 
       const sCtx = snapshot.getContext('2d');
       if (!sCtx) return;
+
+      // Translate the world-space cursor into the current layer's local space
+      // (where we paint) and into the source layer's local space (where we
+      // sample the snapshot).
+      const activeLayer = layers?.find((l: any) => l.id === activeLayerId);
+      const curPos = activeLayer?.position
+        ? { x: activeLayer.position.x || 0, y: activeLayer.position.y || 0 }
+        : { x: 0, y: 0 };
+      const srcPos = toolState._artHistorySourcePos || { x: 0, y: 0 };
 
       const dist = Math.hypot(coords.x - lastPoint.x, coords.y - lastPoint.y);
       const steps = Math.max(1, Math.ceil(dist / (brushSize / 2))); // Fewer steps for performance since it dabs 6 times
@@ -443,19 +493,21 @@ export const paintingTools: ToolModule[] = [
         for (let i = 0; i < 6; i++) {
           const offsetX = (Math.random() - 0.5) * brushSize * 2.5;
           const offsetY = (Math.random() - 0.5) * brushSize * 2.5;
-          const x = interpX + offsetX;
-          const y = interpY + offsetY;
+          const worldX = interpX + offsetX;
+          const worldY = interpY + offsetY;
 
-          const pixel = sCtx.getImageData(
-            Math.max(0, Math.min(snapshot.width - 1, Math.round(x))),
-            Math.max(0, Math.min(snapshot.height - 1, Math.round(y))),
-            1, 1
-          ).data;
+          // Where to sample on the snapshot and where to dab on the layer.
+          const sx = Math.max(0, Math.min(snapshot.width - 1, Math.round(worldX - srcPos.x)));
+          const sy = Math.max(0, Math.min(snapshot.height - 1, Math.round(worldY - srcPos.y)));
+          const px = worldX - curPos.x;
+          const py = worldY - curPos.y;
+
+          const pixel = sCtx.getImageData(sx, sy, 1, 1).data;
 
           if (pixel[3] > 0) {
             const opacity = (pixel[3] / 255) * (toolState._artHistoryOpacity || 1.0);
             ctx.save();
-            ctx.translate(x, y);
+            ctx.translate(px, py);
             ctx.rotate(Math.random() * Math.PI);
 
             // 1. Base Painterly Dab
@@ -489,6 +541,7 @@ export const paintingTools: ToolModule[] = [
     },
     end: () => {
       delete toolState._artHistorySnapshot;
+      delete toolState._artHistorySourcePos;
     }
   },
   {

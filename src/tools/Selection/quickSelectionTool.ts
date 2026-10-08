@@ -234,7 +234,7 @@ export const quickSelectionTool: ToolModule = {
     const contours = contoursFromMask(visited, canvas.width, canvas.height, layer?.position);
     if (contours.length === 0) return;
 
-    const shouldAdd = selectionMode === 'add' || isShift;
+    const shouldAdd = selectionMode === 'unite' || isShift;
     const shouldSubtract = selectionMode === 'subtract' || isAlt;
     if (shouldAdd || shouldSubtract) {
       const existingMask = createMaskFromPaths(canvas.width, canvas.height, lassoPaths, layer?.position);

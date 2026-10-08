@@ -404,6 +404,160 @@ export class FilterService {
   }
 
   /**
+   * Duotone: maps luminance through a two-color gradient.
+   * `shadowColor` is used for the darkest tones, `highlightColor` for the
+   * lightest. Returns the result as a new ImageData.
+   */
+  static duotone(
+    src: ImageData,
+    shadowColor: [number, number, number] = [0, 0, 0],
+    highlightColor: [number, number, number] = [255, 255, 255]
+  ): ImageData {
+    const dst = new ImageData(src.width, src.height);
+    const srcData = src.data;
+    const dstData = dst.data;
+    const sr = shadowColor[0], sg = shadowColor[1], sb = shadowColor[2];
+    const hr = highlightColor[0], hg = highlightColor[1], hb = highlightColor[2];
+
+    for (let i = 0; i < srcData.length; i += 4) {
+      // Rec. 709 luma for perceptual luminance
+      const luma = (0.2126 * srcData[i] + 0.7152 * srcData[i + 1] + 0.0722 * srcData[i + 2]) / 255;
+      dstData[i] = sr + (hr - sr) * luma;
+      dstData[i + 1] = sg + (hg - sg) * luma;
+      dstData[i + 2] = sb + (hb - sb) * luma;
+      dstData[i + 3] = srcData[i + 3];
+    }
+    return dst;
+  }
+
+  /**
+   * Halftone: simulates a CMYK-ish dot screen using a single dot color on a
+   * white background. Each cell of `dotSize` pixels emits a dot whose radius
+   * scales with the local luminance (darker areas → bigger dots).
+   */
+  static halftone(
+    src: ImageData,
+    dotSize: number = 8,
+    dotColor: [number, number, number] = [0, 0, 0]
+  ): ImageData {
+    const w = src.width;
+    const h = src.height;
+    const dst = new ImageData(w, h);
+    const srcData = src.data;
+    const dstData = dst.data;
+
+    // Fill background white (opaque)
+    for (let i = 0; i < dstData.length; i += 4) {
+      dstData[i] = 255;
+      dstData[i + 1] = 255;
+      dstData[i + 2] = 255;
+      dstData[i + 3] = 255;
+    }
+
+    const cell = Math.max(2, Math.floor(dotSize));
+    const r = cell / 2;
+    const [cr, cg, cb] = dotColor;
+
+    for (let cy = 0; cy < h; cy += cell) {
+      for (let cx = 0; cx < w; cx += cell) {
+        // Sample the cell center for luminance
+        const sx = Math.min(w - 1, cx + r);
+        const sy = Math.min(h - 1, cy + r);
+        const idx = (sy * w + sx) * 4;
+        const luma = (0.2126 * srcData[idx] + 0.7152 * srcData[idx + 1] + 0.0722 * srcData[idx + 2]) / 255;
+        // Darker pixel → larger dot (invert luma)
+        const dotRadius = r * (1 - luma);
+        if (dotRadius <= 0.1) continue;
+
+        const centerX = cx + r;
+        const centerY = cy + r;
+        const dotR2 = dotRadius * dotRadius;
+
+        const minY = Math.max(0, Math.floor(centerY - dotRadius));
+        const maxY = Math.min(h - 1, Math.ceil(centerY + dotRadius));
+        const minX = Math.max(0, Math.floor(centerX - dotRadius));
+        const maxX = Math.min(w - 1, Math.ceil(centerX + dotRadius));
+
+        for (let y = minY; y <= maxY; y++) {
+          for (let x = minX; x <= maxX; x++) {
+            const dx = x - centerX;
+            const dy = y - centerY;
+            if (dx * dx + dy * dy <= dotR2) {
+              const didx = (y * w + x) * 4;
+              dstData[didx] = cr;
+              dstData[didx + 1] = cg;
+              dstData[didx + 2] = cb;
+              // keep alpha 255 (opaque)
+            }
+          }
+        }
+      }
+    }
+    return dst;
+  }
+
+  /**
+   * Glitch: applies horizontal RGB channel shifts and random scanline slices
+   * for a digital-corruption look. `shift` is the maximum channel offset in
+   * pixels; `sliceIntensity` (0..1) controls how many rows get displaced.
+   */
+  static glitch(src: ImageData, shift: number = 12, sliceIntensity: number = 0.4): ImageData {
+    const w = src.width;
+    const h = src.height;
+    const dst = new ImageData(w, h);
+    const srcData = src.data;
+    const dstData = dst.data;
+
+    // Start from a copy
+    dstData.set(srcData);
+
+    const maxShift = Math.max(0, Math.floor(shift));
+
+    // 1. Channel shift: red left, blue right by a fraction of maxShift
+    const rShift = -Math.round(maxShift * 0.6);
+    const bShift = Math.round(maxShift * 0.6);
+    const temp = new Uint8ClampedArray(srcData.length);
+    temp.set(srcData);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dstIdx = (y * w + x) * 4;
+        const rSrcX = Math.min(w - 1, Math.max(0, x + rShift));
+        const bSrcX = Math.min(w - 1, Math.max(0, x + bShift));
+        const rIdx = (y * w + rSrcX) * 4;
+        const bIdx = (y * w + bSrcX) * 4;
+        dstData[dstIdx] = temp[rIdx];       // R from shifted-left
+        dstData[dstIdx + 1] = temp[(y * w + x) * 4 + 1]; // G stays
+        dstData[dstIdx + 2] = temp[bIdx + 2]; // B from shifted-right
+        dstData[dstIdx + 3] = temp[(y * w + x) * 4 + 3];
+      }
+    }
+
+    // 2. Scanline slices: displace blocks of rows horizontally
+    if (maxShift > 0 && sliceIntensity > 0) {
+      const sliceH = Math.max(2, Math.floor(h / 40));
+      for (let y = 0; y < h; y += sliceH * 2) {
+        if (Math.random() > sliceIntensity) continue;
+        const blockH = sliceH;
+        const dx = Math.floor((Math.random() - 0.5) * 2 * maxShift);
+        for (let yy = y; yy < Math.min(h, y + blockH); yy++) {
+          for (let x = 0; x < w; x++) {
+            const srcX = x - dx;
+            if (srcX < 0 || srcX >= w) continue;
+            const dstIdx = (yy * w + x) * 4;
+            const srcIdx = (yy * w + srcX) * 4;
+            dstData[dstIdx] = srcData[srcIdx];
+            dstData[dstIdx + 1] = srcData[srcIdx + 1];
+            dstData[dstIdx + 2] = srcData[srcIdx + 2];
+            dstData[dstIdx + 3] = srcData[srcIdx + 3];
+          }
+        }
+      }
+    }
+
+    return dst;
+  }
+
+  /**
    * Oil Paint (simplification: simplified kuwahara or local color bucket grouping)
    */
   static oilPaint(src: ImageData, radius: number, intensity: number): ImageData {

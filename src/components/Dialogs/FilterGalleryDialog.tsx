@@ -25,7 +25,10 @@ const FILTER_TYPES = [
   { value: 'median', label: 'Median' },
   { value: 'high_pass', label: 'High Pass' },
   { value: 'maximum', label: 'Maximum' },
-  { value: 'minimum', label: 'Minimum' }
+  { value: 'minimum', label: 'Minimum' },
+  { value: 'duotone', label: 'Duotone' },
+  { value: 'halftone', label: 'Halftone' },
+  { value: 'glitch', label: 'Glitch' }
 ];
 
 export const FilterGalleryDialog: React.FC = () => {
@@ -214,6 +217,15 @@ export const FilterGalleryDialog: React.FC = () => {
         case 'minimum':
           previewResult = FilterService.minMax(previewBaseImageData, previewRadius, false);
           break;
+        case 'duotone':
+          previewResult = FilterService.duotone(previewBaseImageData);
+          break;
+        case 'halftone':
+          previewResult = FilterService.halftone(previewBaseImageData, previewRadius);
+          break;
+        case 'glitch':
+          previewResult = FilterService.glitch(previewBaseImageData, previewRadius, 0.4);
+          break;
         default:
           previewResult = previewBaseImageData;
       }
@@ -302,6 +314,15 @@ export const FilterGalleryDialog: React.FC = () => {
         case 'minimum':
           actualResult = FilterService.minMax(actualImageData, radius, false);
           break;
+        case 'duotone':
+          actualResult = FilterService.duotone(actualImageData);
+          break;
+        case 'halftone':
+          actualResult = FilterService.halftone(actualImageData, radius);
+          break;
+        case 'glitch':
+          actualResult = FilterService.glitch(actualImageData, radius, 0.4);
+          break;
       }
     } catch (e) {
       console.error('[Filter Actual Render Error]:', e);
@@ -382,6 +403,7 @@ export const FilterGalleryDialog: React.FC = () => {
     else if (filter === 'oil_paint') { setRadius(2); setIntensity(10); }
     else if (filter === 'high_pass') setRadius(10);
     else if (filter === 'maximum' || filter === 'minimum') setRadius(3);
+    else if (filter === 'halftone' || filter === 'glitch') setRadius(8);
   };
 
   // Render dynamic parameter sliders
@@ -571,6 +593,34 @@ export const FilterGalleryDialog: React.FC = () => {
               />
             </div>
           </>
+        );
+      case 'halftone':
+        return (
+          <div className="dialog-control-group">
+            <label>Dot Size: {radius}px</label>
+            <input
+              type="range"
+              min="2"
+              max="30"
+              step="1"
+              value={radius}
+              onChange={(e) => setRadius(parseInt(e.target.value))}
+            />
+          </div>
+        );
+      case 'glitch':
+        return (
+          <div className="dialog-control-group">
+            <label>Shift: {radius}px</label>
+            <input
+              type="range"
+              min="2"
+              max="40"
+              step="1"
+              value={radius}
+              onChange={(e) => setRadius(parseInt(e.target.value))}
+            />
+          </div>
         );
       default:
         return <p className="dialog-no-controls">This filter has no adjustable parameters.</p>;

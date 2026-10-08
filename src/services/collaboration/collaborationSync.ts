@@ -93,6 +93,10 @@ export function initCollaborationSync() {
         console.log(`[Pixelite P2P Sync] 📥 Applying remote STATE_UPDATE from peer ${msg.peerId} (${layers.length} layers)`);
         isApplyingRemoteUpdate = true;
         try {
+          // Pre-sync prevLayersHash so store subscriber recognizes this payload as remote
+          const serialized = serializeCanvasState(layers, documentSize || useStore.getState().documentSize);
+          prevLayersHash = JSON.stringify(serialized.layers);
+
           useStore.setState((state) => {
             const hasValidActive = layers.some((l: any) => l.id === state.activeLayerId);
             const targetActive = hasValidActive ? state.activeLayerId : (layers[0]?.id || null);
@@ -108,7 +112,7 @@ export function initCollaborationSync() {
         } finally {
           setTimeout(() => {
             isApplyingRemoteUpdate = false;
-          }, 50);
+          }, 150);
         }
       }
     }
@@ -116,6 +120,8 @@ export function initCollaborationSync() {
 
   // Subscribe to local store changes and broadcast sanitized layer states to peers
   let prevLayersHash = '';
+  let lastBroadcastTime = 0;
+  let broadcastTimeout: ReturnType<typeof setTimeout> | null = null;
 
   useStore.subscribe((state) => {
     const roomCode = collaborationService.getRoomCode();
@@ -131,18 +137,43 @@ export function initCollaborationSync() {
       const currentLayersHash = JSON.stringify(serialized.layers);
 
       if (currentLayersHash !== prevLayersHash) {
-        prevLayersHash = currentLayersHash;
-        console.log(`[Pixelite P2P Sync] 🎨 Local layer change detected! Broadcasting state update (${state.layers.length} layers)...`);
+        const now = Date.now();
 
-        collaborationService.broadcast({
-          type: 'STATE_UPDATE',
-          peerId: collaborationService.getPeerId(),
-          timestamp: Date.now(),
-          payload: {
-            layers: serialized.layers,
-            documentSize: serialized.documentSize,
-          },
-        });
+        const doBroadcast = () => {
+          prevLayersHash = currentLayersHash;
+          lastBroadcastTime = Date.now();
+          if (broadcastTimeout) {
+            clearTimeout(broadcastTimeout);
+            broadcastTimeout = null;
+          }
+
+          collaborationService.broadcast({
+            type: 'STATE_UPDATE',
+            peerId: collaborationService.getPeerId(),
+            timestamp: Date.now(),
+            payload: {
+              layers: serialized.layers,
+              documentSize: serialized.documentSize,
+            },
+          });
+        };
+
+        if (state.isInteracting) {
+          // Throttle mid-drag broadcasts to ~200ms for smooth local 60fps movement
+          if (now - lastBroadcastTime > 200) {
+            doBroadcast();
+          } else {
+            // Schedule broadcast for micro-pause alignment
+            if (!broadcastTimeout) {
+              broadcastTimeout = setTimeout(() => {
+                doBroadcast();
+              }, 120);
+            }
+          }
+        } else {
+          // Drag finished or direct edit: broadcast final update immediately (0ms delay)
+          doBroadcast();
+        }
       }
     } catch (err) {
       console.warn('[Pixelite P2P Sync] ⚠️ Error serializing local layer update:', err);

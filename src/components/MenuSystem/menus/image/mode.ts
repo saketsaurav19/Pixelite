@@ -57,9 +57,8 @@ export const imageModeMenu: MenuItem[] = [
     },
     {
       label: 'Indexed Color',
-      action: (store) => {
-        store.addAlert?.({ type: 'info', message: 'Indexed color mode is not implemented yet.' });
-      },
+      disabled: true,
+      action: () => {},
     },
     { divider: true },
     ...[8, 16, 32].map((depth): MenuLeafItem => ({

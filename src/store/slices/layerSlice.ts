@@ -2,8 +2,10 @@
 import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { EditorState, Layer } from '../types';
-import { findLayerById, findParentNode, removeNode, insertNode, updateNode, flattenTree, moveNode, reorderNodes } from '../../utils/layerUtils';
+import { findLayerById, findParentNode, removeNode, insertNode, insertAfter, updateNode, flattenTree, moveNode, reorderNodes, replaceVisibleExceptKeep } from '../../utils/layerUtils';
 import { FilterService } from '../../services/image/FilterService';
+import { combineShapes as combineShapesUtil, type BooleanOp as ShapeBooleanOp } from '../../utils/shapeBooleanOps';
+import { rasterizeAllToDataUrl } from '../../utils/mergeUtils';
 
 export interface LayerSlice {
   layers: Layer[];
@@ -21,8 +23,26 @@ export interface LayerSlice {
   reorderLayers: (startIndex: number, endIndex: number) => void; // Old array-based, consider deprecating
   reorderNodesAction: (draggedId: string, targetId: string, position: 'before'|'after'|'inside') => void;
   setLayers: (layers: Layer[]) => void;
-  mergeLayers: (ids: string[]) => void;
-  flattenImage: () => void;
+  /**
+   * Photoshop "Merge Down": merge the active layer (or the first selected
+   * layer when no active layer is set) with the layer immediately below it
+   * in z-order. Result is a single rasterized paint layer that replaces
+   * both originals. All other layers are left untouched.
+   */
+  mergeLayers: (ids?: string[]) => Promise<void>;
+  /**
+   * Photoshop "Flatten Image": rasterize all visible layers into a single
+   * locked "Background" paint layer. Hidden layers are discarded.
+   */
+  flattenImage: () => Promise<void>;
+  /**
+   * Photoshop "Merge Visible" (Shift+Ctrl+E): rasterize every layer with
+   * `visible: true` into a single paint layer. Hidden layers are dropped
+   * without being merged. The result inherits the active layer's name and
+   * is left unlocked (unlike Flatten Image, which forces "Background" +
+   * locked).
+   */
+  mergeVisible: () => Promise<void>;
   rasterizeLayer: (id: string) => void;
   addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup') => void;
   autoAlignLayers: () => Promise<void>;
@@ -34,6 +54,8 @@ export interface LayerSlice {
   applyActualFilter: (filterType: string, options: any) => void;
   flipCanvas: (direction: 'horizontal' | 'vertical') => Promise<void>;
   trimCanvas: () => void;
+  combineShapes: (ids: string[], op: 'union' | 'subtract' | 'intersect' | 'exclude') => void;
+  makeCompoundShape: (ids: string[]) => string | null;
 }
 
 export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set, get) => ({
@@ -69,7 +91,7 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
   removeLayer: (id) => set((state) => {
     const idsToDelete = state.selectedLayerIds.includes(id) ? state.selectedLayerIds : [id];
     let newLayers = state.layers;
-    idsToDelete.forEach(deleteId => {
+    idsToDelete.forEach((deleteId: string) => {
       newLayers = removeNode(newLayers, deleteId);
     });
 
@@ -278,28 +300,188 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
 
   setLayers: (layers) => set({ layers }),
 
-  mergeLayers: (ids) => set((state) => {
-    let newLayers = state.layers;
-    const layerToKeep = ids[0];
-    for (let i = 1; i < ids.length; i++) {
-        newLayers = removeNode(newLayers, ids[i]);
-    }
-    return { layers: newLayers, activeLayerId: layerToKeep };
-  }),
+  mergeLayers: async (ids) => {
+    // Photoshop "Merge Down": pick the target layer (the active layer, or
+    // the first id passed in, or the first selected layer) and merge it with
+    // the layer immediately below it in z-order. Both originals are removed
+    // and a single rasterized paint layer takes their place. Everything else
+    // in the stack is left untouched.
+    const state = get();
+    const flat = flattenTree(state.layers);
+    if (flat.length < 2) return;
 
-  flattenImage: () => set((state) => {
-    if (state.layers.length === 0) return state;
-    const allLayers = flattenTree(state.layers);
-    const bottomLayer = allLayers[allLayers.length - 1] || state.layers[0];
-    const backgroundLayer: Layer = {
-      ...bottomLayer,
+    // Resolve the target layer. Priority: explicit ids[0] → activeLayerId →
+    // first selectedLayerId. flat[] is top→bottom, so its first entry is
+    // the visually topmost layer.
+    const targetId =
+      (ids && ids[0]) ||
+      state.activeLayerId ||
+      (state.selectedLayerIds.length > 0 ? state.selectedLayerIds[0] : null);
+    if (!targetId) return;
+
+    const targetIdx = flat.findIndex((l) => l.id === targetId);
+    if (targetIdx === -1) return;
+
+    // The layer below the target is the next one *deeper* in flat[] (i.e.
+    // toward the bottom of the visual stack).
+    const below = flat[targetIdx + 1];
+    if (!below) {
+      // Already the bottom layer — nothing to merge down into.
+      return;
+    }
+    const target = flat[targetIdx];
+
+    // Rasterize the two layers, top-painted-over-bottom.
+    const result = await rasterizeAllToDataUrl([target, below], state.documentSize, {
+      onlyVisible: true,
+    });
+    if (!result) return;
+
+    const { dataUrl, size } = result;
+    const merged: Layer = {
+      id: nanoid(),
+      name: target.name || 'Merged',
+      type: 'paint',
+      visible: true,
+      locked: false,
+      lockPixels: false,
+      lockPosition: false,
+      lockTransparent: false,
+      opacity: 1,
+      fill: 1,
+      blendMode: 'source-over',
+      position: { x: 0, y: 0 },
+      width: size.w,
+      height: size.h,
+      dataUrl,
+    };
+
+    // Drop both originals and splice the merged layer in where the `below`
+    // layer used to sit. removeNode preserves sibling order, so this is
+    // equivalent to Photoshop's behavior (the new layer lands at the bottom
+    // of the pair).
+    let nextLayers = removeNode(state.layers, target.id);
+    nextLayers = removeNode(nextLayers, below.id);
+    nextLayers = insertAfter(nextLayers, below.id, merged);
+
+    set({
+      layers: nextLayers,
+      activeLayerId: merged.id,
+      selectedLayerIds: [merged.id],
+    });
+  },
+
+  flattenImage: async () => {
+    // Photoshop "Flatten Image": rasterize every visible layer into a single
+    // locked "Background" paint layer. Hidden layers are dropped.
+    const state = get();
+    const result = await rasterizeAllToDataUrl(state.layers, state.documentSize, {
+      onlyVisible: true,
+    });
+    if (!result) return;
+
+    const { dataUrl, size } = result;
+    const background: Layer = {
       id: nanoid(),
       name: 'Background',
-      locked: true,
       type: 'paint',
+      visible: true,
+      locked: true,
+      lockPixels: false,
+      lockPosition: false,
+      lockTransparent: false,
+      opacity: 1,
+      fill: 1,
+      blendMode: 'source-over',
+      position: { x: 0, y: 0 },
+      width: size.w,
+      height: size.h,
+      dataUrl,
     };
-    return { layers: [backgroundLayer], activeLayerId: backgroundLayer.id };
-  }),
+    set({
+      layers: [background],
+      activeLayerId: background.id,
+      selectedLayerIds: [background.id],
+    });
+  },
+
+  mergeVisible: async () => {
+    // Photoshop "Merge Visible" (Shift+Ctrl+E): rasterize EVERY visible
+    // layer from across the whole layer tree into a single paint layer,
+    // then drop that merged layer into the original tree at the slot of
+    // the bottom-most visible layer. Hidden layers stay exactly where
+    // they were. Visible layers that are "sandwiched" between two hidden
+    // layers merge with all the other visible layers — they do NOT form
+    // their own separate run.
+    //
+    // Net effect on a stack like [V1, V2, H1, V3, V4, H2]:
+    //   - V1, V2, V3, V4 are rasterized into one "Merged" paint layer
+    //   - H1 and H2 are kept untouched, in their original slots
+    //   - the merged layer is placed at the slot where V4 used to be
+    //   - final: [Merged, H1, H2]
+    const state = get();
+    const active = state.activeLayerId
+      ? findLayerById(state.layers, state.activeLayerId)
+      : undefined;
+    const activeName = (active && active.name) || 'Merged';
+
+    // Collect every visible layer across the whole tree. The rasterizer
+    // walks the array in reverse internally to paint bottom-up, so we
+    // pass them in top-to-bottom (which is the order flattenTree gives us
+    // — topmost first).
+    const flatAll = flattenTree(state.layers);
+    const visibleLayers = flatAll.filter((l) => l.visible !== false);
+    if (visibleLayers.length < 2) {
+      // Nothing meaningful to merge.
+      return;
+    }
+
+    const result = await rasterizeAllToDataUrl(visibleLayers, state.documentSize, {
+      onlyVisible: true,
+    });
+    if (!result) return;
+    const { dataUrl, size } = result;
+
+    const merged: Layer = {
+      id: nanoid(),
+      name: activeName,
+      type: 'paint' as const,
+      visible: true,
+      locked: false,
+      lockPixels: false,
+      lockPosition: false,
+      lockTransparent: false,
+      opacity: 1,
+      fill: 1,
+      blendMode: 'source-over' as const,
+      position: { x: 0, y: 0 },
+      width: size.w,
+      height: size.h,
+      dataUrl,
+    };
+
+    // Identify the bottom-most visible layer. That's the slot `merged`
+    // will replace in the original tree.
+    const bottomVisible = visibleLayers[visibleLayers.length - 1];
+
+    // Walk the tree once: drop every visible layer EXCEPT the bottom-most
+    // one, which is replaced by `merged`. Hidden layers and groups/
+    // artboards are kept as they are (groups are recursed into so nested
+    // visible/hidden are handled correctly).
+    const visibleIds = new Set(visibleLayers.map((l) => l.id));
+    const nextLayers = replaceVisibleExceptKeep(
+      state.layers,
+      visibleIds,
+      bottomVisible.id,
+      merged
+    );
+
+    set({
+      layers: nextLayers,
+      activeLayerId: merged.id,
+      selectedLayerIds: [merged.id],
+    });
+  },
 
   rasterizeLayer: (id) => set((state) => ({
     layers: updateNode(state.layers, id, { type: 'paint' })
@@ -371,6 +553,13 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       defaultSettings = {
         colorLookup: {
           preset: 'identity'
+        }
+      };
+    } else if (type === 'posterize') {
+      name = 'Posterize';
+      defaultSettings = {
+        posterize: {
+          levels: 4
         }
       };
     }
@@ -1219,6 +1408,19 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
         case 'minimum':
           resultData = FilterService.minMax(imageData, options.radius ?? 3, false);
           break;
+        case 'duotone':
+          resultData = FilterService.duotone(
+            imageData,
+            options.shadowColor ?? [0, 0, 0],
+            options.highlightColor ?? [255, 255, 255]
+          );
+          break;
+        case 'halftone':
+          resultData = FilterService.halftone(imageData, options.dotSize ?? 8, options.dotColor ?? [0, 0, 0]);
+          break;
+        case 'glitch':
+          resultData = FilterService.glitch(imageData, options.shift ?? 12, options.sliceIntensity ?? 0.4);
+          break;
         case 'camera_raw': {
           resultData = imageData;
           ctx.restore();
@@ -1448,5 +1650,199 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       type: 'success',
       message: `Trimmed canvas to ${newW} x ${newH} px.`
     });
+  },
+
+  // ---------- Combine Shapes (boolean ops) ----------
+
+  combineShapes: (ids, op) => {
+    const state = get();
+    if (ids.length < 2) {
+      state.addAlert?.({ type: 'error', message: 'Select two or more shape layers to combine.' });
+      return;
+    }
+
+    // Resolve to shape layers in z-order (layers[0] is the topmost). Only
+    // rect/path/ellipse shapes participate; 'compound' (already-booleaned)
+    // shapes are skipped because their type isn't representable as a fresh
+    // boolean input.
+    const ordered: Layer[] = [];
+    for (const layer of state.layers) {
+      if (ids.includes(layer.id) && layer.type === 'shape' && layer.shapeData &&
+          layer.shapeData.type !== 'compound') {
+        ordered.push(layer);
+      }
+    }
+    if (ordered.length < 2) {
+      state.addAlert?.({ type: 'error', message: 'Select two or more shape layers to combine.' });
+      return;
+    }
+
+    // Pixel-mask boolean ops need bottom-up paint order. layers[] is top-to-bottom,
+    // so reverse the picked layers.
+    const bottomUp = [...ordered].reverse();
+
+    // Project to the helper's expected shape, in document coordinates. The
+    // helper only accepts rect/path/ellipse shapeData.type; `compound` shapes
+    // were already filtered out above, so the cast is safe.
+    const shapeInputs = bottomUp.map((l) => ({
+      shapeData: l.shapeData as { type: 'rect' | 'path' | 'ellipse' },
+      position: l.position || { x: 0, y: 0 },
+    }));
+
+    let result;
+    try {
+      result = combineShapesUtil(shapeInputs, op as ShapeBooleanOp);
+    } catch (err: any) {
+      state.addAlert?.({ type: 'error', message: `Combine failed: ${err?.message || err}` });
+      return;
+    }
+    if (!result) {
+      state.addAlert?.({ type: 'error', message: 'Could not compute the boolean result.' });
+      return;
+    }
+
+    // The polygon points are in document space; build a local-space path so
+    // the new layer's `position` carries the offset.
+    const localPolys = result.polygons.map((poly) =>
+      poly.map((p) => ({ x: p.x - result.bbox.x, y: p.y - result.bbox.y }))
+    );
+    let svgPath = '';
+    localPolys.forEach((poly) => {
+      if (poly.length < 3) return;
+      svgPath += `M ${poly[0].x.toFixed(2)} ${poly[0].y.toFixed(2)} `;
+      for (let i = 1; i < poly.length; i++) {
+        svgPath += `L ${poly[i].x.toFixed(2)} ${poly[i].y.toFixed(2)} `;
+      }
+      svgPath += 'Z ';
+    });
+    svgPath = svgPath.trim();
+    if (!svgPath) {
+      state.addAlert?.({ type: 'error', message: 'Boolean result is empty.' });
+      return;
+    }
+
+    // Style: use the TOP layer's fill/stroke (Photoshop convention).
+    const top = ordered[0];
+    const baseSd = top.shapeData!;
+    const fill = (baseSd as any).fill || '#000000';
+    const stroke = (baseSd as any).stroke || 'transparent';
+    const strokeWidth = (baseSd as any).strokeWidth || 0;
+
+    const newLayer: Layer = {
+      id: nanoid(),
+      name: `${top.name || 'Shape'} Combined`,
+      visible: true,
+      locked: false,
+      lockPixels: false,
+      lockPosition: false,
+      lockTransparent: false,
+      opacity: top.opacity ?? 1,
+      fill: top.fill,
+      type: 'shape',
+      blendMode: top.blendMode || 'source-over',
+      position: { x: result.bbox.x, y: result.bbox.y },
+      width: result.bbox.w,
+      height: result.bbox.h,
+      rotation: top.rotation,
+      shapeData: {
+        type: 'path',
+        svgPath,
+        fill,
+        stroke,
+        strokeWidth,
+        fillRule: 'evenodd',
+      },
+    } as Layer;
+
+    // Insert at the top of the layer stack, then remove the originals.
+    set((s) => ({
+      layers: [newLayer, ...s.layers],
+      activeLayerId: newLayer.id,
+      selectedLayerIds: [newLayer.id],
+    }));
+    // Remove the originals by passing each one through removeLayer (each call
+    // only removes that single id because they are no longer in selectedLayerIds).
+    const originalIds = ordered.map((l) => l.id);
+    for (const id of originalIds) {
+      set((s) => ({
+        layers: removeNode(s.layers, id),
+        selectedLayerIds: s.selectedLayerIds.filter((sid: string) => sid !== id),
+        activeLayerId: s.activeLayerId === id ? newLayer.id : s.activeLayerId,
+      }));
+    }
+    state.recordHistory?.(`Combine Shapes: ${op}`);
+    state.addAlert?.({
+      type: 'success',
+      message: `Combined ${ordered.length} shapes (${op}).`,
+    });
+  },
+
+  makeCompoundShape: (ids) => {
+    const state = get();
+    if (ids.length < 2) {
+      state.addAlert?.({ type: 'error', message: 'Select two or more shape layers to combine.' });
+      return null;
+    }
+    const ordered: Layer[] = [];
+    for (const layer of state.layers) {
+      if (ids.includes(layer.id) && layer.type === 'shape' && layer.shapeData) {
+        ordered.push(layer);
+      }
+    }
+    if (ordered.length < 2) {
+      state.addAlert?.({ type: 'error', message: 'Select two or more shape layers to combine.' });
+      return null;
+    }
+
+    // The compound layer carries no geometry of its own — children render
+    // every frame via the renderer. Style is taken from the top shape, to
+    // match the flatten Union/Subtract/Intersect/Exclude ops.
+    const top = ordered[0];
+    const baseSd = top.shapeData!;
+    const newLayer: Layer = {
+      id: nanoid(),
+      name: 'Compound Shape',
+      visible: true,
+      locked: false,
+      lockPixels: false,
+      lockPosition: false,
+      lockTransparent: false,
+      opacity: top.opacity ?? 1,
+      fill: top.fill,
+      type: 'shape',
+      blendMode: top.blendMode || 'source-over',
+      position: { x: 0, y: 0 },
+      width: state.documentSize.w,
+      height: state.documentSize.h,
+      rotation: 0,
+      shapeData: {
+        type: 'compound',
+        childIds: ordered.map((l) => l.id),
+        booleanOp: 'union',
+        fill: (baseSd as any).fill || '#000000',
+        stroke: (baseSd as any).stroke || 'transparent',
+        strokeWidth: (baseSd as any).strokeWidth || 0,
+        fillRule: 'evenodd',
+      },
+    } as Layer;
+
+    set((s) => ({
+      layers: [newLayer, ...s.layers],
+      activeLayerId: newLayer.id,
+      selectedLayerIds: [newLayer.id],
+    }));
+    // Hide the children so the user doesn't see them BOTH inside and outside
+    // the compound (the renderer draws them via childIds).
+    for (const id of ordered.map((l) => l.id)) {
+      set((s) => ({
+        layers: updateNode(s.layers, id, { visible: false }),
+      }));
+    }
+    state.recordHistory?.('Make Compound Shape');
+    state.addAlert?.({
+      type: 'success',
+      message: `Created a compound shape from ${ordered.length} layers.`,
+    });
+    return newLayer.id;
   },
 });

@@ -41,11 +41,17 @@ export interface CanvasContext {
   lassoPaths: Point[][];
   vectorPaths: any[];
   activePathIndex: number | null;
+  selectedPoint: { pathIdx: number; pointIdx: number; handle?: 'in' | 'out' } | null;
+  penMode: 'path' | 'shape';
   cropRect: Rect | null;
   isInverseSelection: boolean;
   setLassoPaths: (paths: Point[][]) => void;
   setSelectionRect: (rect: any, shape?: any) => void;
   setCropRect: (rect: Rect | null) => void;
+  setVectorPaths: (updater: any) => void;
+  setActivePathIndex: (index: number | null) => void;
+  setCurrentMousePos: (pos: Point) => void;
+  setSelectedPoint: (point: { pathIdx: number; pointIdx: number; handle?: 'in' | 'out' } | null) => void;
   updateLayer: (id: string, updates: Partial<Layer>) => void;
   recordHistory: (label: string) => void;
   setIsInteracting: (val: boolean) => void;

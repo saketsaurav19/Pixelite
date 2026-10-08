@@ -17,37 +17,7 @@ function ensureCanvasInitialized() {
 }
 
 export class WorkerExportBridge {
-  private worker: Worker | null = null;
-  private messageCallbacks = new Map<string, { resolve: (val: any) => void, reject: (err: any) => void }>();
-
-  constructor() {
-    // Lazy worker initialization
-  }
-
-  private ensureWorker() {
-    if (!this.worker) {
-      // Vite handles worker instantiation
-      this.worker = new Worker(new URL('../../workers/fileWorker.ts', import.meta.url), { type: 'module' });
-      this.worker.onmessage = this.handleWorkerMessage.bind(this);
-      this.worker.onerror = (err) => {
-        console.error("Worker error:", err);
-      };
-    }
-  }
-
-  private handleWorkerMessage(e: MessageEvent) {
-    const { id, success, error, ...data } = e.data;
-    const callback = this.messageCallbacks.get(id);
-
-    if (callback) {
-      if (success) {
-        callback.resolve(data);
-      } else {
-        callback.reject(new Error(error));
-      }
-      this.messageCallbacks.delete(id);
-    }
-  }
+  constructor() {}
 
       async generatePSD(layers: any[], width: number, height: number): Promise<Uint8Array> {
     ensureCanvasInitialized();
@@ -135,13 +105,6 @@ export class WorkerExportBridge {
     }
 
     return psd;
-  }
-  terminate() {
-      this.ensureWorker();
-      if(this.worker) {
-          this.worker.terminate();
-          this.worker = null;
-      }
   }
 }
 

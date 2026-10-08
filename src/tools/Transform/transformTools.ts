@@ -512,8 +512,13 @@ export const transformTools: ToolModule[] = [
           setDocumentSize({ w, h });
           const newCanvas = document.createElement('canvas');
           newCanvas.width = w; newCanvas.height = h;
-          newCanvas.getContext('2d')!.putImageData(warpedData, 0, 0);
-          updateLayer(activeLayerId!, { dataUrl: newCanvas.toDataURL(), position: { x: 0, y: 0 } });
+          const wctx = newCanvas.getContext('2d')!;
+          if (warpedData instanceof ImageData) {
+            wctx.putImageData(warpedData, 0, 0);
+          } else {
+            wctx.drawImage(warpedData as any, 0, 0);
+          }
+          updateLayer(activeLayerId!, { dataUrl: newCanvas.toDataURL(), position: { x: 0, y: 0 }, width: w, height: h });
           recordHistory('Perspective Crop');
         }
       }
@@ -618,7 +623,7 @@ export const transformTools: ToolModule[] = [
       const startCorners = getLayerCorners(layer);
       toolState._transformStartCornersList = startCorners;
 
-      if (['skew', 'distort', 'perspective', 'warp'].includes(mode)) {
+      if (['skew', 'distort', 'perspective', 'warp', 'puppet'].includes(mode)) {
         if (layer.type === 'text' || layer.type === 'shape') {
           const canvas = document.createElement('canvas');
           canvas.width = layer.width || 100;
@@ -646,6 +651,8 @@ export const transformTools: ToolModule[] = [
 
       if (mode === 'warp') {
         const currentCorners = layer.corners || startCorners;
+
+        // Warp (legacy full-mesh) mode: snap to the nearest grid vertex.
         if (!layer.warpGrid) {
           const grid = initWarpGrid(currentCorners);
           updateLayer(activeLayerId, { warpGrid: grid });
@@ -653,8 +660,6 @@ export const transformTools: ToolModule[] = [
         } else {
           toolState._warpStartGrid = layer.warpGrid.map((p: any) => ({ ...p }));
         }
-
-        // transformOriginalCanvas is now cached globally in the start phase
 
         const grid = layer.warpGrid || initWarpGrid(currentCorners);
         const zoom = useStore.getState().zoom || 1;
@@ -679,6 +684,7 @@ export const transformTools: ToolModule[] = [
 
       const mode = useStore.getState().transformMode;
 
+      // Puppet Warp is owned entirely by `usePuppetWarp` (the overlay's hook).
       if (mode === 'warp' && activeLayer.warpGrid) {
         const startGrid = toolState._warpStartGrid;
         const startCoords = toolState._warpStartCoords;
@@ -972,8 +978,13 @@ export const transformTools: ToolModule[] = [
     },
     end: ({ setIsInteracting }) => {
       setIsInteracting(false);
+
+      // Cleanup per-gesture state. IMPORTANT: `transformOriginalImage` is NOT deleted here —
+      // `end` runs on EVERY pointer-up, and the layer renderer needs the pristine bitmap to
+      // keep painting the live warp/deform preview between drags. It's released in the
+      // session-level commit/cancel cleanup in Canvas.tsx.
       delete toolState._warpActivePointIdx;
-      delete toolState.transformOriginalImage;
+      delete toolState._transformStartCoords;
     }
   }
 ];

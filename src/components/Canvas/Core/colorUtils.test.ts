@@ -1,19 +1,20 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, expect } from 'vitest';
 import { hexToRgba } from './colorUtils.ts';
 
-test('hexToRgba converts 6-digit hex to rgba', () => {
-  assert.strictEqual(hexToRgba('#ff0000', 1), 'rgba(255, 0, 0, 1)');
-  assert.strictEqual(hexToRgba('#00ff00', 0.5), 'rgba(0, 255, 0, 0.5)');
-  assert.strictEqual(hexToRgba('#0000ff', 0.1), 'rgba(0, 0, 255, 0.1)');
-});
+describe('hexToRgba in colorUtils', () => {
+  it('converts 6-digit hex to rgba', () => {
+    expect(hexToRgba('#ff0000', 1)).toBe('rgba(255, 0, 0, 1)');
+    expect(hexToRgba('#00ff00', 0.5)).toBe('rgba(0, 255, 0, 0.5)');
+    expect(hexToRgba('#0000ff', 0.1)).toBe('rgba(0, 0, 255, 0.1)');
+  });
 
-test('hexToRgba converts 3-digit shorthand hex to rgba', () => {
-  assert.strictEqual(hexToRgba('#f00', 1), 'rgba(255, 0, 0, 1)');
-  assert.strictEqual(hexToRgba('#0f0', 0.5), 'rgba(0, 255, 0, 0.5)');
-});
+  it('converts 3-digit shorthand hex to rgba', () => {
+    expect(hexToRgba('#f00', 1)).toBe('rgba(255, 0, 0, 1)');
+    expect(hexToRgba('#0f0', 0.5)).toBe('rgba(0, 255, 0, 0.5)');
+  });
 
-test('hexToRgba handles hex without # prefix', () => {
-  assert.strictEqual(hexToRgba('ff0000', 1), 'rgba(255, 0, 0, 1)');
-  assert.strictEqual(hexToRgba('f00', 1), 'rgba(255, 0, 0, 1)');
+  it('handles hex without # prefix', () => {
+    expect(hexToRgba('ff0000', 1)).toBe('rgba(255, 0, 0, 1)');
+    expect(hexToRgba('f00', 1)).toBe('rgba(255, 0, 0, 1)');
+  });
 });

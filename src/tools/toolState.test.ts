@@ -1,20 +1,21 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, expect } from 'vitest';
 import { toolState } from './toolState.ts';
 
-test('toolState can store and retrieve values', () => {
-  toolState.testKey = 'testValue';
-  assert.strictEqual(toolState.testKey, 'testValue');
-});
+describe('toolState', () => {
+  it('can store and retrieve values', () => {
+    toolState.testKey = 'testValue';
+    expect(toolState.testKey).toBe('testValue');
+  });
 
-test('toolState can delete values', () => {
-  toolState.tempKey = 123;
-  delete toolState.tempKey;
-  assert.strictEqual(toolState.tempKey, undefined);
-});
+  it('can delete values', () => {
+    toolState.tempKey = 123;
+    delete toolState.tempKey;
+    expect(toolState.tempKey).toBeUndefined();
+  });
 
-test('toolState can store complex objects', () => {
-  const obj = { x: 10, y: 20 };
-  toolState.point = obj;
-  assert.deepStrictEqual(toolState.point, obj);
+  it('can store complex objects', () => {
+    const obj = { x: 10, y: 20 };
+    toolState.point = obj;
+    expect(toolState.point).toEqual(obj);
+  });
 });

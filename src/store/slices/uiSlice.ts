@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { EditorState, Alert } from '../types';
+import type { EditorState, Alert, DocumentVariable, DataSet, VariablesState } from '../types';
 
 const defaultShortcuts: Record<string, string> = {
   file_new: 'Ctrl+N',
@@ -23,6 +23,7 @@ const defaultShortcuts: Record<string, string> = {
   view_zoom_fit: 'Ctrl+0',
   view_zoom_100: 'Ctrl+1',
   view_rulers: 'Ctrl+R',
+  layer_merge_visible: 'Shift+Ctrl+E',
 };
 
 export interface UISlice {
@@ -36,7 +37,8 @@ export interface UISlice {
   isFilterGalleryDialogOpen: boolean;
   filterGallerySelectedType: string;
   isLayerStyleDialogOpen: boolean;
-  layerStyleActiveTab: 'blending' | 'shadow' | 'stroke';
+  layerStyleActiveTab: 'blending' | 'shadow' | 'stroke' | 'dropShadow' | 'innerShadow' | 'innerGlow' | 'outerGlow' | 'bevelAndEmboss' | 'contour' | 'texture' | 'satin' | 'colorOverlay' | 'gradientOverlay' | 'patternOverlay' | 'strokeStyle' | 'd3d';
+  isVariablesDialogOpen: boolean;
   isColorRangeDialogOpen: boolean;
   isTransformSelectionDialogOpen: boolean;
   documentLayout: 'tabs' | 'cascade' | 'tile' | 'float';
@@ -57,6 +59,10 @@ export interface UISlice {
   isKeyboardShortcutsDialogOpen: boolean;
   isPrecisionFillDialogOpen: boolean;
   setIsPrecisionFillDialogOpen: (isOpen: boolean) => void;
+  isDefineBrushDialogOpen: boolean;
+  setIsDefineBrushDialogOpen: (isOpen: boolean) => void;
+  isDefineCustomShapeDialogOpen: boolean;
+  setIsDefineCustomShapeDialogOpen: (isOpen: boolean) => void;
   isServerlessShareDialogOpen: boolean;
   serverlessShareTab: 'url' | 'webrtc' | 'public';
   setIsServerlessShareDialogOpen: (isOpen: boolean, tab?: 'url' | 'webrtc' | 'public') => void;
@@ -69,8 +75,8 @@ export interface UISlice {
   isMobileMenuOpen: boolean;
   showRulers: boolean;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null) => void;
   adjustmentSourceLayerId: string | null;
   setAdjustmentSourceLayerId: (id: string | null) => void;
   activeMobileSubmenu: string | null;
@@ -120,7 +126,16 @@ export interface UISlice {
   setIsFilterGalleryDialogOpen: (isOpen: boolean) => void;
   setFilterGallerySelectedType: (type: string) => void;
   setIsLayerStyleDialogOpen: (isOpen: boolean) => void;
-  setLayerStyleActiveTab: (tab: 'blending' | 'shadow' | 'stroke') => void;
+  setLayerStyleActiveTab: (tab: 'blending' | 'shadow' | 'stroke' | 'dropShadow' | 'innerShadow' | 'innerGlow' | 'outerGlow' | 'bevelAndEmboss' | 'contour' | 'texture' | 'satin' | 'colorOverlay' | 'gradientOverlay' | 'patternOverlay' | 'strokeStyle' | 'd3d') => void;
+  setIsVariablesDialogOpen: (isOpen: boolean) => void;
+  variablesData: VariablesState;
+  setVariablesData: (data: Partial<VariablesState>) => void;
+  addVariable: (variable: DocumentVariable) => void;
+  updateVariable: (id: string, patch: Partial<DocumentVariable>) => void;
+  removeVariable: (id: string) => void;
+  addDataSet: (dataSet: DataSet) => void;
+  updateDataSet: (id: string, values: Record<string, string>) => void;
+  removeDataSet: (id: string) => void;
   setIsColorRangeDialogOpen: (isOpen: boolean) => void;
   setIsTransformSelectionDialogOpen: (isOpen: boolean) => void;
   setDocumentLayout: (layout: 'tabs' | 'cascade' | 'tile' | 'float') => void;
@@ -164,6 +179,8 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   filterGallerySelectedType: 'gaussian_blur',
   isLayerStyleDialogOpen: false,
   layerStyleActiveTab: 'blending',
+  isVariablesDialogOpen: false,
+  variablesData: { variables: [], dataSets: [] },
   isColorRangeDialogOpen: false,
   isTransformSelectionDialogOpen: false,
   documentLayout: 'tabs',
@@ -239,6 +256,18 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setFilterGallerySelectedType: (type) => set({ filterGallerySelectedType: type }),
   setIsLayerStyleDialogOpen: (isOpen) => set({ isLayerStyleDialogOpen: isOpen }),
   setLayerStyleActiveTab: (tab) => set({ layerStyleActiveTab: tab }),
+  setIsVariablesDialogOpen: (isOpen) => set({ isVariablesDialogOpen: isOpen }),
+  setVariablesData: (data) => set((s) => ({ variablesData: { ...s.variablesData, ...data } })),
+  addVariable: (variable) => set((s) => ({ variablesData: { ...s.variablesData, variables: [...s.variablesData.variables, variable] } })),
+  updateVariable: (id, patch) => set((s) => ({
+    variablesData: { ...s.variablesData, variables: s.variablesData.variables.map((v: DocumentVariable) => v.id === id ? { ...v, ...patch } : v) }
+  })),
+  removeVariable: (id) => set((s) => ({ variablesData: { ...s.variablesData, variables: s.variablesData.variables.filter((v: DocumentVariable) => v.id !== id) } })),
+  addDataSet: (dataSet) => set((s) => ({ variablesData: { ...s.variablesData, dataSets: [...s.variablesData.dataSets, dataSet] } })),
+  updateDataSet: (id, values) => set((s) => ({
+    variablesData: { ...s.variablesData, dataSets: s.variablesData.dataSets.map((d: DataSet) => d.id === id ? { ...d, values } : d) }
+  })),
+  removeDataSet: (id) => set((s) => ({ variablesData: { ...s.variablesData, dataSets: s.variablesData.dataSets.filter((d: DataSet) => d.id !== id) } })),
   setIsColorRangeDialogOpen: (isOpen) => set({ isColorRangeDialogOpen: isOpen }),
   setIsTransformSelectionDialogOpen: (isOpen) => set({ isTransformSelectionDialogOpen: isOpen }),
   setDocumentLayout: (layout) => set({ documentLayout: layout }),
@@ -312,6 +341,10 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsKeyboardShortcutsDialogOpen: (isOpen) => set({ isKeyboardShortcutsDialogOpen: isOpen }),
   isPrecisionFillDialogOpen: false,
   setIsPrecisionFillDialogOpen: (isOpen) => set({ isPrecisionFillDialogOpen: isOpen }),
+  isDefineBrushDialogOpen: false,
+  setIsDefineBrushDialogOpen: (isOpen) => set({ isDefineBrushDialogOpen: isOpen }),
+  isDefineCustomShapeDialogOpen: false,
+  setIsDefineCustomShapeDialogOpen: (isOpen) => set({ isDefineCustomShapeDialogOpen: isOpen }),
   isServerlessShareDialogOpen: false,
   serverlessShareTab: 'url',
   setIsServerlessShareDialogOpen: (isOpen, tab = 'url') => set({ isServerlessShareDialogOpen: isOpen, serverlessShareTab: tab }),

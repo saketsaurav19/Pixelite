@@ -1,12 +1,77 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { serializeCanvasState, compressStateToHash, generateQrCodeUrl, getShareBaseUrl } from '../../utils/shareUtils';
+import { serializeCanvasState, compressStateToHash, generateQrCodeUrl, getShareBaseUrl, ensureLayerDataUrls, splitUrlIntoQrChunks } from '../../utils/shareUtils';
 import { collaborationService } from '../../services/collaboration/WebRTCCollaborationService';
 import { initCollaborationSync } from '../../services/collaboration/collaborationSync';
 import { normalizeRoomCode } from '../../utils/bip39Wordlist';
+import { uploadToPublicHost, PUBLIC_HOST_SERVICES } from '../../utils/cloudServices';
+import { QrCameraScanner } from './QrCameraScanner';
 import './Modals.css';
 import './ServerlessShareModal.css';
+
+const LiveQrSlide: React.FC<{ url: string; size?: number }> = ({ url, size = 160 }) => {
+  const [chunks, setChunks] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    const parts = splitUrlIntoQrChunks(url, 350);
+    setChunks(parts);
+    setCurrentIndex(0);
+  }, [url]);
+
+  useEffect(() => {
+    if (chunks.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % chunks.length);
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [chunks.length]);
+
+  if (!url) return null;
+  const currentChunk = chunks[currentIndex] || url;
+  const qrUrl = generateQrCodeUrl(currentChunk, size);
+
+  return (
+    <div className="qr-section">
+      <div style={{ position: 'relative', width: size, height: size, margin: '0 auto' }}>
+        <img
+          className="qr-image"
+          src={qrUrl}
+          alt="Canvas QR Code"
+          width={size}
+          height={size}
+          style={{ borderRadius: '8px', border: '1px solid var(--border-color, #333)' }}
+        />
+        {chunks.length > 1 && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '6px',
+              right: '6px',
+              background: 'rgba(15, 23, 42, 0.85)',
+              color: '#38bdf8',
+              fontSize: '10px',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontWeight: 600,
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+            }}
+          >
+            Seq {currentIndex + 1}/{chunks.length}
+          </div>
+        )}
+      </div>
+      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px', textAlign: 'center', display: 'block' }}>
+        {chunks.length > 1
+          ? `Live Sequence Slide (${chunks.length} frames). Scan continuously to capture payload.`
+          : 'Scan with camera to open canvas'}
+      </span>
+    </div>
+  );
+};
 
 export const ServerlessShareModal: React.FC = () => {
   const isOpen = useStore((s) => s.isServerlessShareDialogOpen);
@@ -20,6 +85,7 @@ export const ServerlessShareModal: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [showQr, setShowQr] = useState<boolean>(false);
+  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
 
   // WebRTC state
   const [roomCode, setRoomCode] = useState<string>(collaborationService.getRoomCode());
@@ -35,6 +101,72 @@ export const ServerlessShareModal: React.FC = () => {
   const [peerCount, setPeerCount] = useState<number>(collaborationService.getConnectedPeerCount());
   const [userNameInput, setUserNameInput] = useState<string>(collaborationService.getUserName());
   const [canEdit, setCanEdit] = useState<boolean>(collaborationService.getCanEdit());
+
+  // Public Host state
+  const [selectedPublicService, setSelectedPublicService] = useState<string>(PUBLIC_HOST_SERVICES[0].id);
+  const [publicStatus, setPublicStatus] = useState<'idle' | 'uploading' | 'success'>('idle');
+  const [publicShareLink, setPublicShareLink] = useState<string>('');
+  const [publicUsedService, setPublicUsedService] = useState<string>('');
+  const [publicCopiedFormat, setPublicCopiedFormat] = useState<string | null>(null);
+  const [publicShowQr, setPublicShowQr] = useState<boolean>(false);
+  const [publicImgurKey, setPublicImgurKey] = useState<string>(localStorage.getItem('pixelite_imgur_key') || '');
+  const [publicImageBBKey, setPublicImageBBKey] = useState<string>(localStorage.getItem('pixelite_imagebb_key') || '');
+  const [showPublicKeySettings, setShowPublicKeySettings] = useState<boolean>(false);
+
+  const handlePublicUpload = async () => {
+    setPublicStatus('uploading');
+    try {
+      if (publicImgurKey) localStorage.setItem('pixelite_imgur_key', publicImgurKey.trim());
+      if (publicImageBBKey) localStorage.setItem('pixelite_imagebb_key', publicImageBBKey.trim());
+
+      ensureCanvasExists();
+      const currentLayers = useStore.getState().layers;
+      const layersWithData = await ensureLayerDataUrls(currentLayers);
+      const state = serializeCanvasState(layersWithData, documentSize);
+
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = documentSize.w;
+      exportCanvas.height = documentSize.h;
+      const ctx = exportCanvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, documentSize.w, documentSize.h);
+        for (const l of state.layers) {
+          if (l.visible && l.dataUrl) {
+            const img = new Image();
+            await new Promise((resolve) => {
+              img.onload = resolve;
+              img.onerror = resolve;
+              img.src = l.dataUrl!;
+            });
+            ctx.drawImage(img, l.position?.x || 0, l.position?.y || 0, (l as any).width || documentSize.w, (l as any).height || documentSize.h);
+          }
+        }
+      }
+      const dataUrl = exportCanvas.toDataURL('image/png');
+
+      const result = await uploadToPublicHost(dataUrl, selectedPublicService, {
+        customImgurClientId: publicImgurKey,
+        customImageBBKey: publicImageBBKey,
+      });
+
+      setPublicShareLink(result.url);
+      setPublicUsedService(result.service);
+      setPublicStatus('success');
+      addAlert({ type: 'success', message: `Canvas image uploaded to ${result.service.toUpperCase()}!` });
+    } catch (err: any) {
+      setPublicStatus('idle');
+      addAlert({ type: 'error', message: `Public upload failed: ${err.message}` });
+    }
+  };
+
+  const copyPublicFormat = async (text: string, formatName: string) => {
+    const success = await safeCopyToClipboard(text);
+    if (success) {
+      setPublicCopiedFormat(formatName);
+      setTimeout(() => setPublicCopiedFormat(null), 2000);
+    }
+  };
 
   const handleWordChange = (index: 0 | 1 | 2, val: string) => {
     let clean = val.toLowerCase().trim();
@@ -131,7 +263,8 @@ export const ServerlessShareModal: React.FC = () => {
     try {
       ensureCanvasExists();
       const currentLayers = useStore.getState().layers;
-      const state = serializeCanvasState(currentLayers, documentSize);
+      const layersWithData = await ensureLayerDataUrls(currentLayers);
+      const state = serializeCanvasState(layersWithData, documentSize);
       const compressed = await compressStateToHash(state);
       const fullUrl = `${getShareBaseUrl()}${window.location.pathname}#state=${compressed}`;
       setShareUrl(fullUrl);
@@ -337,42 +470,43 @@ export const ServerlessShareModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                     <button
                       className="btn btn-secondary"
                       style={{ flex: 1, fontSize: '12px' }}
                       onClick={() => setShowQr(!showQr)}
                     >
-                      <LucideIcons.QrCode size={16} />
-                      <span>{showQr ? 'Hide QR Code' : 'Show QR Code'}</span>
+                      <LucideIcons.QrCode size={15} />
+                      <span>{showQr ? 'Hide QR' : 'Show QR'}</span>
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ flex: 1, fontSize: '12px' }}
+                      onClick={() => setIsScannerOpen(true)}
+                    >
+                      <LucideIcons.Camera size={15} />
+                      <span>Scan Live QR</span>
                     </button>
                     <button
                       className="btn btn-secondary"
                       style={{ flex: 1, fontSize: '12px' }}
                       onClick={handleNativeShare}
                     >
-                      <LucideIcons.Share size={16} />
-                      <span>Native OS Share</span>
+                      <LucideIcons.Share size={15} />
+                      <span>OS Share</span>
                     </button>
                   </div>
 
                   {showQr && shareUrl && (
-                    <div className="qr-section">
-                      <img
-                        className="qr-image"
-                        src={generateQrCodeUrl(shareUrl, 160)}
-                        alt="Canvas QR Code"
-                        width={160}
-                        height={160}
-                      />
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                        Scan with camera to open canvas on mobile
-                      </span>
-                    </div>
+                    <LiveQrSlide url={shareUrl} size={160} />
                   )}
                 </>
               )}
             </>
+          )}
+
+          {isScannerOpen && (
+            <QrCameraScanner onClose={() => setIsScannerOpen(false)} />
           )}
 
           {activeTab === 'webrtc' && (
@@ -412,18 +546,7 @@ export const ServerlessShareModal: React.FC = () => {
                     </div>
 
                     {showQr && roomCode && (
-                      <div className="qr-section" style={{ margin: '10px 0' }}>
-                        <img
-                          className="qr-image"
-                          src={generateQrCodeUrl(`${getShareBaseUrl()}${window.location.pathname}?room=${roomCode}`, 160)}
-                          alt="Mobile Join QR Code"
-                          width={160}
-                          height={160}
-                        />
-                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                          Scan with mobile camera to join live room instantly
-                        </span>
-                      </div>
+                      <LiveQrSlide url={`${getShareBaseUrl()}${window.location.pathname}?room=${roomCode}`} size={160} />
                     )}
 
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -530,31 +653,146 @@ export const ServerlessShareModal: React.FC = () => {
               <div className="share-info-card">
                 <LucideIcons.Globe size={20} style={{ flexShrink: 0 }} />
                 <div>
-                  <strong>Public Image Hosting:</strong> Render your canvas image and upload it anonymously to public image services (Imgur, ImageBB) or trigger native OS sharing.
+                  <strong>Public Image Hosting:</strong> Select a public host provider below to upload your canvas and generate direct PNG/JPG, Markdown, HTML, and BBCode share links.
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <button className="btn btn-primary" onClick={handleNativeShare}>
-                  <LucideIcons.Share size={18} />
-                  <span>Share via Native Device Share Sheet</span>
-                </button>
+              {publicStatus === 'success' ? (
+                <div className="success-state" style={{ textAlign: 'left' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <LucideIcons.CheckCircle2 size={26} style={{ color: '#10b981' }} />
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '15px' }}>Upload Successful!</h4>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Hosted via <strong>{publicUsedService.toUpperCase()}</strong>
+                      </span>
+                    </div>
+                  </div>
 
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', margin: '4px 0' }}>
-                  — OR —
-                </p>
+                  <div className="form-group" style={{ marginBottom: '10px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600 }}>Direct Image Link (.png / .jpg)</label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <input className="url-input" value={publicShareLink} readOnly style={{ fontSize: '12px', flex: 1 }} />
+                      <button className="btn btn-primary" onClick={() => copyPublicFormat(publicShareLink, 'direct')}>
+                        {publicCopiedFormat === 'direct' ? <LucideIcons.Check size={14} /> : <LucideIcons.Copy size={14} />}
+                        <span>{publicCopiedFormat === 'direct' ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
 
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setIsOpen(false);
-                    useStore.setState({ saveModal: { type: 'public', provider: 'imgur' } });
-                  }}
-                >
-                  <LucideIcons.Image size={18} />
-                  <span>Upload Canvas Image to Public Host (Imgur / ImageBB)</span>
-                </button>
-              </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      <span>Markdown Embed</span>
+                      <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '11px' }} onClick={() => copyPublicFormat(`![Pixelite Canvas](${publicShareLink})`, 'md')}>
+                        {publicCopiedFormat === 'md' ? 'Copied!' : 'Copy Markdown'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      <span>HTML Embed Code</span>
+                      <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '11px' }} onClick={() => copyPublicFormat(`<img src="${publicShareLink}" alt="Pixelite Canvas" />`, 'html')}>
+                        {publicCopiedFormat === 'html' ? 'Copied!' : 'Copy HTML'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      <span>Forum BBCode</span>
+                      <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '11px' }} onClick={() => copyPublicFormat(`[img]${publicShareLink}[/img]`, 'bb')}>
+                        {publicCopiedFormat === 'bb' ? 'Copied!' : 'Copy BBCode'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '12px' }}>
+                    <button className="btn btn-secondary" style={{ width: '100%', fontSize: '12px' }} onClick={() => setPublicShowQr(!publicShowQr)}>
+                      <LucideIcons.QrCode size={14} />
+                      <span>{publicShowQr ? 'Hide Mobile QR Code' : 'Show Mobile QR Code'}</span>
+                    </button>
+
+                    {publicShowQr && (
+                      <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                        <img src={generateQrCodeUrl(publicShareLink, 140)} alt="QR Code" width={140} height={140} style={{ borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Choose Public Host Provider:</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      {PUBLIC_HOST_SERVICES.map((s) => {
+                        const IconComponent = (LucideIcons as any)[s.icon] || LucideIcons.Image;
+                        return (
+                          <div
+                            key={s.id}
+                            onClick={() => publicStatus === 'idle' && setSelectedPublicService(s.id)}
+                            style={{
+                              padding: '10px',
+                              borderRadius: '8px',
+                              border: selectedPublicService === s.id ? '2px solid var(--accent-primary, #6366f1)' : '1px solid var(--border-color, #334155)',
+                              background: selectedPublicService === s.id ? 'rgba(99, 102, 241, 0.12)' : 'var(--card-bg, #1e293b)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                            }}
+                          >
+                            <IconComponent size={20} style={{ color: selectedPublicService === s.id ? '#38bdf8' : 'inherit' }} />
+                            <div>
+                              <span style={{ fontSize: '13px', fontWeight: 600, display: 'block' }}>{s.name}</span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{s.badge}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={{ margin: '8px 0' }}>
+                    <button
+                      type="button"
+                      style={{ background: 'none', border: 'none', color: 'var(--accent-primary, #38bdf8)', fontSize: '11px', cursor: 'pointer', padding: 0 }}
+                      onClick={() => setShowPublicKeySettings(!showPublicKeySettings)}
+                    >
+                      {showPublicKeySettings ? '▲ Hide Custom API Key Settings' : '▼ Optional: Custom Provider API Keys'}
+                    </button>
+
+                    {showPublicKeySettings && (
+                      <div style={{ marginTop: '8px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', fontSize: '11px' }}>
+                        <div style={{ marginBottom: '6px' }}>
+                          <label style={{ display: 'block', marginBottom: '2px' }}>Imgur Client ID (Optional):</label>
+                          <input className="url-input" value={publicImgurKey} onChange={(e) => setPublicImgurKey(e.target.value)} placeholder="e.g. e9f4a138c21a415" style={{ fontSize: '11px' }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '2px' }}>ImageBB API Key (Optional):</label>
+                          <input className="url-input" value={publicImageBBKey} onChange={(e) => setPublicImageBBKey(e.target.value)} placeholder="e.g. 646b97645f782c5a278149f127419163" style={{ fontSize: '11px' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                    <button className="btn btn-primary" style={{ flex: 1, fontSize: '13px' }} onClick={handlePublicUpload} disabled={publicStatus !== 'idle'}>
+                      {publicStatus === 'uploading' ? (
+                        <>
+                          <LucideIcons.Loader2 size={16} className="animate-spin" />
+                          <span>Uploading Canvas...</span>
+                        </>
+                      ) : (
+                        <>
+                          <LucideIcons.CloudUpload size={16} />
+                          <span>Upload & Get Link</span>
+                        </>
+                      )}
+                    </button>
+                    <button className="btn btn-secondary" style={{ fontSize: '13px' }} onClick={handleNativeShare} title="Native OS Share Sheet">
+                      <LucideIcons.Share size={16} />
+                      <span>OS Share</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>

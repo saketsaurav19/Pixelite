@@ -1,6 +1,43 @@
 import type { ToolModule } from '../types';
+import type { Point } from '../../components/Canvas/types';
 import { findBestEdgePoint } from '../../utils/canvasUtils';
-import { shouldClear } from './utils';
+import { shouldClear, getSelectionOp } from './utils';
+import { computeSelectionBooleanOp } from './selectionBooleanOps';
+
+const finishLasso = ({
+  lassoPaths,
+  setLassoPaths,
+  selectionMode,
+  recordHistory,
+  label
+}: {
+  lassoPaths: Point[][];
+  setLassoPaths: (updater: any) => void;
+  selectionMode: string;
+  recordHistory: (label: string) => void;
+  label: string;
+}) => {
+  const current = lassoPaths[lassoPaths.length - 1];
+  if (!current || current.length < 3) return;
+
+  const op = getSelectionOp(selectionMode, false, false);
+  if (op === 'unite') {
+    // For additive operations, just concatenate paths — no rasterization needed.
+    // Rasterizing to a canvas and tracing boundary pixels produces a jagged,
+    // unordered pixel path that renders as a thick zigzag black stroke.
+    const existing = lassoPaths.slice(0, -1);
+    setLassoPaths([...existing, current]);
+  } else if (op === 'subtract') {
+    const existing = lassoPaths.slice(0, -1);
+    const result = computeSelectionBooleanOp(existing, current, 'subtract');
+    setLassoPaths(result);
+  } else if (op === 'intersect') {
+    const existing = lassoPaths.slice(0, -1);
+    const result = computeSelectionBooleanOp(existing, current, 'intersect');
+    setLassoPaths(result);
+  }
+  recordHistory(label);
+};
 
 export const lassoTools: ToolModule[] = [
   {
@@ -24,15 +61,24 @@ export const lassoTools: ToolModule[] = [
         next[next.length - 1] = [...next[next.length - 1], coords];
         return next;
       });
+    },
+    end: ({ lassoPaths, setLassoPaths, selectionMode, recordHistory, setIsInteracting }) => {
+      finishLasso({
+        lassoPaths,
+        setLassoPaths,
+        selectionMode,
+        recordHistory,
+        label: 'Lasso'
+      });
+      setIsInteracting(false);
     }
   },
   {
     id: 'polygonal_lasso',
-    start: ({ coords, setLassoPaths, setSelectionRect, setIsInteracting, selectionMode, isShift, isAlt, zoom, recordHistory, isInteracting, selectionRect }) => {
+    start: ({ coords, setLassoPaths, setSelectionRect, setIsInteracting, selectionMode, isShift, isAlt, zoom, recordHistory, isInteracting: interacting, selectionRect }) => {
       let closed = false;
       setLassoPaths((prev: any) => {
-        // Only start a brand new path if we aren't already building one
-        if (!isInteracting || prev.length === 0 || (shouldClear(selectionMode, isShift, isAlt) && prev[prev.length-1].length === 0)) {
+        if (!interacting || prev.length === 0 || (shouldClear(selectionMode, isShift, isAlt) && prev[prev.length-1].length === 0)) {
           setIsInteracting(true);
           if (shouldClear(selectionMode, isShift, isAlt)) {
             setSelectionRect(null);
@@ -45,30 +91,27 @@ export const lassoTools: ToolModule[] = [
           }
           return [[coords]];
         }
-        
+
         const currentPath = prev[prev.length - 1];
         if (currentPath.length === 0) {
           const next = [...prev];
           next[next.length - 1] = [coords];
           return next;
         }
-        
+
         const firstPoint = currentPath[0];
         const dist = Math.hypot(coords.x - firstPoint.x, coords.y - firstPoint.y);
-        
-        // Close path if clicking near start
+
         if (dist < 15 / (zoom || 1) && currentPath.length > 2) {
-          setIsInteracting(false);
           closed = true;
           return prev;
         }
-        
+
         const next = [...prev];
         next[next.length - 1] = [...next[next.length - 1], coords];
         return next;
       });
 
-      // Record history after the point is added (or path closed)
       if (closed) {
         recordHistory('Polygonal Lasso (Closed)');
       } else {
@@ -78,6 +121,16 @@ export const lassoTools: ToolModule[] = [
     doubleClick: ({ setIsInteracting, recordHistory }) => {
       setIsInteracting(false);
       recordHistory('Polygonal Lasso');
+    },
+    end: ({ lassoPaths, setLassoPaths, selectionMode, recordHistory, setIsInteracting }) => {
+      finishLasso({
+        lassoPaths,
+        setLassoPaths,
+        selectionMode,
+        recordHistory,
+        label: 'Polygonal Lasso'
+      });
+      setIsInteracting(false);
     }
   },
   {
@@ -112,6 +165,16 @@ export const lassoTools: ToolModule[] = [
     doubleClick: ({ setIsInteracting, recordHistory }) => {
       setIsInteracting(false);
       recordHistory('Magnetic Lasso');
+    },
+    end: ({ lassoPaths, setLassoPaths, selectionMode, recordHistory, setIsInteracting }) => {
+      finishLasso({
+        lassoPaths,
+        setLassoPaths,
+        selectionMode,
+        recordHistory,
+        label: 'Magnetic Lasso'
+      });
+      setIsInteracting(false);
     }
   }
 ];

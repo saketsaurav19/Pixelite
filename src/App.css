@@ -508,6 +508,8 @@ body {
 /* Side Panels */
 .side-panels {
   width: var(--sidebar-width);
+  min-width: 12rem;
+  max-width: 22rem;
   background-color: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
   display: flex;
@@ -520,6 +522,7 @@ body {
   border-bottom: 1px solid var(--border-color);
   overflow: scroll;
   flex: 1;
+  min-width: 0;
 }
 
 .history-panel {
@@ -638,6 +641,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .history-item.active,

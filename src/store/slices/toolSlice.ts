@@ -1,6 +1,8 @@
 import type { StateCreator } from 'zustand';
 import type { EditorState, Tool, BrushPreset, CustomShapePreset } from '../types';
+import type { PuppetWarpMode } from '../../utils/puppetWarpUtils';
 import { nanoid } from 'nanoid';
+import { normalizeColor } from '../../utils/canvasUtils';
 
 export interface ToolSlice {
   activeTool: Tool;
@@ -28,13 +30,30 @@ export interface ToolSlice {
   contentAwareMoveMode: 'move' | 'extend';
   moveAutoSelect: boolean;
   moveShowTransform: boolean;
+  moveAutoSelectType: 'layer' | 'group';
+  activeToolBlendMode: string;
+  shapeDrawMode: 'shape' | 'path' | 'pixels';
+  shapePathOperation: 'combine' | 'subtract' | 'intersect' | 'exclude';
   textFontFamily: string;
   textFontWeight: string;
   textFontStyle: string;
   textAlign: 'left' | 'center' | 'right';
   textEditor: { x: number; y: number; value: string; layerId?: string } | null;
-  transformMode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp';
-  setTransformMode: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp') => void;
+  transformMode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp' | 'puppet';
+  setTransformMode: (mode: 'free' | 'scale' | 'rotate' | 'skew' | 'distort' | 'perspective' | 'warp' | 'puppet') => void;
+  setMoveAutoSelectType: (type: 'layer' | 'group') => void;
+  setActiveToolBlendMode: (mode: string) => void;
+  setShapeDrawMode: (mode: 'shape' | 'path' | 'pixels') => void;
+  setShapePathOperation: (op: 'combine' | 'subtract' | 'intersect' | 'exclude') => void;
+  puppetMode: PuppetWarpMode;
+  setPuppetMode: (mode: PuppetWarpMode) => void;
+  puppetDensity: number;
+  setPuppetDensity: (density: number) => void;
+  puppetShowMesh: boolean;
+  setPuppetShowMesh: (show: boolean) => void;
+  /** Selection radius for new pins (0 = global influence, Photoshop-style off). */
+  puppetRadius: number;
+  setPuppetRadius: (radius: number) => void;
 
   brushPresets: BrushPreset[];
   customShapes: CustomShapePreset[];
@@ -81,6 +100,7 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
     move: 'move',
     marquee: 'marquee',
     lasso: 'lasso',
+    magnetic_lasso: 'magnetic_lasso',
     selection: 'quick_selection',
     crop: 'crop',
     eyedropper: 'eyedropper',
@@ -97,7 +117,8 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
     path: 'path_select',
     shape: 'shape',
     hand: 'hand',
-    zoom: 'zoom_tool'
+    zoom: 'zoom_tool',
+    transform: 'transform'
   },
   brushSize: 40,
   strokeWidth: 2,
@@ -122,12 +143,20 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
   contentAwareMoveMode: 'move',
   moveAutoSelect: true,
   moveShowTransform: true,
+  moveAutoSelectType: 'layer',
+  activeToolBlendMode: 'normal',
+  shapeDrawMode: 'shape',
+  shapePathOperation: 'combine',
   textFontFamily: 'Inter, system-ui, sans-serif',
   textFontWeight: 'normal',
   textFontStyle: 'normal',
   textAlign: 'left',
   textEditor: null,
   transformMode: 'free',
+  puppetMode: 'normal',
+  puppetDensity: 5,
+  puppetShowMesh: true,
+  puppetRadius: 0,
 
   brushPresets: JSON.parse(localStorage.getItem('pixelite_brushPresets') || '[]'),
   customShapes: JSON.parse(localStorage.getItem('pixelite_customShapes') || '[]'),
@@ -137,8 +166,8 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
     localStorage.setItem('pixelite_brushPresets', JSON.stringify(updated));
     return { brushPresets: updated };
   }),
-  removeBrushPreset: (id) => set((state) => {
-    const updated = state.brushPresets.filter((p) => p.id !== id);
+  removeBrushPreset: (id: string) => set((state) => {
+    const updated = state.brushPresets.filter((p: BrushPreset) => p.id !== id);
     localStorage.setItem('pixelite_brushPresets', JSON.stringify(updated));
     return { brushPresets: updated };
   }),
@@ -148,22 +177,26 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
     localStorage.setItem('pixelite_customShapes', JSON.stringify(updated));
     return { customShapes: updated };
   }),
-  removeCustomShapePreset: (id) => set((state) => {
-    const updated = state.customShapes.filter((s) => s.id !== id);
+  removeCustomShapePreset: (id: string) => set((state) => {
+    const updated = state.customShapes.filter((s: CustomShapePreset) => s.id !== id);
     localStorage.setItem('pixelite_customShapes', JSON.stringify(updated));
     return { customShapes: updated };
   }),
 
   setActiveTool: (tool) => set({ activeTool: tool }),
   setTransformMode: (mode) => set({ transformMode: mode }),
+  setPuppetMode: (mode) => set({ puppetMode: mode }),
+  setPuppetDensity: (density) => set({ puppetDensity: density }),
+  setPuppetShowMesh: (show) => set({ puppetShowMesh: show }),
+  setPuppetRadius: (radius) => set({ puppetRadius: radius }),
   setToolVariant: (groupId, tool) => set((state) => ({
     activeToolVariants: { ...state.activeToolVariants, [groupId]: tool },
     activeTool: tool
   })),
   setBrushSize: (size) => set({ brushSize: size }),
   setStrokeWidth: (width) => set({ strokeWidth: width }),
-  setBrushColor: (color) => set({ brushColor: color }),
-  setSecondaryColor: (color) => set({ secondaryColor: color }),
+  setBrushColor: (color) => set({ brushColor: normalizeColor(color) }),
+  setSecondaryColor: (color) => set({ secondaryColor: normalizeColor(color) }),
   setPrimaryOpacity: (opacity) => set({ primaryOpacity: opacity }),
   setSecondaryOpacity: (opacity) => set({ secondaryOpacity: opacity }),
   setToolStrength: (strength) => set({ toolStrength: strength }),
@@ -183,6 +216,10 @@ export const createToolSlice: StateCreator<EditorState, [], [], ToolSlice> = (se
   setContentAwareMoveMode: (mode) => set({ contentAwareMoveMode: mode }),
   setMoveAutoSelect: (val) => set({ moveAutoSelect: val }),
   setMoveShowTransform: (val) => set({ moveShowTransform: val }),
+  setMoveAutoSelectType: (type) => set({ moveAutoSelectType: type }),
+  setActiveToolBlendMode: (mode) => set({ activeToolBlendMode: mode }),
+  setShapeDrawMode: (mode) => set({ shapeDrawMode: mode }),
+  setShapePathOperation: (op) => set({ shapePathOperation: op }),
   setTextFontFamily: (val) => set({ textFontFamily: val }),
   setTextFontWeight: (val) => set({ textFontWeight: val }),
   setTextFontStyle: (val) => set({ textFontStyle: val }),
