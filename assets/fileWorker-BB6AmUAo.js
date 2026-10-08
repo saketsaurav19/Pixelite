@@ -1,1 +1,0 @@
-(function(){"use strict";self.onmessage=async e=>{try{const{type:s}=e.data;s==="PING"&&self.postMessage({type:"PONG",success:!0})}catch(s){self.postMessage({type:"ERROR",error:s.message,success:!1})}}})();
