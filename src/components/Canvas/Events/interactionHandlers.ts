@@ -6,6 +6,7 @@ import { useStore } from '../../../store/useStore';
 import { toolState } from '../../../tools/toolState';
 import { collaborationService } from '../../../services/collaboration/WebRTCCollaborationService';
 import { promptForEditPermission } from '../../../services/collaboration/collaborationSync';
+import { commitMaskPaint } from '../../../utils/maskCanvas';
 
 const getClickedTextLayer = (
   layers: any[],
@@ -325,12 +326,22 @@ export const endAction = (
 
   // Paint tools commitment
   if (['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'patch', 'smudge', 'clone', 'pattern_stamp', 'mixer_brush', 'color_replacement', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush'].includes(activeTool)) {
-    const id = activeLayerId || layers[0]?.id;
-    const canvas = refs.canvasRefs.current[id];
-    if (canvas) {
-      handlers.updateLayer(id, { dataUrl: canvas.toDataURL() });
-      const historyLabel = activeTool.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-      handlers.recordHistory(historyLabel);
+    // MU-1 paint-on-mask: the stroke went to the mask's off-DOM canvas, so
+    // persist it as the layer's mask instead of touching layer pixels.
+    // updateLayerMaskDataUrl records no history itself; the single
+    // recordHistory below makes the stroke undoable/redoable.
+    if (context.maskPaintLayerId) {
+      if (commitMaskPaint(context.maskPaintLayerId)) {
+        handlers.recordHistory('Paint on Mask');
+      }
+    } else {
+      const id = activeLayerId || layers[0]?.id;
+      const canvas = refs.canvasRefs.current[id];
+      if (canvas) {
+        handlers.updateLayer(id, { dataUrl: canvas.toDataURL() });
+        const historyLabel = activeTool.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        handlers.recordHistory(historyLabel);
+      }
     }
   }
 

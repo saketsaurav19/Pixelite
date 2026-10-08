@@ -34,6 +34,9 @@ export interface CanvasContext {
   strokeWidth: number;
   activeLayerId: string | null;
   layers: Layer[];
+  // MU-1 paint-on-mask: when set, the stroke targeted this layer's mask
+  // (off-DOM canvas) instead of the layer's working canvas.
+  maskPaintLayerId?: string | null;
   selectionMode: any;
   selectionTolerance: number;
   selectionContiguous: boolean;

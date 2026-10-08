@@ -51,6 +51,28 @@ export interface BaseLayer {
   isPdfBackground?: boolean;
   pdfData?: string;
   pdfPageIndex?: number;
+  /**
+   * Layer mask (white reveals / black hides). Null/undefined = no mask.
+   * Mask pixels are stored in the same coordinate space as the layer's own
+   * canvas (`layer.width` x `layer.height`, falling back to the document size).
+   */
+  layerMask?: LayerMask | null;
+  /**
+   * Clipping-mask anchor: id of the base layer within the same parent that
+   * this layer is clipped to (Photoshop Alt+click semantics).
+   * Null/undefined = not clipped.
+   */
+  clippedTo?: string | null;
+}
+
+/**
+ * A layer mask: a grayscale pixel mask stored as a PNG data URL.
+ * White (255) reveals the layer, black (0) hides it; gray = partial.
+ */
+export interface LayerMask {
+  enabled: boolean;
+  /** Grayscale PNG data URL, same pixel size as the layer's canvas. */
+  dataUrl: string;
 }
 
 export interface AnnotationData {
