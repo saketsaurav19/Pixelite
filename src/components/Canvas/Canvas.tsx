@@ -24,6 +24,7 @@ import { useSelectionAnimation } from './Rendering/useSelectionAnimation';
 import { useTextRendering } from './Rendering/useTextRendering';
 import { useLighting } from './Rendering/useLighting';
 import { CanvasLayer } from './UI/CanvasLayer';
+import { getMaskPaintCanvas, preloadMaskPaintCanvas, toGrayscaleColor } from '../../utils/maskCanvas';
 import { SelectionOverlay } from './UI/SelectionOverlay';
 import { VectorOverlay } from './UI/VectorOverlay';
 import { CropOverlay } from './UI/CropOverlay';
@@ -81,7 +82,7 @@ const Canvas: React.FC = () => {
   const {
     activeTool, brushSize, strokeWidth, brushColor, secondaryColor,
     primaryOpacity, secondaryOpacity,
-    zoom, setZoom, layers, activeLayerId,
+    zoom, setZoom, layers, activeLayerId, activeMaskLayerId,
     updateLayer, addLayer, recordHistory, setActiveLayer, setLayers, setActiveTool, removeLayer,
     canvasOffset, setCanvasOffset, canvasRotation, setCanvasRotation, setBrushColor,
     history, historyIndex,
@@ -519,6 +520,18 @@ const Canvas: React.FC = () => {
 
   const effectiveLayerIdRef = useRef<string | null>(null);
 
+  // MU-1 paint-on-mask: the mask thumbnail click sets activeMaskLayerId (and
+  // the active layer) together. Pre-decode the mask into the off-DOM paint
+  // canvas so the first stroke lands on the real mask, not a blank canvas.
+  // Re-runs when the mask dataUrl changes (undo/redo, invert, …).
+  const activeMaskPaintDataUrl = useStore((s) => {
+    const l = s.activeMaskLayerId ? findLayerById(s.layers, s.activeMaskLayerId) : undefined;
+    return l?.layerMask?.dataUrl ?? null;
+  });
+  useEffect(() => {
+    if (activeMaskLayerId) preloadMaskPaintCanvas(activeMaskLayerId);
+  }, [activeMaskLayerId, activeMaskPaintDataUrl]);
+
   /**
    * --- Interaction Engine ---
    * These functions manage the lifecycle of a tool interaction (Click/Touch -> Drag -> Release).
@@ -547,12 +560,31 @@ const Canvas: React.FC = () => {
       }
     }
 
+    // MU-1 paint-on-mask: when a mask is the paint target and the tool is
+    // brush/pencil/eraser, strokes redirect to the mask's own off-DOM canvas.
+    // The layer's working canvas is never touched (stroke persistence
+    // serializes it), no raster layer is spawned, and lockTransparent's
+    // source-atop override is skipped (masks have no "transparent pixels").
+    const maskPaintLayerId =
+      activeMaskLayerId && activeMaskLayerId === activeLayerId &&
+      ['brush', 'pencil', 'eraser'].includes(activeTool as string)
+        ? activeMaskLayerId
+        : null;
+    // Eraser on a mask reveals (paints solid white, Photoshop semantics), so
+    // it runs through the brush module with a forced white color.
+    const maskPaintDispatchTool = maskPaintLayerId && activeTool === 'eraser' ? 'brush' : activeTool;
+    const maskPaintBrushColor = !maskPaintLayerId
+      ? brushColor
+      : activeTool === 'eraser'
+        ? '#ffffff'
+        : toGrayscaleColor(brushColor);
+
     // Auto-create a raster layer when a modifying tool is used on a non-raster layer
     const rasterTypes = new Set(['paint', 'image']);
     const modifyingTools = ['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'dodge', 'burn', 'healing', 'healing_brush', 'smudge', 'clone', 'patch', 'pattern_stamp', 'mixer_brush', 'color_replacement', 'background_eraser', 'magic_eraser', 'history_brush', 'art_history_brush', 'paint_bucket', 'gradient'];
     const layer = activeLayerId ? findLayerById(layers, activeLayerId) : undefined;
     let targetLayerId = activeLayerId;
-    if (activeLayerId && layer && modifyingTools.includes(activeTool as string) && !rasterTypes.has(layer.type || 'paint')) {
+    if (!maskPaintLayerId && activeLayerId && layer && modifyingTools.includes(activeTool as string) && !rasterTypes.has(layer.type || 'paint')) {
       store.addLayer({ name: 'Layer', type: 'paint', width: store.documentSize.w, height: store.documentSize.h });
       targetLayerId = store.activeLayerId;
     }
@@ -560,9 +592,11 @@ const Canvas: React.FC = () => {
       effectiveLayerIdRef.current = targetLayerId;
     }
 
-    const activeCanvas = targetLayerId ? canvasRefs.current[targetLayerId] : null;
+    const activeCanvas = maskPaintLayerId
+      ? getMaskPaintCanvas(maskPaintLayerId)
+      : targetLayerId ? canvasRefs.current[targetLayerId] : null;
     const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
-    if (activeCtx && activeLayer?.lockTransparent) {
+    if (activeCtx && activeLayer?.lockTransparent && !maskPaintLayerId) {
       activeCtx.globalCompositeOperation = 'source-atop';
     }
 
@@ -579,8 +613,8 @@ const Canvas: React.FC = () => {
       isShift: (e as any).shiftKey || false,
       isAlt: (e as any).altKey || false,
       isCtrl: (e as any).ctrlKey || (e as any).metaKey || false,
-      activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
-      activeLayerId: targetLayerId, layers,
+      activeTool: maskPaintDispatchTool, brushSize, brushColor: maskPaintBrushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
+      activeLayerId: targetLayerId, maskPaintLayerId, layers,
       setLightingEnabled: store.setLightingEnabled,
       isLightingEnabled,
       selectionMode: store.selectionMode,
@@ -607,7 +641,7 @@ const Canvas: React.FC = () => {
     }, {
       lastPointRef, startMouseRef, startOffsetRef, hiddenTextInputRef
     });
-  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, canvasOffset, lassoPaths, vectorPaths, activePathIndex, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, setSelectedPoint, isAltPressed, isCtrlPressed, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, applySelectionClip, activeCropHandle, moveAutoSelect, moveShowTransform]);
+  }, [getCoordinates, activeTool, textEditor, commitText, layers, setActiveLayer, zoom, setZoom, handleEyedropper, activeLayerId, activeMaskLayerId, canvasOffset, lassoPaths, vectorPaths, activePathIndex, setActivePathIndex, setLassoPaths, setSelectionRect, cropRect, setCropRect, setDraftShape, setVectorPaths, setGradientStart, handlePaintBucket, setCloneSource, brushSize, brushColor, primaryOpacity, recordHistory, setIsInteracting, addLayer, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, setSelectedPoint, isAltPressed, isCtrlPressed, slices, setSlices, addSlice, colorSamplers, addColorSampler, clearColorSamplers, rulerData, setRulerData, history, historyIndex, applySelectionClip, activeCropHandle, moveAutoSelect, moveShowTransform]);
 
   const handleDoubleClick = useCallback(() => {
     const id = activeLayerId || layers[0]?.id;
@@ -698,10 +732,18 @@ const Canvas: React.FC = () => {
     const coords = isMoveVectorTool ? getSnappedCoords(resolvedMoveCoords) : resolvedMoveCoords;
 
     const effectiveId = effectiveLayerIdRef.current ?? activeLayerId;
-    const activeCanvas = effectiveId ? canvasRefs.current[effectiveId] : null;
+    // MU-1 paint-on-mask: same redirect as startAction.
+    const maskPaintLayerId =
+      activeMaskLayerId && activeMaskLayerId === activeLayerId &&
+      ['brush', 'pencil', 'eraser'].includes(activeTool as string)
+        ? activeMaskLayerId
+        : null;
+    const activeCanvas = maskPaintLayerId
+      ? getMaskPaintCanvas(maskPaintLayerId)
+      : effectiveId ? canvasRefs.current[effectiveId] : null;
     const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
     const activeLayer = layers.find(l => l.id === effectiveId);
-    if (activeCtx && activeLayer?.lockTransparent) {
+    if (activeCtx && activeLayer?.lockTransparent && !maskPaintLayerId) {
       activeCtx.globalCompositeOperation = 'source-atop';
     }
 
@@ -711,8 +753,11 @@ const Canvas: React.FC = () => {
       coords,
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
-      activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
-      activeLayerId: effectiveId, layers,
+      activeTool: maskPaintLayerId && activeTool === 'eraser' ? 'brush' : activeTool,
+      brushSize,
+      brushColor: !maskPaintLayerId ? brushColor : activeTool === 'eraser' ? '#ffffff' : toGrayscaleColor(brushColor),
+      zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
+      activeLayerId: effectiveId, maskPaintLayerId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
       selectionContiguous: store.selectionContiguous,
@@ -739,7 +784,7 @@ const Canvas: React.FC = () => {
     }, {
       isInteracting, activeCropHandle, selectedPoint, activePathIndex
     });
-  }, [getCoordinates, isInteracting, activeTool, activeLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect, applySelectionClip, findBestEdgePoint, vectorPaths, activePathIndex, selectedPoint, isAltPressed, isCtrlPressed, isShiftPressed, moveAutoSelect, moveShowTransform]);
+  }, [getCoordinates, isInteracting, activeTool, activeLayerId, activeMaskLayerId, layers, brushSize, strokeWidth, hexToRgba, secondaryColor, secondaryOpacity, brushColor, primaryOpacity, updateLayer, canvasOffset, setCanvasOffset, cloneSource, selectionRect, lassoPaths, activeCropHandle, cropRect, applySelectionClip, findBestEdgePoint, vectorPaths, activePathIndex, selectedPoint, isAltPressed, isCtrlPressed, isShiftPressed, moveAutoSelect, moveShowTransform]);
 
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
@@ -757,6 +802,12 @@ const Canvas: React.FC = () => {
     const effectiveId = effectiveLayerIdRef.current ?? activeLayerId;
     const activeCanvas = effectiveId ? canvasRefs.current[effectiveId] : null;
     const activeCtx = activeCanvas?.getContext('2d', { willReadFrequently: true }) || null;
+    // MU-1 paint-on-mask: tell the end handler to commit to the mask.
+    const maskPaintLayerId =
+      activeMaskLayerId && activeMaskLayerId === activeLayerId &&
+      ['brush', 'pencil', 'eraser'].includes(activeTool as string)
+        ? activeMaskLayerId
+        : null;
 
     const context: any = {
       canvas: activeCanvas,
@@ -764,8 +815,9 @@ const Canvas: React.FC = () => {
       coords: currentMousePos || { x: 0, y: 0 },
       startCoords: startMouseRef.current ? getCoordinates(startMouseRef.current.x, startMouseRef.current.y) : null,
       lastPoint: lastPointRef.current,
-      activeTool, brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
-      activeLayerId: effectiveId, layers,
+      activeTool: maskPaintLayerId && activeTool === 'eraser' ? 'brush' : activeTool,
+      brushSize, brushColor, zoom, toolStrength, toolHardness, strokeWidth, canvasOffset,
+      activeLayerId: effectiveId, maskPaintLayerId, layers,
       selectionMode: store.selectionMode,
       selectionTolerance: store.selectionTolerance,
       selectionContiguous: store.selectionContiguous,
@@ -798,7 +850,12 @@ const Canvas: React.FC = () => {
     if (activeCtx) {
       activeCtx.globalCompositeOperation = 'source-over';
     }
-  }, [isInteracting, activeTool, activeLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle, isShiftPressed, moveAutoSelect, moveShowTransform]);
+    if (maskPaintLayerId) {
+      // Leave the mask paint canvas in a clean composite state for the next stroke.
+      const maskCtx = getMaskPaintCanvas(maskPaintLayerId)?.getContext('2d');
+      if (maskCtx) maskCtx.globalCompositeOperation = 'source-over';
+    }
+  }, [isInteracting, activeTool, activeLayerId, activeMaskLayerId, layers, updateLayer, draftShape, addLayer, hexToRgba, brushColor, primaryOpacity, secondaryColor, secondaryOpacity, strokeWidth, recordHistory, currentMousePos, gradientStart, applyGradient, selectionRect, lassoPaths, activeCropHandle, isShiftPressed, moveAutoSelect, moveShowTransform]);
 
 
   // Handles mouse wheel zooming
