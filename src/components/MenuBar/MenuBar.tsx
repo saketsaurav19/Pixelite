@@ -590,8 +590,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Raster Mask',
           subItems: [
-            { label: 'Reveal All' },
-            { label: 'Hide All' },
+            { label: 'Reveal All', action: (s) => s.activeLayerId && s.addLayerMask?.(s.activeLayerId, 'revealAll') },
+            { label: 'Hide All', action: (s) => s.activeLayerId && s.addLayerMask?.(s.activeLayerId, 'hideAll') },
           ]
         },
         {
