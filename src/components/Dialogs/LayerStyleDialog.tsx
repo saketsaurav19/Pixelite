@@ -1,42 +1,37 @@
+/**
+ * Layer Style dialog — MU-2 rewire.
+ *
+ * Effects are pure store data now. Every control writes live to the store
+ * (`updateLayerEffects` for effect parameters, `updateLayer` for blending
+ * options) with no per-tick history, so the document updates in real time.
+ * - On open: a deep clone of `activeLayer.effects` (or the model defaults) is
+ *   snapshotted into a ref, along with opacity / fill / blendMode.
+ * - On Apply: a single `recordHistory('Layer Styles')` entry is recorded; the
+ *   store already holds the final values.
+ * - On Cancel (or overlay click): the snapshot is restored with
+ *   `setLayerEffects` + `updateLayer`. No history entry.
+ *
+ * The old destructive canvas-bake path is gone: no canvas resizing, no
+ * backup/restore machinery, no baking effects into layer pixels. The only
+ * canvas code left is the small 200x150 preview, which renders from the
+ * CURRENT STORE values using a read-only preview-only copy of the layer
+ * artwork. The real layer canvas is never touched.
+ *
+ * OUT OF SCOPE — kept as non-functional UI (local state only, not backed by
+ * the LayerEffects model; separate Photoshop sub-features):
+ * - Contour tab, Texture tab, Stroke Style tab, 3D tab.
+ * - Blending tab extras: Channels toggles and Blend If (no model backing).
+ * - Trimmed single controls with no model field (e.g. Drop Shadow noise,
+ *   glow Technique/Range, Bevel contour/gloss/global-light) were removed;
+ *   see TRIMMED_CONTROLS in src/utils/layerEffects.ts.
+ */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useDragControls } from 'framer-motion';
 import { useStore } from '../../store/useStore';
 import { findLayerById } from '../../utils/layerUtils';
+import { DEFAULT_LAYER_EFFECTS } from '../../utils/layerEffects';
+import type { LayerEffects, BlendMode, BevelStyle, BevelTechnique } from '../../store/types';
 import './Dialogs.css';
-
-interface StyleEffects {
-  bevelAndEmboss: boolean;
-  contour: boolean;
-  texture: boolean;
-  stroke: boolean;
-  dropShadow: boolean;
-  innerShadow: boolean;
-  innerGlow: boolean;
-  outerGlow: boolean;
-  satin: boolean;
-  colorOverlay: boolean;
-  gradientOverlay: boolean;
-  patternOverlay: boolean;
-  strokeStyle: boolean; // distinct from "stroke" effect
-  d3d: boolean;
-}
-
-const INITIAL_EFFECTS: StyleEffects = {
-  bevelAndEmboss: false,
-  contour: false,
-  texture: false,
-  stroke: false,
-  dropShadow: false,
-  innerShadow: false,
-  innerGlow: false,
-  outerGlow: false,
-  satin: false,
-  colorOverlay: false,
-  gradientOverlay: false,
-  patternOverlay: false,
-  strokeStyle: false,
-  d3d: false,
-};
 
 export const EFFECT_LIST = [
   { key: 'bevelAndEmboss', label: 'Bevel and Emboss' },
@@ -57,6 +52,55 @@ export const EFFECT_LIST = [
 
 type EffectKey = (typeof EFFECT_LIST)[number]['key'];
 
+/** Effect keys backed by the LayerEffects store model (MU-2). */
+const MODEL_EFFECT_KEYS = [
+  'bevelAndEmboss',
+  'stroke',
+  'dropShadow',
+  'innerShadow',
+  'innerGlow',
+  'outerGlow',
+  'satin',
+  'colorOverlay',
+  'gradientOverlay',
+  'patternOverlay',
+] as const;
+
+type ModelEffectKey = (typeof MODEL_EFFECT_KEYS)[number];
+
+const isModelEffectKey = (key: EffectKey): key is ModelEffectKey =>
+  (MODEL_EFFECT_KEYS as readonly string[]).includes(key);
+
+/** Merge store values over the model defaults so every field is always defined. */
+const normalizeEffects = (e: LayerEffects | undefined): LayerEffects => ({
+  dropShadow: { ...DEFAULT_LAYER_EFFECTS.dropShadow, ...e?.dropShadow },
+  innerShadow: { ...DEFAULT_LAYER_EFFECTS.innerShadow, ...e?.innerShadow },
+  outerGlow: { ...DEFAULT_LAYER_EFFECTS.outerGlow, ...e?.outerGlow },
+  innerGlow: { ...DEFAULT_LAYER_EFFECTS.innerGlow, ...e?.innerGlow },
+  bevelAndEmboss: { ...DEFAULT_LAYER_EFFECTS.bevelAndEmboss, ...e?.bevelAndEmboss },
+  satin: { ...DEFAULT_LAYER_EFFECTS.satin, ...e?.satin },
+  colorOverlay: { ...DEFAULT_LAYER_EFFECTS.colorOverlay, ...e?.colorOverlay },
+  gradientOverlay: { ...DEFAULT_LAYER_EFFECTS.gradientOverlay, ...e?.gradientOverlay },
+  patternOverlay: { ...DEFAULT_LAYER_EFFECTS.patternOverlay, ...e?.patternOverlay },
+  stroke: { ...DEFAULT_LAYER_EFFECTS.stroke, ...e?.stroke },
+});
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
+/** Pre-dialog values restored on Cancel. */
+interface StyleDialogSnapshot {
+  effects: LayerEffects | undefined;
+  opacity: number; // 0-1
+  fill: number | undefined; // 0-1
+  blendMode: BlendMode;
+}
+
 export const LayerStyleDialog: React.FC = () => {
   const dragControls = useDragControls();
   const {
@@ -66,74 +110,46 @@ export const LayerStyleDialog: React.FC = () => {
     setLayerStyleActiveTab,
     activeLayerId,
     updateLayer,
+    updateLayerEffects,
+    setLayerEffects,
     recordHistory,
     layers,
   } = useStore();
 
   const activeLayer = activeLayerId ? findLayerById(layers, activeLayerId) : undefined;
 
-  const [opacity, setOpacity] = useState(100);
-  const [blendMode, setBlendMode] = useState<string>('source-over');
-  const [fillOpacity, setFillOpacity] = useState(100);
+  // Live store-backed values (normalized over model defaults).
+  const fx = normalizeEffects(activeLayer?.effects);
+  const opacityPct = Math.round((activeLayer?.opacity ?? 1) * 100);
+  const fillPct = Math.round((activeLayer?.fill ?? 1) * 100);
+  const blendModeValue: BlendMode = activeLayer?.blendMode ?? 'source-over';
+
+  /** Write one effect's fields live to the store (deep-merged per effect key). */
+  const writeFx = (key: ModelEffectKey, patch: object): void => {
+    if (!activeLayerId) return;
+    updateLayerEffects(activeLayerId, { [key]: patch } as unknown as Partial<LayerEffects>);
+  };
+
+  /** Write blending options live to the store. */
+  const writeBlending = (patch: { opacity?: number; fill?: number; blendMode?: BlendMode }): void => {
+    if (!activeLayerId) return;
+    updateLayer(activeLayerId, patch);
+  };
+
+  // Cancel snapshot (deep clone taken on open).
+  const snapshotRef = useRef<StyleDialogSnapshot | null>(null);
+  // Read-only artwork copy used ONLY by the small preview canvas.
+  const previewSourceRef = useRef<HTMLCanvasElement | null>(null);
+
+  // --- Non-functional UI state (out of scope for MU-2; kept as-is) ---
+  // Blending tab extras with no model backing.
   const [fillChannels, setFillChannels] = useState({ r: true, g: true, b: true });
   const [blendIf, setBlendIf] = useState<'gray' | 'r' | 'g' | 'b'>('gray');
   const [blendIfRange, setBlendIfRange] = useState({ underlyingLow: 0, underlyingHigh: 255, blendLow: 0, blendHigh: 255 });
-  const [effects, setEffects] = useState<StyleEffects>(INITIAL_EFFECTS);
+  // Effect-list checkboxes for the tabs not backed by the model.
+  const [legacyToggles, setLegacyToggles] = useState<Record<string, boolean>>({});
 
-  // Effect-specific settings
-  const [shadowColor, setShadowColor] = useState('#000000');
-  const [shadowOpacity, setShadowOpacity] = useState(75);
-  const [shadowAngle, setShadowAngle] = useState(120);
-  const [shadowDistance, setShadowDistance] = useState(5);
-  const [shadowSize, setShadowSize] = useState(5);
-  const [shadowChoke, setShadowChoke] = useState(0);
-  const [shadowNoise, setShadowNoise] = useState(0);
-
-  const [innerShadowColor, setInnerShadowColor] = useState('#000000');
-  const [innerShadowOpacity, setInnerShadowOpacity] = useState(75);
-  const [innerShadowAngle, setInnerShadowAngle] = useState(120);
-  const [innerShadowDistance, setInnerShadowDistance] = useState(5);
-  const [innerShadowSize, setInnerShadowSize] = useState(5);
-
-  const [strokeSize, setStrokeSize] = useState(3);
-  const [strokeColor, setStrokeColor] = useState('#ff0000');
-  const [strokeOpacity, setStrokeOpacity] = useState(100);
-  const [strokePosition, setStrokePosition] = useState<'outside' | 'inside' | 'center'>('outside');
-  const [strokeBlendMode, setStrokeBlendMode] = useState('source-over');
-
-  const [glowColor, setGlowColor] = useState('#ff0000');
-  const [glowOpacity, setGlowOpacity] = useState(75);
-  const [glowSize, setGlowSize] = useState(10);
-  const [glowTechnique, setGlowTechnique] = useState('softer');
-  const [glowRange, setGlowRange] = useState('50%');
-
-  const [overlayColor, setOverlayColor] = useState('#ff0000');
-  const [overlayOpacity, setOverlayOpacity] = useState(100);
-  const [overlayBlendMode, setOverlayBlendMode] = useState('normal');
-
-  const [gradientStart, setGradientStart] = useState('#ff0000');
-  const [gradientEnd, setGradientEnd] = useState('#0000ff');
-  const [gradientOpacity, setGradientOpacity] = useState(100);
-  const [gradientAngle, setGradientAngle] = useState(90);
-  const [gradientStyle, setGradientStyle] = useState('linear');
-
-  // Bevel & Emboss settings
-  const [bevelStyle, setBevelStyle] = useState<string>('innerBevel');
-  const [bevelTechnique, setBevelTechnique] = useState<string>('smooth');
-  const [bevelDepth, setBevelDepth] = useState(100);
-  const [bevelSize, setBevelSize] = useState(5);
-  const [bevelSoften, setBevelSoften] = useState(0);
-  const [bevelAngle, setBevelAngle] = useState(30);
-  const [bevelAltitude, setBevelAltitude] = useState(30);
-  const [bevelGloss, setBevelGloss] = useState(0);
-  const [bevelHighlightMode, setBevelHighlightMode] = useState<string>('screen');
-  const [bevelHighlightOpacity, setBevelHighlightOpacity] = useState(75);
-  const [bevelShadowMode, setBevelShadowMode] = useState<string>('multiply');
-  const [bevelShadowOpacity, setBevelShadowOpacity] = useState(75);
-  const [bevelUseGlobalAngle, setBevelUseGlobalAngle] = useState(true);
-  const [bevelContour, setBevelContour] = useState<string>('linear');
-
-  // Contour settings
+  // Contour settings (out of scope — local UI only)
   const [contourColor, setContourColor] = useState('#000000');
   const [contourOpacity, setContourOpacity] = useState(75);
   const [contourRange, setContourRange] = useState(50);
@@ -142,7 +158,7 @@ export const LayerStyleDialog: React.FC = () => {
   const [contourNoise, setContourNoise] = useState(0);
   const [contourAntiAliased, setContourAntiAliased] = useState(true);
 
-  // Texture settings
+  // Texture settings (out of scope — local UI only)
   const [texturePattern, setTexturePattern] = useState<string>('brick');
   const [textureScale, setTextureScale] = useState(100);
   const [textureDepth, setTextureDepth] = useState(50);
@@ -150,159 +166,51 @@ export const LayerStyleDialog: React.FC = () => {
   const [textureLinkToLayer, setTextureLinkToLayer] = useState(true);
   const [textureOpacity, setTextureOpacity] = useState(100);
 
-  const backupCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  // Original layer canvas size captured when the dialog opens. Used to grow
-  // the canvas to accommodate outer effects (drop shadow, outer glow, stroke,
-  // outer bevel) so they aren't clipped at the canvas boundary, and to restore
-  // the size on cancel.
-  const originalSizeRef = useRef<{ w: number; h: number; px: number; py: number } | null>(null);
-  const layerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Stroke Style tab (out of scope — local UI only; separate from the Stroke effect)
+  const [ssSize, setSsSize] = useState(3);
+  const [ssColor, setSsColor] = useState('#ff0000');
+  const [ssOpacity, setSsOpacity] = useState(100);
+  const [ssPosition, setSsPosition] = useState<'outside' | 'inside' | 'center'>('outside');
 
   /**
-   * Compute the padding (in canvas pixels) needed on each side of the content
-   * to accommodate outer effects. Layer styles like drop shadow extend
-   * `shadowSize` (blur) on every side and `shadowDistance` (offset) in one
-   * direction. We pad equally on all sides so the offset direction doesn't
-   * matter and the content stays visually anchored.
+   * Capture a read-only copy of the layer artwork for the preview only.
+   * The real layer canvas is never resized, baked, or otherwise mutated.
    */
-  const computeEffectPadding = useCallback(() => {
-    let pad = 0;
-    if (effects.dropShadow) {
-      pad = Math.max(pad, Math.ceil(shadowSize * 2 + Math.abs(shadowDistance)));
-    }
-    if (effects.outerGlow) {
-      pad = Math.max(pad, Math.ceil(glowSize * 2));
-    }
-    if (effects.stroke) {
-      pad = Math.max(pad, Math.ceil(strokeSize));
-    }
-    if (effects.bevelAndEmboss && bevelStyle === 'outerBevel') {
-      pad = Math.max(pad, Math.ceil(bevelSize * 2));
-    }
-    return pad;
-  }, [effects.dropShadow, effects.outerGlow, effects.stroke, effects.bevelAndEmboss, bevelStyle, shadowSize, shadowDistance, glowSize, strokeSize, bevelSize]);
-
-  /**
-   * Keep the store's `layer.width` / `layer.height` / `layer.position` in sync
-   * with the (now-padded) canvas dimensions, so the wrapper div that hosts
-   * the canvas grows to match. The visible artwork is at `(pad, pad)` inside
-   * the canvas, so we shift the position back by `pad` to keep the artwork
-   * anchored at its original document coordinate. `originalSizeRef` holds the
-   * pre-dialog geometry so we can compute the un-padded reference position.
-   */
-  const syncStoreSize = useCallback((targetW: number, targetH: number, pad: number) => {
-    if (!activeLayerId) return;
-    const orig = originalSizeRef.current;
-    if (!orig) return;
-    // Only push updates that actually change the store, to avoid extra
-    // CanvasLayer re-renders on every slider tick.
-    const layer = findLayerById(useStore.getState().layers, activeLayerId);
-    if (!layer) return;
-    const needsSize = layer.width !== targetW || layer.height !== targetH;
-    const newX = orig.px - pad;
-    const newY = orig.py - pad;
-    const needsPos = (layer.position?.x ?? 0) !== newX || (layer.position?.y ?? 0) !== newY;
-    if (!needsSize && !needsPos) return;
-    useStore.getState().updateLayer(activeLayerId, {
-      ...(needsSize ? { width: targetW, height: targetH } : {}),
-      ...(needsPos ? { position: { x: newX, y: newY } } : {}),
-    });
-  }, [activeLayerId]);
-
-  /**
-   * Grow or shrink the layer's actual canvas to `originalSize + 2*padding` and
-   * re-anchor the content in the center. Returns the new width/height, or null
-   * if no layer is available. Original size is captured the first time so the
-   * canvas tracks the current padding through every effect toggle.
-   */
-  const ensureCanvasSized = useCallback(() => {
-    const layerCanvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement | null;
-    if (!layerCanvas || !backupCanvasRef.current) return null;
-    layerCanvasRef.current = layerCanvas;
-    if (!originalSizeRef.current) {
-      originalSizeRef.current = {
-        w: layerCanvas.width,
-        h: layerCanvas.height,
-        px: activeLayer?.position?.x ?? 0,
-        py: activeLayer?.position?.y ?? 0,
-      };
-    }
-    const pad = computeEffectPadding();
-    const orig = originalSizeRef.current;
-    const targetW = orig.w + pad * 2;
-    const targetH = orig.h + pad * 2;
-    const prevW = layerCanvas.width;
-    const prevH = layerCanvas.height;
-    if (prevW === targetW && prevH === targetH) {
-      // Canvas size already matches — still make sure the store's layer
-      // dimensions track the padded size so the visible wrapper matches.
-      syncStoreSize(targetW, targetH, pad);
-      return { w: targetW, h: targetH, pad };
-    }
-    // Capture the original backup (centered at 0,0 within `orig.w x orig.h`).
-    // We redraw from the backup, not the current canvas, so toggling effects
-    // doesn't compound artifacts.
-    const backup = backupCanvasRef.current;
-    layerCanvas.width = targetW;
-    layerCanvas.height = targetH;
-    const ctx = layerCanvas.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, targetW, targetH);
-      // Place the backup at (pad, pad) in the new canvas. The previous live
-      // preview is discarded — effects re-render on top.
-      ctx.drawImage(backup, pad, pad);
-    }
-    // Grow/shrink the layer's display dimensions in the store to match the
-    // canvas, and shift the position so the visible content stays anchored at
-    // the same document coordinate. Without this, the wrapper div stays at
-    // the pre-dialog size and the shadow/glow pixels (which are drawn in the
-    // padded region around the content) are clipped off-screen.
-    syncStoreSize(targetW, targetH, pad);
-    return { w: targetW, h: targetH, pad };
-  }, [activeLayerId, activeLayer, computeEffectPadding]);
-
-  /** Shrink the layer canvas back to its original size on cancel. */
-  const restoreCanvasSize = useCallback(() => {
-    const layerCanvas = layerCanvasRef.current;
-    const orig = originalSizeRef.current;
-    if (!layerCanvas || !orig) return;
-    if (layerCanvas.width === orig.w && layerCanvas.height === orig.h) {
-      // Canvas already at original size — make sure the store dimensions are
-      // back to the original too (handleApply does this; handleCancel can
-      // arrive here if no effects were ever enabled).
-      if (activeLayerId) {
-        const layer = findLayerById(useStore.getState().layers, activeLayerId);
-        if (layer && (layer.width !== orig.w || layer.height !== orig.h ||
-            (layer.position?.x ?? 0) !== orig.px || (layer.position?.y ?? 0) !== orig.py)) {
-          useStore.getState().updateLayer(activeLayerId, {
-            width: orig.w, height: orig.h, position: { x: orig.px, y: orig.py },
-          });
-        }
+  const capturePreviewSource = useCallback((): void => {
+    const layerCanvas = document.querySelector(
+      `canvas[data-layer-id="${activeLayerId}"]`
+    ) as HTMLCanvasElement | null;
+    const src = document.createElement('canvas');
+    if (layerCanvas && layerCanvas.width > 0 && layerCanvas.height > 0) {
+      src.width = layerCanvas.width;
+      src.height = layerCanvas.height;
+      src.getContext('2d')?.drawImage(layerCanvas, 0, 0);
+    } else {
+      // Fallback shape so effect controls still show something in the preview.
+      src.width = 120;
+      src.height = 90;
+      const c = src.getContext('2d');
+      if (c) {
+        c.fillStyle = '#4a90d9';
+        c.fillRect(20, 18, 80, 54);
       }
-      return;
     }
-    // Crop back to original size from the top-left so the visible content
-    // aligns with the pre-dialog document position.
-    const temp = document.createElement('canvas');
-    temp.width = layerCanvas.width;
-    temp.height = layerCanvas.height;
-    const tCtx = temp.getContext('2d');
-    if (tCtx) tCtx.drawImage(layerCanvas, 0, 0);
-    layerCanvas.width = orig.w;
-    layerCanvas.height = orig.h;
-    const ctx = layerCanvas.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, orig.w, orig.h);
-      ctx.drawImage(temp, 0, 0);
-    }
-    // Restore the store's layer dimensions so the wrapper div shrinks back
-    // to the pre-dialog size and the layer's document position is preserved.
-    if (activeLayerId) {
-      useStore.getState().updateLayer(activeLayerId, {
-        width: orig.w, height: orig.h, position: { x: orig.px, y: orig.py },
-      });
-    }
+    previewSourceRef.current = src;
   }, [activeLayerId]);
+
+  // Snapshot on open: deep-clone store values so Cancel can restore them.
+  useEffect(() => {
+    if (!isLayerStyleDialogOpen || !activeLayerId) return;
+    const layer = findLayerById(useStore.getState().layers, activeLayerId);
+    snapshotRef.current = {
+      effects: layer?.effects ? (structuredClone(layer.effects) as LayerEffects) : undefined,
+      opacity: layer?.opacity ?? 1,
+      fill: layer?.fill,
+      blendMode: layer?.blendMode ?? 'source-over',
+    };
+    setLayerStyleActiveTab('blending');
+    capturePreviewSource();
+  }, [isLayerStyleDialogOpen, activeLayerId, setLayerStyleActiveTab, capturePreviewSource]);
 
   // Mobile layout detection
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -312,117 +220,62 @@ export const LayerStyleDialog: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Set defaults when opening
-  useEffect(() => {
-    if (!isLayerStyleDialogOpen || !activeLayer) return;
-
-    setOpacity(Math.round((activeLayer.opacity ?? 1) * 100));
-    setFillOpacity(Math.round((activeLayer.fill ?? 1) * 100));
-    setBlendMode(activeLayer.blendMode || 'source-over');
-    setEffects(INITIAL_EFFECTS);
-    setLayerStyleActiveTab('blending');
-    setBevelStyle('innerBevel');
-    setBevelTechnique('smooth');
-    setBevelDepth(100);
-    setBevelSize(5);
-    setBevelSoften(0);
-    setBevelAngle(30);
-    setBevelAltitude(30);
-    setBevelGloss(0);
-    setBevelHighlightMode('screen');
-    setBevelHighlightOpacity(75);
-    setBevelShadowMode('multiply');
-    setBevelShadowOpacity(75);
-    setBevelUseGlobalAngle(true);
-    setBevelContour('linear');
-    setContourColor('#000000');
-    setContourOpacity(75);
-    setContourRange(50);
-    setContourEdge('inside');
-    setContourShape('linear');
-    setContourNoise(0);
-    setContourAntiAliased(true);
-    setTexturePattern('brick');
-    setTextureScale(100);
-    setTextureDepth(50);
-    setTextureInvert(false);
-    setTextureLinkToLayer(true);
-    setTextureOpacity(100);
-
-    // Save backup canvas of the layer's original state
-    const layerCanvas = document.querySelector(`canvas[data-layer-id="${activeLayer.id}"]`) as HTMLCanvasElement;
-    if (layerCanvas) {
-      const backup = document.createElement('canvas');
-      backup.width = layerCanvas.width;
-      backup.height = layerCanvas.height;
-      const backupCtx = backup.getContext('2d');
-      if (backupCtx) {
-        backupCtx.drawImage(layerCanvas, 0, 0);
-        backupCanvasRef.current = backup;
-      }
-    }
-  }, [isLayerStyleDialogOpen, activeLayerId]);
-
-  // Bake base layer content + all enabled style effects onto the given context.
-  // Shared by the live preview AND the real "Apply" path so the main canvas
-  // actually reflects the enabled effects (previously only the preview did).
-  // `pad` is the padding offset of the base content from (0,0) — when the
-  // canvas has been grown to fit outer effects, the original content is
-  // anchored at (pad, pad) instead of (0, 0), and the effects need to be
-  // drawn at the same offset so they line up with the base.
-  const renderEffects = useCallback((
+  /**
+   * Preview-only effect renderer. Paints the base artwork plus the enabled
+   * style effects onto the given context, reading parameters from `fxNow`
+   * (current store values). Never touches the real layer canvas.
+   */
+  const renderPreviewEffects = (
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    pad: number = 0
-  ) => {
-    if (!backupCanvasRef.current) return;
-
+    fxNow: LayerEffects,
+    src: HTMLCanvasElement,
+    opacityNow: number // 0-1
+  ): void => {
     ctx.save();
-    ctx.globalAlpha = opacity / 100;
+    ctx.globalAlpha = opacityNow;
 
     // Draw base layer content first (single source of truth for the shape)
-    if (backupCanvasRef.current) {
-      ctx.drawImage(backupCanvasRef.current, pad, pad);
-    }
+    ctx.drawImage(src, 0, 0);
 
     // Drop Shadow
-    if (effects.dropShadow && backupCanvasRef.current) {
+    if (fxNow.dropShadow.enabled) {
       ctx.save();
-      const rad = (shadowAngle * Math.PI) / 180;
-      ctx.shadowColor = `rgba(0,0,0,${shadowOpacity / 100})`;
-      ctx.shadowBlur = shadowSize;
-      ctx.shadowOffsetX = shadowDistance * Math.cos(rad);
-      ctx.shadowOffsetY = shadowDistance * Math.sin(rad);
-      ctx.drawImage(backupCanvasRef.current, pad, pad);
+      const rad = (fxNow.dropShadow.angle * Math.PI) / 180;
+      ctx.shadowColor = hexToRgba(fxNow.dropShadow.color, fxNow.dropShadow.opacity / 100);
+      ctx.shadowBlur = fxNow.dropShadow.size;
+      ctx.shadowOffsetX = fxNow.dropShadow.distance * Math.cos(rad);
+      ctx.shadowOffsetY = fxNow.dropShadow.distance * Math.sin(rad);
+      ctx.drawImage(src, 0, 0);
       ctx.restore();
     }
 
     // Inner Shadow
-    if (effects.innerShadow && backupCanvasRef.current) {
+    if (fxNow.innerShadow.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      const rad = (innerShadowAngle * Math.PI) / 180;
+      const rad = (fxNow.innerShadow.angle * Math.PI) / 180;
 
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
       tCtx.globalCompositeOperation = 'source-in';
-      tCtx.fillStyle = '#000';
+      tCtx.fillStyle = fxNow.innerShadow.color;
       tCtx.fillRect(0, 0, w, h);
 
       ctx.save();
       ctx.clip();
-      ctx.shadowColor = `rgba(0,0,0,${innerShadowOpacity / 100})`;
-      ctx.shadowBlur = innerShadowSize;
-      ctx.shadowOffsetX = innerShadowDistance * Math.cos(rad);
-      ctx.shadowOffsetY = innerShadowDistance * Math.sin(rad);
+      ctx.shadowColor = hexToRgba(fxNow.innerShadow.color, fxNow.innerShadow.opacity / 100);
+      ctx.shadowBlur = fxNow.innerShadow.size;
+      ctx.shadowOffsetX = fxNow.innerShadow.distance * Math.cos(rad);
+      ctx.shadowOffsetY = fxNow.innerShadow.distance * Math.sin(rad);
       ctx.drawImage(temp, 0, 0);
       ctx.restore();
     }
 
     // Outer Glow
-    if (effects.outerGlow && backupCanvasRef.current) {
+    if (fxNow.outerGlow.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
@@ -430,98 +283,99 @@ export const LayerStyleDialog: React.FC = () => {
       const steps = 24;
       for (let i = 0; i < steps; i++) {
         const angle = (i / steps) * Math.PI * 2;
-        const dx = Math.round(Math.cos(angle) * glowSize);
-        const dy = Math.round(Math.sin(angle) * glowSize);
-        tCtx.drawImage(backupCanvasRef.current, pad + dx, pad + dy);
+        const dx = Math.round(Math.cos(angle) * fxNow.outerGlow.size);
+        const dy = Math.round(Math.sin(angle) * fxNow.outerGlow.size);
+        tCtx.drawImage(src, dx, dy);
       }
       tCtx.globalCompositeOperation = 'source-in';
-      tCtx.fillStyle = glowColor;
-      tCtx.globalAlpha = glowOpacity / 100;
+      tCtx.fillStyle = fxNow.outerGlow.color;
+      tCtx.globalAlpha = fxNow.outerGlow.opacity / 100;
       tCtx.fillRect(0, 0, w, h);
       ctx.drawImage(temp, 0, 0);
     }
 
     // Color Overlay
-    if (effects.colorOverlay && backupCanvasRef.current) {
+    if (fxNow.colorOverlay.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
       tCtx.globalCompositeOperation = 'source-in';
-      tCtx.fillStyle = overlayColor;
-      tCtx.globalAlpha = overlayOpacity / 100;
+      tCtx.fillStyle = fxNow.colorOverlay.color;
+      tCtx.globalAlpha = fxNow.colorOverlay.opacity / 100;
       tCtx.fillRect(0, 0, w, h);
       ctx.drawImage(temp, 0, 0);
     }
 
     // Gradient Overlay
-    if (effects.gradientOverlay && backupCanvasRef.current) {
+    if (fxNow.gradientOverlay.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
       tCtx.globalCompositeOperation = 'source-in';
 
+      const stops = fxNow.gradientOverlay.stops;
       const grad = tCtx.createLinearGradient(0, 0, w, h);
-      grad.addColorStop(0, gradientStart);
-      grad.addColorStop(1, gradientEnd);
+      grad.addColorStop(0, stops[0]?.color ?? '#ff0000');
+      grad.addColorStop(1, stops[stops.length - 1]?.color ?? '#0000ff');
       tCtx.fillStyle = grad;
-      tCtx.globalAlpha = gradientOpacity / 100;
+      tCtx.globalAlpha = fxNow.gradientOverlay.opacity / 100;
       tCtx.fillRect(0, 0, w, h);
       ctx.drawImage(temp, 0, 0);
     }
 
     // Inner Glow
-    if (effects.innerGlow && backupCanvasRef.current) {
+    if (fxNow.innerGlow.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
 
       ctx.save();
       ctx.clip();
       const steps = 24;
       for (let i = 0; i < steps; i++) {
         const angle = (i / steps) * Math.PI * 2;
-        const dx = Math.round(Math.cos(angle) * glowSize);
-        const dy = Math.round(Math.sin(angle) * glowSize);
-        tCtx.drawImage(backupCanvasRef.current, pad + dx, pad + dy);
+        const dx = Math.round(Math.cos(angle) * fxNow.innerGlow.size);
+        const dy = Math.round(Math.sin(angle) * fxNow.innerGlow.size);
+        tCtx.drawImage(src, dx, dy);
       }
       tCtx.globalCompositeOperation = 'source-in';
-      tCtx.fillStyle = glowColor;
-      tCtx.globalAlpha = glowOpacity / 100;
+      tCtx.fillStyle = fxNow.innerGlow.color;
+      tCtx.globalAlpha = fxNow.innerGlow.opacity / 100;
       tCtx.fillRect(0, 0, w, h);
       ctx.drawImage(temp, 0, 0);
       ctx.restore();
     }
 
     // Satin
-    if (effects.satin && backupCanvasRef.current) {
+    if (fxNow.satin.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
       tCtx.globalCompositeOperation = 'overlay';
-      tCtx.fillStyle = gradientStart;
-      tCtx.globalAlpha = 0.5;
+      tCtx.fillStyle = fxNow.satin.color;
+      tCtx.globalAlpha = fxNow.satin.opacity / 100;
       tCtx.fillRect(0, 0, w, h);
       ctx.drawImage(temp, 0, 0);
     }
 
     // Pattern Overlay
-    if (effects.patternOverlay && backupCanvasRef.current) {
+    if (fxNow.patternOverlay.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
       tCtx.globalCompositeOperation = 'source-in';
       tCtx.fillStyle = '#666';
-      tCtx.globalAlpha = 0.3;
+      tCtx.globalAlpha = fxNow.patternOverlay.opacity / 100;
       const ps = 10;
       for (let x = 0; x < w; x += ps) {
         for (let y = 0; y < h; y += ps) {
@@ -532,7 +386,7 @@ export const LayerStyleDialog: React.FC = () => {
     }
 
     // Stroke
-    if (effects.stroke && backupCanvasRef.current) {
+    if (fxNow.stroke.enabled) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
@@ -540,51 +394,52 @@ export const LayerStyleDialog: React.FC = () => {
       const steps = 32;
       for (let i = 0; i < steps; i++) {
         const angle = (i / steps) * Math.PI * 2;
-        const dx = Math.round(Math.cos(angle) * strokeSize);
-        const dy = Math.round(Math.sin(angle) * strokeSize);
-        tCtx.drawImage(backupCanvasRef.current, pad + dx, pad + dy);
+        const dx = Math.round(Math.cos(angle) * fxNow.stroke.size);
+        const dy = Math.round(Math.sin(angle) * fxNow.stroke.size);
+        tCtx.drawImage(src, dx, dy);
       }
       tCtx.globalCompositeOperation = 'source-in';
-      tCtx.fillStyle = strokeColor;
-      tCtx.globalAlpha = strokeOpacity / 100;
+      tCtx.fillStyle = fxNow.stroke.color;
+      tCtx.globalAlpha = fxNow.stroke.opacity / 100;
       tCtx.fillRect(0, 0, w, h);
       ctx.drawImage(temp, 0, 0);
     }
 
     // Bevel and Emboss
-    if (effects.bevelAndEmboss && backupCanvasRef.current) {
+    if (fxNow.bevelAndEmboss.enabled) {
+      const bevel = fxNow.bevelAndEmboss;
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
 
       ctx.save();
 
       // Use globalCompositeOperation to simulate emboss
       ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = bevelDepth / 100;
+      ctx.globalAlpha = bevel.depth / 100;
 
       // Outer bevel - highlight top-left, shadow bottom-right
-      const rad = (bevelAngle * Math.PI) / 180;
-      const highlightX = -Math.cos(rad) * bevelSize;
-      const highlightY = -Math.sin(rad) * bevelSize;
-      const shadowX = Math.cos(rad) * bevelSize;
-      const shadowY = Math.sin(rad) * bevelSize;
+      const rad = (bevel.angle * Math.PI) / 180;
+      const highlightX = -Math.cos(rad) * bevel.size;
+      const highlightY = -Math.sin(rad) * bevel.size;
+      const shadowX = Math.cos(rad) * bevel.size;
+      const shadowY = Math.sin(rad) * bevel.size;
 
       // Draw highlight layer
-      if (bevelStyle === 'innerBevel') {
-        ctx.globalCompositeOperation = (bevelHighlightMode === 'screen' ? 'lighten' : bevelHighlightMode) as GlobalCompositeOperation;
-        ctx.globalAlpha = (bevelHighlightOpacity / 100) * (bevelDepth / 100);
+      if (bevel.style === 'innerBevel') {
+        ctx.globalCompositeOperation = (bevel.highlightMode === 'screen' ? 'lighten' : bevel.highlightMode) as GlobalCompositeOperation;
+        ctx.globalAlpha = (bevel.highlightOpacity / 100) * (bevel.depth / 100);
         ctx.shadowColor = 'rgba(255,255,255,0.6)';
-        ctx.shadowBlur = bevelSize;
+        ctx.shadowBlur = bevel.size;
         ctx.shadowOffsetX = highlightX;
         ctx.shadowOffsetY = highlightY;
         ctx.drawImage(temp, 0, 0);
 
         // Draw shadow layer
-        ctx.globalCompositeOperation = (bevelShadowMode === 'multiply' ? 'darken' : bevelShadowMode) as GlobalCompositeOperation;
-        ctx.globalAlpha = (bevelShadowOpacity / 100) * (bevelDepth / 100);
+        ctx.globalCompositeOperation = (bevel.shadowMode === 'multiply' ? 'darken' : bevel.shadowMode) as GlobalCompositeOperation;
+        ctx.globalAlpha = (bevel.shadowOpacity / 100) * (bevel.depth / 100);
         ctx.shadowColor = 'rgba(0,0,0,0.6)';
         ctx.shadowOffsetX = shadowX;
         ctx.shadowOffsetY = shadowY;
@@ -592,24 +447,24 @@ export const LayerStyleDialog: React.FC = () => {
       } else {
         // Outer bevel
         ctx.shadowColor = 'rgba(255,255,255,0.6)';
-        ctx.shadowBlur = bevelSize;
+        ctx.shadowBlur = bevel.size;
         ctx.shadowOffsetX = highlightX;
         ctx.shadowOffsetY = highlightY;
-        ctx.globalCompositeOperation = bevelHighlightMode as GlobalCompositeOperation;
-        ctx.globalAlpha = (bevelHighlightOpacity / 100) * (bevelDepth / 100);
+        ctx.globalCompositeOperation = bevel.highlightMode as GlobalCompositeOperation;
+        ctx.globalAlpha = (bevel.highlightOpacity / 100) * (bevel.depth / 100);
         ctx.drawImage(temp, 0, 0);
       }
 
       ctx.restore();
     }
 
-    // Contour effect
-    if (effects.contour && backupCanvasRef.current) {
+    // Contour effect (out of scope — local UI state only)
+    if (legacyToggles.contour) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
 
       ctx.save();
       ctx.clip();
@@ -630,13 +485,13 @@ export const LayerStyleDialog: React.FC = () => {
       ctx.restore();
     }
 
-    // Texture effect
-    if (effects.texture && backupCanvasRef.current) {
+    // Texture effect (out of scope — local UI state only)
+    if (legacyToggles.texture) {
       const temp = document.createElement('canvas');
       temp.width = w;
       temp.height = h;
       const tCtx = temp.getContext('2d')!;
-      tCtx.drawImage(backupCanvasRef.current, pad, pad);
+      tCtx.drawImage(src, 0, 0);
 
       // Draw pattern texture with source-in to clip to layer shape
       const textureScaleFactor = textureScale / 100;
@@ -722,23 +577,19 @@ export const LayerStyleDialog: React.FC = () => {
     }
 
     ctx.restore();
-  }, [opacity, blendMode, effects, bevelStyle, bevelTechnique, bevelDepth, bevelSize, bevelSoften, bevelAngle, bevelAltitude, bevelGloss, bevelHighlightMode, bevelHighlightOpacity, bevelShadowMode, bevelShadowOpacity, bevelUseGlobalAngle, bevelContour,
-    contourColor, contourOpacity, contourRange, contourEdge, contourShape, contourNoise, contourAntiAliased,
-    texturePattern, textureScale, textureDepth, textureInvert, textureLinkToLayer, textureOpacity,
-    shadowColor, shadowOpacity, shadowAngle, shadowDistance, shadowSize, shadowChoke, shadowNoise,
-    innerShadowColor, innerShadowOpacity, innerShadowAngle, innerShadowDistance, innerShadowSize,
-    strokeSize, strokeColor, strokeOpacity, strokePosition, strokeBlendMode,
-    glowColor, glowOpacity, glowSize, glowTechnique, glowRange,
-    overlayColor, overlayOpacity, overlayBlendMode,
-    gradientStart, gradientEnd, gradientOpacity, gradientAngle, gradientStyle]);
+  };
 
-  // Preview-specific wrapper: paints the checkerboard, then shares the
-  // exact same effect-baking logic as the real "Apply" path.
-  const renderPreview = useCallback(() => {
-    const previewCanvas = document.getElementById('layer-style-preview') as HTMLCanvasElement;
+  /**
+   * Repaint the small preview canvas from current store values. Uses fresh
+   * store state (not render-closure values) so slider ticks redraw correctly.
+   */
+  const renderPreview = useCallback((): void => {
+    const previewCanvas = document.getElementById('layer-style-preview') as HTMLCanvasElement | null;
     if (!previewCanvas) return;
     const pCtx = previewCanvas.getContext('2d');
     if (!pCtx) return;
+    const src = previewSourceRef.current;
+    if (!src) return;
 
     const w = previewCanvas.width;
     const h = previewCanvas.height;
@@ -754,138 +605,78 @@ export const LayerStyleDialog: React.FC = () => {
       }
     }
 
-    // The preview canvas (200×150) is much smaller than the actual layer
-    // canvas (often 500×500+). renderEffects draws the backup at its native
-    // 1:1 scale, so on a 200×150 preview we would only see the top-left
-    // corner of the content. Scale the rendered output to fit the preview
-    // area while preserving the layer's aspect ratio, so the whole shape
-    // (and any outer effects) remain visible and centered.
-    const backup = backupCanvasRef.current;
-    const srcW = backup ? backup.width : w;
-    const srcH = backup ? backup.height : h;
+    // Scale the rendered output to fit the 200x150 preview while preserving
+    // the layer's aspect ratio, so the whole shape (and any outer effects)
+    // remain visible and centered.
+    const srcW = src.width;
+    const srcH = src.height;
     const scale = Math.min(w / srcW, h / srcH);
     const drawW = srcW * scale;
     const drawH = srcH * scale;
     const offsetX = (w - drawW) / 2;
     const offsetY = (h - drawH) / 2;
 
+    const st = useStore.getState();
+    const layer = activeLayerId ? findLayerById(st.layers, activeLayerId) : undefined;
+
     pCtx.save();
     pCtx.translate(offsetX, offsetY);
     pCtx.scale(scale, scale);
-    renderEffects(pCtx, srcW, srcH);
+    renderPreviewEffects(pCtx, srcW, srcH, normalizeEffects(layer?.effects), src, layer?.opacity ?? 1);
     pCtx.restore();
-  }, [renderEffects]);
+  }, [activeLayerId]);
 
+  // Redraw the preview whenever the dialog is open and any backing value changes.
   useEffect(() => {
     if (!isLayerStyleDialogOpen) return;
-    requestAnimationFrame(() => {
-      // Thumbnail preview (existing)
-      renderPreview();
-      // Live document preview: paint the real layer canvas too, so effects
-      // like Texture update in real time without clicking OK. The render loop
-      // (useLayerRendering) skips the active layer while this dialog is open,
-      // and handleCancel restores the backup — so this is safe.
-      // Grow the canvas first so outer effects (drop shadow, outer glow,
-      // outer stroke, outer bevel) have room to extend beyond the content
-      // without being clipped at the canvas boundary.
-      const sized = ensureCanvasSized();
-      const layerCanvas = layerCanvasRef.current;
-      if (layerCanvas && backupCanvasRef.current) {
-        const lCtx = layerCanvas.getContext('2d');
-        if (lCtx) {
-          // Clear and let renderEffects draw base + all effects. The base
-          // is positioned at (pad, pad) so the original artwork keeps its
-          // visual center within the (now-larger) canvas.
-          const pad = sized?.pad ?? 0;
-          lCtx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
-          renderEffects(lCtx, layerCanvas.width, layerCanvas.height, pad);
-        }
-      }
-    });
-  }, [isLayerStyleDialogOpen, renderPreview, activeLayerId, renderEffects, ensureCanvasSized,
-    // Effect settings — re-render the document canvas whenever any of them change,
-    // so sliders/colors/checkboxes update the live document preview without
-    // needing to click OK. The rAF inside coalesces rapid slider movement.
-    effects, opacity, blendMode, fillOpacity, fillChannels, blendIf, blendIfRange,
-    shadowColor, shadowOpacity, shadowAngle, shadowDistance, shadowSize, shadowChoke, shadowNoise,
-    innerShadowColor, innerShadowOpacity, innerShadowAngle, innerShadowDistance, innerShadowSize,
-    strokeSize, strokeColor, strokeOpacity, strokePosition, strokeBlendMode,
-    glowColor, glowOpacity, glowSize, glowTechnique, glowRange,
-    overlayColor, overlayOpacity, overlayBlendMode,
-    gradientStart, gradientEnd, gradientOpacity, gradientAngle, gradientStyle,
-    bevelStyle, bevelTechnique, bevelDepth, bevelSize, bevelSoften, bevelAngle, bevelAltitude, bevelGloss,
-    bevelHighlightMode, bevelHighlightOpacity, bevelShadowMode, bevelShadowOpacity, bevelUseGlobalAngle, bevelContour,
-    contourColor, contourOpacity, contourRange, contourEdge, contourShape, contourNoise, contourAntiAliased,
-    texturePattern, textureScale, textureDepth, textureInvert, textureLinkToLayer, textureOpacity]);
+    const raf = requestAnimationFrame(() => renderPreview());
+    return () => cancelAnimationFrame(raf);
+  }, [
+    isLayerStyleDialogOpen, activeLayerId, renderPreview,
+    activeLayer?.effects, activeLayer?.opacity,
+    // Out-of-scope tabs still preview locally.
+    legacyToggles,
+    contourColor, contourOpacity, contourRange, contourShape,
+    texturePattern, textureScale, textureDepth, textureInvert, textureOpacity,
+  ]);
 
   if (!isLayerStyleDialogOpen || !activeLayer) return null;
 
-  const toggleEffect = (key: EffectKey) => {
-    setEffects(prev => ({ ...prev, [key]: !prev[key] }));
-    if (EFFECT_LIST.some(e => e.key === key)) {
-      setLayerStyleActiveTab(key);
+  const toggleEffect = (key: EffectKey): void => {
+    if (isModelEffectKey(key)) {
+      writeFx(key, { enabled: !fx[key].enabled });
+    } else {
+      // Out-of-scope tabs: checkbox only, no store backing.
+      setLegacyToggles((prev) => ({ ...prev, [key]: !prev[key] }));
     }
+    setLayerStyleActiveTab(key);
   };
 
-  const handleApply = () => {
-    // Make sure the canvas has been grown to fit any outer effects.
-    const sized = ensureCanvasSized();
-    const layerCanvas = layerCanvasRef.current;
-    if (layerCanvas && backupCanvasRef.current) {
-      // Bake the enabled style effects (drop shadow, bevel, contour, TEXTURE,
-      // strokes, etc.) onto the real layer canvas using the same logic as the
-      // preview. Previously this only restored the unmodified backup, so no
-      // effect ever reached the document canvas — hence "nothing changes".
-      const ctx = layerCanvas.getContext('2d');
-      if (ctx) {
-        // Clear and let renderEffects draw base + all effects. The base is
-        // positioned at (pad, pad) so the original artwork keeps its visual
-        // center within the (now-larger) canvas.
-        const pad = sized?.pad ?? 0;
-        ctx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
-        renderEffects(ctx, layerCanvas.width, layerCanvas.height, pad);
-        const orig = originalSizeRef.current;
-        const newPosition = orig
-          ? { x: orig.px - pad, y: orig.py - pad }
-          : activeLayer?.position;
-        updateLayer(activeLayerId, {
-          opacity: opacity / 100,
-          fill: fillOpacity / 100,
-          blendMode,
-          width: layerCanvas.width,
-          height: layerCanvas.height,
-          position: newPosition,
-          dataUrl: layerCanvas.toDataURL(),
-        });
-        recordHistory('Layer Styles Applied');
-      }
-    }
-    // Reset the size refs so the next open re-captures the (now-larger) size.
-    originalSizeRef.current = null;
-    layerCanvasRef.current = null;
+  const isEffectChecked = (key: EffectKey): boolean =>
+    isModelEffectKey(key) ? fx[key].enabled : !!legacyToggles[key];
+
+  const handleApply = (): void => {
+    // All values already live in the store; record a single history entry.
+    recordHistory('Layer Styles');
+    snapshotRef.current = null;
     setIsLayerStyleDialogOpen(false);
   };
 
-  const handleCancel = () => {
-    const layerCanvas = layerCanvasRef.current;
-    if (layerCanvas && backupCanvasRef.current) {
-      // First restore the original canvas size (crop the live-preview result),
-      // then redraw the unmodified backup so the layer is back to its pre-dialog
-      // state.
-      restoreCanvasSize();
-      const ctx = layerCanvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
-        ctx.drawImage(backupCanvasRef.current, 0, 0);
-      }
+  const handleCancel = (): void => {
+    // Restore the pre-dialog snapshot. No history entry.
+    const snap = snapshotRef.current;
+    if (activeLayerId && snap) {
+      setLayerEffects(
+        activeLayerId,
+        snap.effects ? (structuredClone(snap.effects) as LayerEffects) : undefined
+      );
+      updateLayer(activeLayerId, {
+        opacity: snap.opacity,
+        fill: snap.fill,
+        blendMode: snap.blendMode,
+      });
     }
-    originalSizeRef.current = null;
-    layerCanvasRef.current = null;
-    updateLayer(activeLayerId, {
-      opacity: activeLayer.opacity ?? 1,
-      fill: activeLayer.fill,
-      blendMode: activeLayer.blendMode,
-    });
+    snapshotRef.current = null;
     setIsLayerStyleDialogOpen(false);
   };
 
@@ -923,10 +714,10 @@ export const LayerStyleDialog: React.FC = () => {
           {/* Left: Effects List */}
           <div className="layer-style-effects-list">
             {EFFECT_LIST.map(({ key, label }) => (
-              <label key={key} className={`layer-style-effect-item ${(key === 'contour' || key === 'texture') ? 'layer-style-effect-sub-item' : ''} ${effects[key] ? 'active' : ''}`}>
+              <label key={key} className={`layer-style-effect-item ${(key === 'contour' || key === 'texture') ? 'layer-style-effect-sub-item' : ''} ${isEffectChecked(key) ? 'active' : ''}`}>
                 <input
                   type="checkbox"
-                  checked={effects[key]}
+                  checked={isEffectChecked(key)}
                   onChange={() => toggleEffect(key)}
                 />
                 <span className="layer-style-effect-label">{label}</span>
@@ -944,8 +735,8 @@ export const LayerStyleDialog: React.FC = () => {
                     <label className="setting-label">Blend Mode</label>
                     <select
                       className="setting-select"
-                      value={blendMode}
-                      onChange={(e) => setBlendMode(e.target.value)}
+                      value={blendModeValue}
+                      onChange={(e) => writeBlending({ blendMode: e.target.value as BlendMode })}
                     >
                       <option value="source-over">Normal</option>
                       <option value="multiply">Multiply</option>
@@ -972,11 +763,11 @@ export const LayerStyleDialog: React.FC = () => {
                         type="range"
                         min="0"
                         max="100"
-                        value={opacity}
-                        onChange={(e) => setOpacity(parseInt(e.target.value))}
+                        value={opacityPct}
+                        onChange={(e) => writeBlending({ opacity: parseInt(e.target.value) / 100 })}
                         className="setting-slider"
                       />
-                      <span className="setting-value">{opacity}%</span>
+                      <span className="setting-value">{opacityPct}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
@@ -986,11 +777,11 @@ export const LayerStyleDialog: React.FC = () => {
                         type="range"
                         min="0"
                         max="100"
-                        value={fillOpacity}
-                        onChange={(e) => setFillOpacity(parseInt(e.target.value))}
+                        value={fillPct}
+                        onChange={(e) => writeBlending({ fill: parseInt(e.target.value) / 100 })}
                         className="setting-slider"
                       />
-                      <span className="setting-value">{fillOpacity}%</span>
+                      <span className="setting-value">{fillPct}%</span>
                     </div>
                   </div>
                   <div className="setting-row channels-row">
@@ -1047,50 +838,43 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={shadowColor} onChange={(e) => setShadowColor(e.target.value)} className="color-input" />
-                      <span className="setting-value">{shadowColor}</span>
+                      <input type="color" value={fx.dropShadow.color} onChange={(e) => writeFx('dropShadow', { color: e.target.value })} className="color-input" />
+                      <span className="setting-value">{fx.dropShadow.color}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={shadowOpacity} onChange={(e) => setShadowOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.dropShadow.opacity} onChange={(e) => writeFx('dropShadow', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.dropShadow.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Angle</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="-180" max="180" value={shadowAngle} onChange={(e) => setShadowAngle(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowAngle}°</span>
+                      <input type="range" min="-180" max="180" value={fx.dropShadow.angle} onChange={(e) => writeFx('dropShadow', { angle: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.dropShadow.angle}°</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Distance</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="150" value={shadowDistance} onChange={(e) => setShadowDistance(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowDistance}px</span>
+                      <input type="range" min="0" max="150" value={fx.dropShadow.distance} onChange={(e) => writeFx('dropShadow', { distance: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.dropShadow.distance}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Size</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="150" value={shadowSize} onChange={(e) => setShadowSize(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowSize}px</span>
+                      <input type="range" min="0" max="150" value={fx.dropShadow.size} onChange={(e) => writeFx('dropShadow', { size: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.dropShadow.size}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
-                    <label className="setting-label">Choke</label>
+                    <label className="setting-label">Spread</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={shadowChoke} onChange={(e) => setShadowChoke(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowChoke}%</span>
-                    </div>
-                  </div>
-                  <div className="setting-row">
-                    <label className="setting-label">Noise</label>
-                    <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={shadowNoise} onChange={(e) => setShadowNoise(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowNoise}%</span>
+                      <input type="range" min="0" max="100" value={fx.dropShadow.spread} onChange={(e) => writeFx('dropShadow', { spread: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.dropShadow.spread}%</span>
                     </div>
                   </div>
                 </div>
@@ -1104,36 +888,43 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={innerShadowColor} onChange={(e) => setInnerShadowColor(e.target.value)} className="color-input" />
-                      <span className="setting-value">{innerShadowColor}</span>
+                      <input type="color" value={fx.innerShadow.color} onChange={(e) => writeFx('innerShadow', { color: e.target.value })} className="color-input" />
+                      <span className="setting-value">{fx.innerShadow.color}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={innerShadowOpacity} onChange={(e) => setInnerShadowOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{innerShadowOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.innerShadow.opacity} onChange={(e) => writeFx('innerShadow', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerShadow.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Angle</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="-180" max="180" value={innerShadowAngle} onChange={(e) => setInnerShadowAngle(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{innerShadowAngle}°</span>
+                      <input type="range" min="-180" max="180" value={fx.innerShadow.angle} onChange={(e) => writeFx('innerShadow', { angle: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerShadow.angle}°</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Distance</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="150" value={innerShadowDistance} onChange={(e) => setInnerShadowDistance(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{innerShadowDistance}px</span>
+                      <input type="range" min="0" max="150" value={fx.innerShadow.distance} onChange={(e) => writeFx('innerShadow', { distance: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerShadow.distance}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Size</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="150" value={innerShadowSize} onChange={(e) => setInnerShadowSize(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{innerShadowSize}px</span>
+                      <input type="range" min="0" max="150" value={fx.innerShadow.size} onChange={(e) => writeFx('innerShadow', { size: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerShadow.size}px</span>
+                    </div>
+                  </div>
+                  <div className="setting-row">
+                    <label className="setting-label">Choke</label>
+                    <div className="setting-slider-row">
+                      <input type="range" min="0" max="100" value={fx.innerShadow.choke} onChange={(e) => writeFx('innerShadow', { choke: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerShadow.choke}%</span>
                     </div>
                   </div>
                 </div>
@@ -1147,22 +938,22 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Size</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="50" value={strokeSize} onChange={(e) => setStrokeSize(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{strokeSize}px</span>
+                      <input type="range" min="0" max="50" value={fx.stroke.size} onChange={(e) => writeFx('stroke', { size: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.stroke.size}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={strokeColor} onChange={(e) => setStrokeColor(e.target.value)} className="color-input" />
-                      <span className="setting-value">{strokeColor}</span>
+                      <input type="color" value={fx.stroke.color} onChange={(e) => writeFx('stroke', { color: e.target.value })} className="color-input" />
+                      <span className="setting-value">{fx.stroke.color}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={strokeOpacity} onChange={(e) => setStrokeOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{strokeOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.stroke.opacity} onChange={(e) => writeFx('stroke', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.stroke.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
@@ -1171,8 +962,8 @@ export const LayerStyleDialog: React.FC = () => {
                       {(['outside', 'inside', 'center'] as const).map(pos => (
                         <button
                           key={pos}
-                          className={`position-btn ${strokePosition === pos ? 'active' : ''}`}
-                          onClick={() => setStrokePosition(pos)}
+                          className={`position-btn ${fx.stroke.position === pos ? 'active' : ''}`}
+                          onClick={() => writeFx('stroke', { position: pos })}
                         >
                           {pos}
                         </button>
@@ -1181,7 +972,7 @@ export const LayerStyleDialog: React.FC = () => {
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Blend Mode</label>
-                    <select className="setting-select" value={strokeBlendMode} onChange={(e) => setStrokeBlendMode(e.target.value)}>
+                    <select className="setting-select" value={fx.stroke.blendMode} onChange={(e) => writeFx('stroke', { blendMode: e.target.value })}>
                       <option value="source-over">Normal</option>
                       <option value="multiply">Multiply</option>
                       <option value="screen">Screen</option>
@@ -1194,24 +985,23 @@ export const LayerStyleDialog: React.FC = () => {
 
             {layerStyleActiveTab === 'bevelAndEmboss' && (
               <>
-                <h4 className="settings-title">Bevel & Emboss</h4>
+                <h4 className="settings-title">Bevel &amp; Emboss</h4>
                 <div className="settings-section">
                   {/* Structure Sub-group */}
                   <div className="settings-subgroup">
                     <h5 className="subgroup-title">Structure</h5>
                     <div className="setting-row">
                       <label className="setting-label">Style</label>
-                      <select className="setting-select" value={bevelStyle} onChange={(e) => setBevelStyle(e.target.value)}>
+                      <select className="setting-select" value={fx.bevelAndEmboss.style} onChange={(e) => writeFx('bevelAndEmboss', { style: e.target.value as BevelStyle })}>
                         <option value="innerBevel">Inner Bevel</option>
                         <option value="outerBevel">Outer Bevel</option>
                         <option value="emboss">Emboss</option>
                         <option value="pillowEmboss">Pillow Emboss</option>
-                        <option value="strokeEmboss">Stroke Emboss</option>
                       </select>
                     </div>
                     <div className="setting-row">
                       <label className="setting-label">Technique</label>
-                      <select className="setting-select" value={bevelTechnique} onChange={(e) => setBevelTechnique(e.target.value)}>
+                      <select className="setting-select" value={fx.bevelAndEmboss.technique} onChange={(e) => writeFx('bevelAndEmboss', { technique: e.target.value as BevelTechnique })}>
                         <option value="smooth">Smooth</option>
                         <option value="chiselHard">Chisel Hard</option>
                         <option value="chiselSoft">Chisel Soft</option>
@@ -1220,22 +1010,22 @@ export const LayerStyleDialog: React.FC = () => {
                     <div className="setting-row">
                       <label className="setting-label">Depth</label>
                       <div className="setting-slider-row">
-                        <input type="range" min="1" max="250" value={bevelDepth} onChange={(e) => setBevelDepth(parseInt(e.target.value))} className="setting-slider" />
-                        <span className="setting-value">{bevelDepth}%</span>
+                        <input type="range" min="1" max="250" value={fx.bevelAndEmboss.depth} onChange={(e) => writeFx('bevelAndEmboss', { depth: parseInt(e.target.value) })} className="setting-slider" />
+                        <span className="setting-value">{fx.bevelAndEmboss.depth}%</span>
                       </div>
                     </div>
                     <div className="setting-row">
                       <label className="setting-label">Size</label>
                       <div className="setting-slider-row">
-                        <input type="range" min="0" max="50" value={bevelSize} onChange={(e) => setBevelSize(parseInt(e.target.value))} className="setting-slider" />
-                        <span className="setting-value">{bevelSize}px</span>
+                        <input type="range" min="0" max="50" value={fx.bevelAndEmboss.size} onChange={(e) => writeFx('bevelAndEmboss', { size: parseInt(e.target.value) })} className="setting-slider" />
+                        <span className="setting-value">{fx.bevelAndEmboss.size}px</span>
                       </div>
                     </div>
                     <div className="setting-row">
                       <label className="setting-label">Soften</label>
                       <div className="setting-slider-row">
-                        <input type="range" min="0" max="20" value={bevelSoften} onChange={(e) => setBevelSoften(parseInt(e.target.value))} className="setting-slider" />
-                        <span className="setting-value">{bevelSoften}px</span>
+                        <input type="range" min="0" max="20" value={fx.bevelAndEmboss.soften} onChange={(e) => writeFx('bevelAndEmboss', { soften: parseInt(e.target.value) })} className="setting-slider" />
+                        <span className="setting-value">{fx.bevelAndEmboss.soften}px</span>
                       </div>
                     </div>
                   </div>
@@ -1246,34 +1036,20 @@ export const LayerStyleDialog: React.FC = () => {
                     <div className="setting-row">
                       <label className="setting-label">Angle</label>
                       <div className="setting-slider-row">
-                        <input type="range" min="-180" max="180" value={bevelAngle} onChange={(e) => setBevelAngle(parseInt(e.target.value))} className="setting-slider" />
-                        <span className="setting-value">{bevelAngle}°</span>
+                        <input type="range" min="-180" max="180" value={fx.bevelAndEmboss.angle} onChange={(e) => writeFx('bevelAndEmboss', { angle: parseInt(e.target.value) })} className="setting-slider" />
+                        <span className="setting-value">{fx.bevelAndEmboss.angle}°</span>
                       </div>
                     </div>
                     <div className="setting-row">
                       <label className="setting-label">Altitude</label>
                       <div className="setting-slider-row">
-                        <input type="range" min="0" max="90" value={bevelAltitude} onChange={(e) => setBevelAltitude(parseInt(e.target.value))} className="setting-slider" />
-                        <span className="setting-value">{bevelAltitude}°</span>
+                        <input type="range" min="0" max="90" value={fx.bevelAndEmboss.altitude} onChange={(e) => writeFx('bevelAndEmboss', { altitude: parseInt(e.target.value) })} className="setting-slider" />
+                        <span className="setting-value">{fx.bevelAndEmboss.altitude}°</span>
                       </div>
                     </div>
                     <div className="setting-row">
-                      <label className="setting-label">Contour</label>
-                      <select className="setting-select" value={bevelContour} onChange={(e) => setBevelContour(e.target.value)}>
-                          <option value="linear">Linear</option>
-                          <option value="cone">Cone</option>
-                          <option value="coneInverted">Cone-Inverted</option>
-                          <option value="cube">Cube</option>
-                          <option value="halfRound">Half Round</option>
-                          <option value="smooth">Smooth</option>
-                          <option value="ringed">Ringed</option>
-                          <option value="ringedDouble">Ringed Double</option>
-                          <option value="sCurve">S-Curve</option>
-                        </select>
-                      </div>
-                    <div className="setting-row">
                       <label className="setting-label">Highlight Mode</label>
-                      <select className="setting-select" value={bevelHighlightMode} onChange={(e) => setBevelHighlightMode(e.target.value)}>
+                      <select className="setting-select" value={fx.bevelAndEmboss.highlightMode} onChange={(e) => writeFx('bevelAndEmboss', { highlightMode: e.target.value })}>
                         <option value="screen">Screen</option>
                         <option value="multiply">Multiply</option>
                         <option value="overlay">Overlay</option>
@@ -1290,13 +1066,13 @@ export const LayerStyleDialog: React.FC = () => {
                     <div className="setting-row">
                       <label className="setting-label">Highlight Opacity</label>
                       <div className="setting-slider-row">
-                        <input type="range" min="0" max="100" value={bevelHighlightOpacity} onChange={(e) => setBevelHighlightOpacity(parseInt(e.target.value))} className="setting-slider" />
-                        <span className="setting-value">{bevelHighlightOpacity}%</span>
+                        <input type="range" min="0" max="100" value={fx.bevelAndEmboss.highlightOpacity} onChange={(e) => writeFx('bevelAndEmboss', { highlightOpacity: parseInt(e.target.value) })} className="setting-slider" />
+                        <span className="setting-value">{fx.bevelAndEmboss.highlightOpacity}%</span>
                       </div>
                     </div>
                     <div className="setting-row">
                       <label className="setting-label">Shadow Mode</label>
-                      <select className="setting-select" value={bevelShadowMode} onChange={(e) => setBevelShadowMode(e.target.value)}>
+                      <select className="setting-select" value={fx.bevelAndEmboss.shadowMode} onChange={(e) => writeFx('bevelAndEmboss', { shadowMode: e.target.value })}>
                         <option value="multiply">Multiply</option>
                         <option value="screen">Screen</option>
                         <option value="overlay">Overlay</option>
@@ -1313,15 +1089,9 @@ export const LayerStyleDialog: React.FC = () => {
                     <div className="setting-row">
                       <label className="setting-label">Shadow Opacity</label>
                       <div className="setting-slider-row">
-                        <input type="range" min="0" max="100" value={bevelShadowOpacity} onChange={(e) => setBevelShadowOpacity(parseInt(e.target.value))} className="setting-slider" />
-                        <span className="setting-value">{bevelShadowOpacity}%</span>
+                        <input type="range" min="0" max="100" value={fx.bevelAndEmboss.shadowOpacity} onChange={(e) => writeFx('bevelAndEmboss', { shadowOpacity: parseInt(e.target.value) })} className="setting-slider" />
+                        <span className="setting-value">{fx.bevelAndEmboss.shadowOpacity}%</span>
                       </div>
-                    </div>
-                    <div className="setting-row">
-                      <label className="setting-label checkbox-row">
-                        <input type="checkbox" checked={bevelUseGlobalAngle} onChange={(e) => setBevelUseGlobalAngle(e.target.checked)} />
-                        Use Global Light
-                      </label>
                     </div>
                   </div>
                 </div>
@@ -1456,30 +1226,30 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={glowColor} onChange={(e) => setGlowColor(e.target.value)} className="color-input" />
-                      <span className="setting-value">{glowColor}</span>
+                      <input type="color" value={fx.innerGlow.color} onChange={(e) => writeFx('innerGlow', { color: e.target.value })} className="color-input" />
+                      <span className="setting-value">{fx.innerGlow.color}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={glowOpacity} onChange={(e) => setGlowOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{glowOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.innerGlow.opacity} onChange={(e) => writeFx('innerGlow', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerGlow.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Size</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={glowSize} onChange={(e) => setGlowSize(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{glowSize}px</span>
+                      <input type="range" min="0" max="100" value={fx.innerGlow.size} onChange={(e) => writeFx('innerGlow', { size: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerGlow.size}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
-                    <label className="setting-label">Technique</label>
-                    <select className="setting-select" value={glowTechnique} onChange={(e) => setGlowTechnique(e.target.value)}>
-                      <option value="softer">Softer</option>
-                      <option value="precise">Precise</option>
-                    </select>
+                    <label className="setting-label">Choke</label>
+                    <div className="setting-slider-row">
+                      <input type="range" min="0" max="100" value={fx.innerGlow.choke} onChange={(e) => writeFx('innerGlow', { choke: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.innerGlow.choke}%</span>
+                    </div>
                   </div>
                 </div>
               </>
@@ -1492,37 +1262,30 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={glowColor} onChange={(e) => setGlowColor(e.target.value)} className="color-input" />
-                      <span className="setting-value">{glowColor}</span>
+                      <input type="color" value={fx.outerGlow.color} onChange={(e) => writeFx('outerGlow', { color: e.target.value })} className="color-input" />
+                      <span className="setting-value">{fx.outerGlow.color}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={glowOpacity} onChange={(e) => setGlowOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{glowOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.outerGlow.opacity} onChange={(e) => writeFx('outerGlow', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.outerGlow.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Size</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={glowSize} onChange={(e) => setGlowSize(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{glowSize}px</span>
+                      <input type="range" min="0" max="100" value={fx.outerGlow.size} onChange={(e) => writeFx('outerGlow', { size: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.outerGlow.size}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
-                    <label className="setting-label">Range</label>
+                    <label className="setting-label">Spread</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={parseInt(glowRange)} onChange={(e) => setGlowRange(`${e.target.value}%`)} className="setting-slider" />
-                      <span className="setting-value">{glowRange}</span>
+                      <input type="range" min="0" max="100" value={fx.outerGlow.spread} onChange={(e) => writeFx('outerGlow', { spread: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.outerGlow.spread}%</span>
                     </div>
-                  </div>
-                  <div className="setting-row">
-                    <label className="setting-label">Technique</label>
-                    <select className="setting-select" value={glowTechnique} onChange={(e) => setGlowTechnique(e.target.value)}>
-                      <option value="softer">Softer</option>
-                      <option value="precise">Precise</option>
-                    </select>
                   </div>
                 </div>
               </>
@@ -1535,36 +1298,36 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={gradientStart} onChange={(e) => setGradientStart(e.target.value)} className="color-input" />
-                      <span className="setting-value">{gradientStart}</span>
+                      <input type="color" value={fx.satin.color} onChange={(e) => writeFx('satin', { color: e.target.value })} className="color-input" />
+                      <span className="setting-value">{fx.satin.color}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={overlayOpacity} onChange={(e) => setOverlayOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{overlayOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.satin.opacity} onChange={(e) => writeFx('satin', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.satin.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Angle</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="-180" max="180" value={gradientAngle} onChange={(e) => setGradientAngle(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{gradientAngle}°</span>
+                      <input type="range" min="-180" max="180" value={fx.satin.angle} onChange={(e) => writeFx('satin', { angle: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.satin.angle}°</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Distance</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="-100" max="100" value={shadowDistance} onChange={(e) => setShadowDistance(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowDistance}px</span>
+                      <input type="range" min="0" max="100" value={fx.satin.distance} onChange={(e) => writeFx('satin', { distance: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.satin.distance}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Size</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={shadowSize} onChange={(e) => setShadowSize(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{shadowSize}px</span>
+                      <input type="range" min="0" max="100" value={fx.satin.size} onChange={(e) => writeFx('satin', { size: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.satin.size}px</span>
                     </div>
                   </div>
                 </div>
@@ -1578,20 +1341,20 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={overlayColor} onChange={(e) => setOverlayColor(e.target.value)} className="color-input" />
-                      <span className="setting-value">{overlayColor}</span>
+                      <input type="color" value={fx.colorOverlay.color} onChange={(e) => writeFx('colorOverlay', { color: e.target.value })} className="color-input" />
+                      <span className="setting-value">{fx.colorOverlay.color}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={overlayOpacity} onChange={(e) => setOverlayOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{overlayOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.colorOverlay.opacity} onChange={(e) => writeFx('colorOverlay', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.colorOverlay.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Blend Mode</label>
-                    <select className="setting-select" value={overlayBlendMode} onChange={(e) => setOverlayBlendMode(e.target.value)}>
+                    <select className="setting-select" value={fx.colorOverlay.blendMode} onChange={(e) => writeFx('colorOverlay', { blendMode: e.target.value })}>
                       <option value="normal">Normal</option>
                       <option value="multiply">Multiply</option>
                       <option value="screen">Screen</option>
@@ -1609,39 +1372,56 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Start Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={gradientStart} onChange={(e) => setGradientStart(e.target.value)} className="color-input" />
-                      <span className="setting-value">{gradientStart}</span>
+                      <input
+                        type="color"
+                        value={fx.gradientOverlay.stops[0]?.color ?? '#ff0000'}
+                        onChange={(e) => writeFx('gradientOverlay', {
+                          stops: [
+                            { offset: 0, color: e.target.value },
+                            { offset: 1, color: fx.gradientOverlay.stops[1]?.color ?? '#0000ff' },
+                          ],
+                        })}
+                        className="color-input"
+                      />
+                      <span className="setting-value">{fx.gradientOverlay.stops[0]?.color ?? '#ff0000'}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">End Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={gradientEnd} onChange={(e) => setGradientEnd(e.target.value)} className="color-input" />
-                      <span className="setting-value">{gradientEnd}</span>
+                      <input
+                        type="color"
+                        value={fx.gradientOverlay.stops[1]?.color ?? '#0000ff'}
+                        onChange={(e) => writeFx('gradientOverlay', {
+                          stops: [
+                            { offset: 0, color: fx.gradientOverlay.stops[0]?.color ?? '#ff0000' },
+                            { offset: 1, color: e.target.value },
+                          ],
+                        })}
+                        className="color-input"
+                      />
+                      <span className="setting-value">{fx.gradientOverlay.stops[1]?.color ?? '#0000ff'}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={gradientOpacity} onChange={(e) => setGradientOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{gradientOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.gradientOverlay.opacity} onChange={(e) => writeFx('gradientOverlay', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.gradientOverlay.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Angle</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="-180" max="180" value={gradientAngle} onChange={(e) => setGradientAngle(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{gradientAngle}°</span>
+                      <input type="range" min="-180" max="180" value={fx.gradientOverlay.angle} onChange={(e) => writeFx('gradientOverlay', { angle: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.gradientOverlay.angle}°</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Style</label>
-                    <select className="setting-select" value={gradientStyle} onChange={(e) => setGradientStyle(e.target.value)}>
+                    <select className="setting-select" value={fx.gradientOverlay.style} onChange={(e) => writeFx('gradientOverlay', { style: e.target.value as 'linear' | 'radial' })}>
                       <option value="linear">Linear</option>
                       <option value="radial">Radial</option>
-                      <option value="angle">Angle</option>
-                      <option value="reflected">Reflected</option>
-                      <option value="diamond">Diamond</option>
                     </select>
                   </div>
                 </div>
@@ -1655,13 +1435,13 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={overlayOpacity} onChange={(e) => setOverlayOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{overlayOpacity}%</span>
+                      <input type="range" min="0" max="100" value={fx.patternOverlay.opacity} onChange={(e) => writeFx('patternOverlay', { opacity: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.patternOverlay.opacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Blend Mode</label>
-                    <select className="setting-select" value={overlayBlendMode} onChange={(e) => setOverlayBlendMode(e.target.value)}>
+                    <select className="setting-select" value={fx.patternOverlay.blendMode} onChange={(e) => writeFx('patternOverlay', { blendMode: e.target.value })}>
                       <option value="normal">Normal</option>
                       <option value="multiply">Multiply</option>
                       <option value="screen">Screen</option>
@@ -1671,8 +1451,8 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Scale</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="10" max="200" value={100} onChange={() => {}} className="setting-slider" />
-                      <span className="setting-value">100%</span>
+                      <input type="range" min="10" max="200" value={fx.patternOverlay.scale} onChange={(e) => writeFx('patternOverlay', { scale: parseInt(e.target.value) })} className="setting-slider" />
+                      <span className="setting-value">{fx.patternOverlay.scale}%</span>
                     </div>
                   </div>
                 </div>
@@ -1686,22 +1466,22 @@ export const LayerStyleDialog: React.FC = () => {
                   <div className="setting-row">
                     <label className="setting-label">Size</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="50" value={strokeSize} onChange={(e) => setStrokeSize(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{strokeSize}px</span>
+                      <input type="range" min="0" max="50" value={ssSize} onChange={(e) => setSsSize(parseInt(e.target.value))} className="setting-slider" />
+                      <span className="setting-value">{ssSize}px</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Color</label>
                     <div className="setting-controls">
-                      <input type="color" value={strokeColor} onChange={(e) => setStrokeColor(e.target.value)} className="color-input" />
-                      <span className="setting-value">{strokeColor}</span>
+                      <input type="color" value={ssColor} onChange={(e) => setSsColor(e.target.value)} className="color-input" />
+                      <span className="setting-value">{ssColor}</span>
                     </div>
                   </div>
                   <div className="setting-row">
                     <label className="setting-label">Opacity</label>
                     <div className="setting-slider-row">
-                      <input type="range" min="0" max="100" value={strokeOpacity} onChange={(e) => setStrokeOpacity(parseInt(e.target.value))} className="setting-slider" />
-                      <span className="setting-value">{strokeOpacity}%</span>
+                      <input type="range" min="0" max="100" value={ssOpacity} onChange={(e) => setSsOpacity(parseInt(e.target.value))} className="setting-slider" />
+                      <span className="setting-value">{ssOpacity}%</span>
                     </div>
                   </div>
                   <div className="setting-row">
@@ -1710,8 +1490,8 @@ export const LayerStyleDialog: React.FC = () => {
                       {(['outside', 'inside', 'center'] as const).map(pos => (
                         <button
                           key={pos}
-                          className={`position-btn ${strokePosition === pos ? 'active' : ''}`}
-                          onClick={() => setStrokePosition(pos)}
+                          className={`position-btn ${ssPosition === pos ? 'active' : ''}`}
+                          onClick={() => setSsPosition(pos)}
                         >
                           {pos}
                         </button>
