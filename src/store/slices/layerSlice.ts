@@ -58,7 +58,7 @@ export interface LayerSlice {
    */
   mergeVisible: () => Promise<void>;
   rasterizeLayer: (id: string) => void;
-  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup') => void;
+  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold') => void;
   autoAlignLayers: () => Promise<void>;
   autoBlendLayers: () => Promise<void>;
   autoTone: () => void;
@@ -627,6 +627,13 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       defaultSettings = {
         posterize: {
           levels: 4
+        }
+      };
+    } else if (type === 'threshold') {
+      name = 'Threshold';
+      defaultSettings = {
+        threshold: {
+          level: 128
         }
       };
     }

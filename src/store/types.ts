@@ -263,7 +263,7 @@ export type Layer = BaseLayer & {
   /** For PDF background layers in vector mode: raw SVG markup string */
   svgMarkup?: string;
   adjustmentData?: {
-    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize';
+    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold';
     settings: {
       brightness?: number;
       contrast?: number;
@@ -310,6 +310,9 @@ export type Layer = BaseLayer & {
       };
       posterize?: {
         levels: number;
+      };
+      threshold?: {
+        level: number;
       };
     };
   };
@@ -575,8 +578,8 @@ export interface EditorState extends DocumentSpecificState {
   isSignatureDialogOpen: boolean;
   mobileCapturedImage: string | null;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | null) => void;
   adjustmentSourceLayerId: string | null;
   setAdjustmentSourceLayerId: (id: string | null) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;

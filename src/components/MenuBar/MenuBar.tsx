@@ -444,7 +444,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { divider: true },
             { label: 'Invert', shortcut: shortcuts.adjust_invert || 'Ctrl+I', action: onInvert },
             { label: 'Posterize...', action: () => addAdjustmentLayer('posterize') },
-            { label: 'Threshold...' },
+            { label: 'Threshold...', action: () => addAdjustmentLayer('threshold') },
             { label: 'Gradient Map...' },
             { label: 'Selective Color...' },
             { divider: true },
@@ -581,7 +581,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Color Lookup...', action: () => addAdjustmentLayer('color_lookup') },
             { label: 'Invert', action: onInvert },
             { label: 'Posterize...', action: () => addAdjustmentLayer('posterize') },
-            { label: 'Threshold...' },
+            { label: 'Threshold...', action: () => addAdjustmentLayer('threshold') },
             { label: 'Gradient Map...' },
             { label: 'Selective Color...' },
           ]

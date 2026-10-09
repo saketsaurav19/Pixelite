@@ -79,8 +79,8 @@ export interface UISlice {
   isMobileMenuOpen: boolean;
   showRulers: boolean;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | null) => void;
   adjustmentSourceLayerId: string | null;
   setAdjustmentSourceLayerId: (id: string | null) => void;
   activeMobileSubmenu: string | null;

@@ -164,6 +164,7 @@ export const AdjustmentDialog: React.FC = () => {
 
   // Posterize states
   const [posterizeLevels, setPosterizeLevels] = useState(4);
+  const [thresholdLevel, setThresholdLevel] = useState(128);
 
   // Color Balance states
   const [colorBalanceTone, setColorBalanceTone] = useState<'shadows' | 'midtones' | 'highlights'>('midtones');
@@ -234,6 +235,7 @@ export const AdjustmentDialog: React.FC = () => {
       gamma: exposureGamma,
       vibrance,
       posterizeLevels,
+      thresholdLevel,
       cbShadows,
       cbMidtones,
       cbHighlights,
@@ -245,6 +247,7 @@ export const AdjustmentDialog: React.FC = () => {
     brightness, contrast, hue, saturation, lightness, effect,
     exposure, offsetVal, exposureGamma, vibrance,
     posterizeLevels,
+    thresholdLevel,
     cbShadows, cbMidtones, cbHighlights, preserveLuminosity,
     levelsState, curvesState
   ]);
@@ -353,6 +356,7 @@ export const AdjustmentDialog: React.FC = () => {
           setVibrance(settings.vibrance ?? 0);
 
           setPosterizeLevels(settings.posterize?.levels ?? 4);
+          setThresholdLevel(settings.threshold?.level ?? 128);
 
           setCbShadows(settings.colorBalance?.shadows ?? { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbMidtones(settings.colorBalance?.midtones ?? { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
@@ -395,6 +399,7 @@ export const AdjustmentDialog: React.FC = () => {
           setExposureGamma(1.0);
           setVibrance(0);
           setPosterizeLevels(4);
+          setThresholdLevel(128);
           setCbShadows({ cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbMidtones({ cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbHighlights({ cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
@@ -556,6 +561,8 @@ export const AdjustmentDialog: React.FC = () => {
         finalSettings = { vibrance: sliderValuesRef.current.vibrance };
       } else if (activeAdjustmentModal === 'posterize') {
         finalSettings = { posterize: { levels: sliderValuesRef.current.posterizeLevels } };
+      } else if (activeAdjustmentModal === 'threshold') {
+        finalSettings = { threshold: { level: sliderValuesRef.current.thresholdLevel } };
       } else if (activeAdjustmentModal === 'color_balance') {
         finalSettings = {
           colorBalance: {
@@ -589,6 +596,7 @@ export const AdjustmentDialog: React.FC = () => {
     else if (activeAdjustmentModal === 'exposure') actionName = 'Exposure';
     else if (activeAdjustmentModal === 'vibrance') actionName = 'Vibrance';
     else if (activeAdjustmentModal === 'posterize') actionName = 'Posterize';
+    else if (activeAdjustmentModal === 'threshold') actionName = 'Threshold';
     else if (activeAdjustmentModal === 'color_balance') actionName = 'Color Balance';
     else if (activeAdjustmentModal === 'levels') actionName = 'Levels';
     else if (activeAdjustmentModal === 'curves') actionName = 'Curves';
@@ -719,6 +727,11 @@ export const AdjustmentDialog: React.FC = () => {
   const handlePosterizeLevelsChange = (lvl: number) => {
     setPosterizeLevels(lvl);
     applyPreviewDebounced({ posterize: { levels: lvl } });
+  };
+
+  const handleThresholdLevelChange = (lvl: number) => {
+    setThresholdLevel(lvl);
+    applyPreviewDebounced({ threshold: { level: lvl } });
   };
 
   // 3. Color Balance handlers
@@ -1262,6 +1275,38 @@ export const AdjustmentDialog: React.FC = () => {
           </div>
         );
 
+      case 'threshold':
+        return (
+          <div className="adjustment-sliders-container">
+            <div className="adjustment-control-row">
+              <div className="control-header">
+                <label>Threshold Level:</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="255"
+                  value={thresholdLevel}
+                  onChange={(e) => handleThresholdLevelChange(Math.max(1, Math.min(255, parseInt(e.target.value, 10) || 128)))}
+                  className="control-number-input"
+                />
+              </div>
+              <div className="slider-wrapper">
+                <input
+                  type="range"
+                  min="1"
+                  max="255"
+                  value={thresholdLevel}
+                  onChange={(e) => handleThresholdLevelChange(parseInt(e.target.value, 10))}
+                  className="adjustment-range"
+                />
+              </div>
+            </div>
+            <p style={{ marginTop: '1rem', fontSize: '0.78rem', color: '#888', textAlign: 'center' }}>
+              Pixels brighter than the threshold become white; the rest become black.
+            </p>
+          </div>
+        );
+
       case 'color_balance':
         const currentToneData = colorBalanceTone === 'shadows' ? cbShadows : colorBalanceTone === 'midtones' ? cbMidtones : cbHighlights;
 
@@ -1676,6 +1721,8 @@ export const AdjustmentDialog: React.FC = () => {
         return 'Vibrance';
       case 'posterize':
         return 'Posterize';
+      case 'threshold':
+        return 'Threshold';
       case 'color_balance':
         return 'Color Balance';
       case 'levels':
