@@ -32,6 +32,135 @@ export interface TextWarp {
   verticalDistortion: number;
 }
 
+/* ==========================================================================
+   Layer Styles (MU-2) — per-effect parameter model.
+   Each effect carries its own `enabled` flag. Parameter sets follow
+   Photoshop's Layer Style dialog; trimmed controls are documented in
+   src/utils/layerEffects.ts (see TRIMMED_CONTROLS).
+   ========================================================================== */
+
+export interface DropShadowEffect {
+  enabled: boolean;
+  blendMode: string;      // canvas composite op, e.g. 'multiply'
+  color: string;          // hex
+  opacity: number;        // 0-100
+  angle: number;          // degrees, Photoshop convention (0 = east, 90 = south)
+  distance: number;       // px
+  spread: number;         // 0-100 (choke)
+  size: number;           // px blur
+}
+
+export interface InnerShadowEffect {
+  enabled: boolean;
+  blendMode: string;
+  color: string;
+  opacity: number;        // 0-100
+  angle: number;          // degrees
+  distance: number;       // px
+  choke: number;          // 0-100
+  size: number;           // px blur
+}
+
+export interface OuterGlowEffect {
+  enabled: boolean;
+  blendMode: string;      // usually 'screen'
+  color: string;          // hex (gradient glow trimmed — solid color only)
+  opacity: number;        // 0-100
+  spread: number;         // 0-100
+  size: number;           // px
+}
+
+export interface InnerGlowEffect {
+  enabled: boolean;
+  blendMode: string;      // usually 'screen'
+  color: string;          // hex (gradient glow trimmed — solid color only)
+  opacity: number;        // 0-100
+  choke: number;          // 0-100
+  size: number;           // px
+  source: 'edge' | 'center';
+}
+
+export type BevelStyle = 'innerBevel' | 'outerBevel' | 'emboss' | 'pillowEmboss';
+export type BevelTechnique = 'smooth' | 'chiselSoft' | 'chiselHard';
+
+export interface BevelEmbossEffect {
+  enabled: boolean;
+  style: BevelStyle;
+  technique: BevelTechnique;
+  depth: number;          // 1-1000 (%)
+  direction: 'up' | 'down';
+  size: number;           // px
+  soften: number;         // px
+  angle: number;          // degrees
+  altitude: number;       // degrees
+  highlightMode: string;  // blend mode
+  highlightColor: string; // hex
+  highlightOpacity: number; // 0-100
+  shadowMode: string;     // blend mode
+  shadowColor: string;    // hex
+  shadowOpacity: number;  // 0-100
+}
+
+export interface SatinEffect {
+  enabled: boolean;
+  blendMode: string;
+  color: string;          // hex
+  opacity: number;        // 0-100
+  angle: number;          // degrees
+  distance: number;       // px
+  size: number;           // px
+  invert: boolean;
+}
+
+export interface ColorOverlayEffect {
+  enabled: boolean;
+  blendMode: string;
+  color: string;          // hex
+  opacity: number;        // 0-100
+}
+
+export interface GradientStop { offset: number; color: string; } // offset 0-1
+
+export interface GradientOverlayEffect {
+  enabled: boolean;
+  blendMode: string;
+  stops: GradientStop[];  // at least 2
+  opacity: number;        // 0-100
+  style: 'linear' | 'radial';
+  angle: number;          // degrees (linear)
+  scale: number;          // % (radial)
+}
+
+export interface PatternOverlayEffect {
+  enabled: boolean;
+  blendMode: string;
+  opacity: number;        // 0-100
+  pattern: string;        // pattern key; only 'checkerboard' ships (see docs)
+  scale: number;          // %
+}
+
+export interface StrokeEffect {
+  enabled: boolean;
+  size: number;           // px
+  position: 'outside' | 'inside' | 'center';
+  blendMode: string;
+  color: string;          // hex (gradient stroke trimmed — solid color only)
+  opacity: number;        // 0-100
+}
+
+export interface LayerEffects {
+  dropShadow: DropShadowEffect;
+  innerShadow: InnerShadowEffect;
+  outerGlow: OuterGlowEffect;
+  innerGlow: InnerGlowEffect;
+  bevelAndEmboss: BevelEmbossEffect;
+  satin: SatinEffect;
+  colorOverlay: ColorOverlayEffect;
+  gradientOverlay: GradientOverlayEffect;
+  patternOverlay: PatternOverlayEffect;
+  stroke: StrokeEffect;
+}
+
 export interface BaseLayer {
   id: string;
   name: string;
@@ -52,27 +181,11 @@ export interface BaseLayer {
   pdfData?: string;
   pdfPageIndex?: number;
   /**
-   * Layer mask (white reveals / black hides). Null/undefined = no mask.
-   * Mask pixels are stored in the same coordinate space as the layer's own
-   * canvas (`layer.width` x `layer.height`, falling back to the document size).
+   * Layer Styles (MU-2): Photoshop-style per-effect parameters.
+   * Undefined = no effects. Effects are presentation-only; the layer's own
+   * pixels are never mutated by them.
    */
-  layerMask?: LayerMask | null;
-  /**
-   * Clipping-mask anchor: id of the base layer within the same parent that
-   * this layer is clipped to (Photoshop Alt+click semantics).
-   * Null/undefined = not clipped.
-   */
-  clippedTo?: string | null;
-}
-
-/**
- * A layer mask: a grayscale pixel mask stored as a PNG data URL.
- * White (255) reveals the layer, black (0) hides it; gray = partial.
- */
-export interface LayerMask {
-  enabled: boolean;
-  /** Grayscale PNG data URL, same pixel size as the layer's canvas. */
-  dataUrl: string;
+  effects?: LayerEffects;
 }
 
 export interface AnnotationData {
