@@ -11,6 +11,10 @@ import { applyWarpDeformation } from '../../../utils/textWarpUtils';
 import { toolState } from '../../../tools/toolState';
 import { pdfiumManager } from '../../../services/import/PdfiumManager';
 import { combineShapes as combineShapesUtil, type BooleanOp as ShapeBooleanOp } from '../../../utils/shapeBooleanOps';
+// MU-2: imperative repaint of the LayerEffectsOverlay canvases. renderLayer
+// paints base pixels asynchronously (Image.onload, pdfium/pixi promises), so
+// the overlay useEffect alone can't track it — see LayerEffectsOverlay.tsx.
+import { repaintLayerEffectCanvases } from '../UI/LayerEffectsOverlay';
 
 // Cache compound-shape rasterizations so re-renders triggered by unrelated
 // state (selection, zoom, etc.) don't re-rasterize. Keyed by a tuple of
@@ -145,6 +149,7 @@ const renderLayer = (
         img.onload = () => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0);
+          repaintLayerEffectCanvases(layer, canvasRefs);
         };
         img.src = layer.dataUrl;
       }
@@ -186,6 +191,7 @@ const renderLayer = (
           img.onload = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
+            repaintLayerEffectCanvases(layer, canvasRefs);
           };
           img.src = resultDataUrl;
         })
@@ -198,6 +204,7 @@ const renderLayer = (
 
   if (layer.isPdfBackground && layer.pdfData && layer.pdfPageIndex !== undefined) {
     pdfiumManager.renderPage(layer.pdfData, layer.pdfPageIndex, canvas.width, canvas.height, canvas)
+      .then(() => repaintLayerEffectCanvases(layer, canvasRefs))
       .catch((err) => console.error('Failed to dynamically render PDF page:', err));
   } else if (layer.dataUrl) {
     const activeTool = useStore.getState().activeTool;
@@ -250,17 +257,20 @@ const renderLayer = (
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         }
       }
+      repaintLayerEffectCanvases(layer, canvasRefs);
     } else {
       const img = new Image();
       img.onload = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        repaintLayerEffectCanvases(layer, canvasRefs);
       };
       img.src = layer.dataUrl;
     }
   } else if (layer.type === 'paint' && layer.name === 'Background') {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, documentSize.w, documentSize.h);
+    repaintLayerEffectCanvases(layer, canvasRefs);
   } else if (layer.type === 'text' && layer.textContent) {
     const isWarped = layer.textWarp && layer.textWarp.style !== 'None';
     const origW = layer.width || 0;
@@ -379,6 +389,7 @@ const renderLayer = (
       drawTrianglesWarp(ctx, targetCtx.canvas, srcGrid, dstGrid, gridW, gridH);
       ctx.restore();
     }
+    repaintLayerEffectCanvases(layer, canvasRefs);
   } else if (layer.type === 'shape' && layer.shapeData) {
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -413,6 +424,7 @@ const renderLayer = (
         }
       }
       ctx.restore();
+      repaintLayerEffectCanvases(layer, canvasRefs);
       return;
     }
 
@@ -490,6 +502,7 @@ const renderLayer = (
       }
     }
     ctx.restore();
+    repaintLayerEffectCanvases(layer, canvasRefs);
   }
 };
 

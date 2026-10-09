@@ -7,6 +7,7 @@ import { createMaskDataUrl, invertMaskPixels } from '../../utils/maskModel';
 import { FilterService } from '../../services/image/FilterService';
 import { combineShapes as combineShapesUtil, type BooleanOp as ShapeBooleanOp } from '../../utils/shapeBooleanOps';
 import { rasterizeAllToDataUrl } from '../../utils/mergeUtils';
+import { DEFAULT_LAYER_EFFECTS } from '../../utils/layerEffects';
 
 export interface LayerSlice {
   layers: Layer[];
@@ -18,6 +19,18 @@ export interface LayerSlice {
   setActiveLayer: (id: string) => void;
   setSelectedLayerIds: (ids: string[]) => void;
   updateLayer: (id: string, updates: Partial<Layer>) => void;
+  /**
+   * MU-2 Layer Styles: merge `partial` into the layer's `effects` object
+   * (deep-merge per effect key; creates the object from defaults if absent).
+   * Does NOT record history — callers (e.g. the Layer Style dialog) record a
+   * single history entry on commit.
+   */
+  updateLayerEffects: (id: string, partial: Partial<import('../types').LayerEffects>) => void;
+  /**
+   * MU-2: replace the layer's entire `effects` object (used for dialog
+   * open-snapshot restore on cancel). No history recorded.
+   */
+  setLayerEffects: (id: string, effects: import('../types').LayerEffects | undefined) => void;
   duplicateLayer: (id: string) => void;
   toggleLayerVisibility: (id: string) => void;
   moveLayer: (id: string, direction: 'up' | 'down') => void;
@@ -171,6 +184,30 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     } else {
       newLayers = updateNode(state.layers, id, finalUpdates);
     }
+    return { layers: newLayers };
+  }),
+
+  updateLayerEffects: (id, partial) => set((state) => {
+    const targetLayer = findLayerById(state.layers, id);
+    if (!targetLayer) return {};
+    const base: Record<string, any> = { ...(targetLayer.effects || {}) };
+    for (const key of Object.keys(partial) as (keyof typeof partial)[]) {
+      const incoming = (partial as any)[key];
+      // Seed from defaults so the store never holds a partial effect object
+      // (renderers must not assume fields exist — see normalizeLayerEffects).
+      const defaults = (DEFAULT_LAYER_EFFECTS as any)[key] || {};
+      if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+        base[key as string] = { ...defaults, ...(base[key as string] || {}), ...incoming };
+      } else {
+        base[key as string] = incoming;
+      }
+    }
+    const newLayers = updateNode(state.layers, id, { effects: base } as Partial<Layer>);
+    return { layers: newLayers };
+  }),
+
+  setLayerEffects: (id, effects) => set((state) => {
+    const newLayers = updateNode(state.layers, id, { effects } as Partial<Layer>);
     return { layers: newLayers };
   }),
 

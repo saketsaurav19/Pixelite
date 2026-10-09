@@ -3,6 +3,8 @@ import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { mapBlendModeToCss } from '../../../utils/blendModes';
+import { buildEffectFilter } from '../../../utils/layerEffects';
+import { LayerEffectsOverlay } from './LayerEffectsOverlay';
 import { findLayerById } from '../../../utils/layerUtils';
 import { getLayerDocumentOffset } from '../../../utils/maskRender';
 import { getHomography, loadGoogleFont, getFontFamilyString } from '../../../utils/canvasUtils';
@@ -884,13 +886,18 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         pointerEvents: 'none',
         mixBlendMode: (layer.blendMode === 'dissolve' ? 'normal' : mapBlendModeToCss(layer.blendMode)) as any,
         opacity: layer.blendMode === 'dissolve' ? 1 : layer.opacity,
+        // MU-2: drop shadow + outer glow as a GPU-cheap CSS filter. The filter
+        // applies to the wrapper's rendering first; mixBlendMode then blends
+        // the filtered result with the backdrop as a unit.
+        filter: buildEffectFilter(layer.effects) || undefined,
         // MU-1: layer mask + clipping mask + dissolve dither, intersected.
+        // (maskCss already includes the dither mask.)
         ...maskCss,
         transform: layerTransform,
         transformOrigin,
       }}
     >
-      <div style={{ opacity: layer.fill ?? 1, width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+      <div style={{ opacity: layer.fill ?? 1, width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 1 }}>
         {isEditingThisLayer && (
           <div
             style={{
@@ -1004,6 +1011,11 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
           </svg>
         )}
       </div>
+      {/* MU-2 layer styles: canvas-composited effects (stroke, inner shadow/glow,
+          satin, bevel, color/gradient/pattern overlays) render into
+          absolutely-positioned canvases here. Drop shadow + outer glow come
+          from the CSS filter on the wrapper above. */}
+      <LayerEffectsOverlay layer={layer} canvasRefs={canvasRefs} />
     </div>
   );
 };
