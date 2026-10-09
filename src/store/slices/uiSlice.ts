@@ -24,6 +24,10 @@ const defaultShortcuts: Record<string, string> = {
   view_zoom_100: 'Ctrl+1',
   view_rulers: 'Ctrl+R',
   layer_merge_visible: 'Shift+Ctrl+E',
+  layer_arrange_front: 'Shift+Ctrl+]',
+  layer_arrange_forward: 'Ctrl+]',
+  layer_arrange_backward: 'Ctrl+[',
+  layer_arrange_back: 'Shift+Ctrl+[',
 };
 
 export interface UISlice {

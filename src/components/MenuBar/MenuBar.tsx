@@ -157,6 +157,45 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const applyFilterAction = useStore((s) => s.applyFilterAction);
   const shortcuts = useStore((s) => s.shortcuts || {});
 
+  // Layer > Arrange keyboard shortcuts (Ctrl+]/Ctrl+[ family).
+  // Handled here instead of App.tsx so this menu's advertised shortcuts work.
+  useEffect(() => {
+    const matches = (e: KeyboardEvent, shortcut: string): boolean => {
+      if (!shortcut) return false;
+      const parts = shortcut.split('+').map(p => p.trim().toLowerCase());
+      const needsCtrl = parts.includes('ctrl') || parts.includes('cmd') || parts.includes('control');
+      const needsShift = parts.includes('shift');
+      const needsAlt = parts.includes('alt') || parts.includes('option');
+      const keyPart = parts.find(p => !['ctrl', 'cmd', 'control', 'shift', 'alt', 'option'].includes(p));
+      if (!keyPart) return false;
+      if (needsCtrl !== (e.ctrlKey || e.metaKey)) return false;
+      if (needsShift !== e.shiftKey) return false;
+      if (needsAlt !== e.altKey) return false;
+      return e.key.toLowerCase() === keyPart;
+    };
+    const arrange = (dir: 'front' | 'forward' | 'backward' | 'back') => {
+      const st = useStore.getState();
+      if (!st.activeLayerId) return;
+      if (dir === 'front') st.reorderLayers?.(st.layers.findIndex(l => l.id === st.activeLayerId), 0);
+      else if (dir === 'back') st.reorderLayers?.(st.layers.findIndex(l => l.id === st.activeLayerId), st.layers.length - 1);
+      else if (dir === 'forward') st.moveLayer?.(st.activeLayerId, 'up');
+      else st.moveLayer?.(st.activeLayerId, 'down');
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts while typing (same guard as App.tsx)
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA' || useStore.getState().isTyping) {
+        return;
+      }
+      const sc = useStore.getState().shortcuts || {};
+      if (matches(e, sc.layer_arrange_front || 'Shift+Ctrl+]')) { e.preventDefault(); arrange('front'); }
+      else if (matches(e, sc.layer_arrange_forward || 'Ctrl+]')) { e.preventDefault(); arrange('forward'); }
+      else if (matches(e, sc.layer_arrange_backward || 'Ctrl+[')) { e.preventDefault(); arrange('backward'); }
+      else if (matches(e, sc.layer_arrange_back || 'Shift+Ctrl+[')) { e.preventDefault(); arrange('back'); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const activeLayer = layers.find(l => l.id === activeLayerId);
   const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
 
@@ -579,10 +618,10 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Arrange',
           subItems: [
-            { label: 'Bring to Front', shortcut: 'Shift+Ctrl+]' },
-            { label: 'Bring Forward', shortcut: 'Ctrl+]' },
-            { label: 'Send Backward', shortcut: 'Ctrl+[' },
-            { label: 'Send to Back', shortcut: 'Shift+Ctrl+[' },
+            { label: 'Bring to Front', shortcut: 'Shift+Ctrl+]', action: (s) => s.activeLayerId && s.reorderLayers?.(s.layers.findIndex(l => l.id === s.activeLayerId), 0) },
+            { label: 'Bring Forward', shortcut: 'Ctrl+]', action: (s) => s.activeLayerId && s.moveLayer?.(s.activeLayerId, 'up') },
+            { label: 'Send Backward', shortcut: 'Ctrl+[', action: (s) => s.activeLayerId && s.moveLayer?.(s.activeLayerId, 'down') },
+            { label: 'Send to Back', shortcut: 'Shift+Ctrl+[', action: (s) => s.activeLayerId && s.reorderLayers?.(s.layers.findIndex(l => l.id === s.activeLayerId), s.layers.length - 1) },
           ]
         },
         {
