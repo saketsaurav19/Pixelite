@@ -1,9 +1,12 @@
 import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { mapBlendModeToCss } from '../../../utils/blendModes';
 import { buildEffectFilter } from '../../../utils/layerEffects';
 import { LayerEffectsOverlay } from './LayerEffectsOverlay';
+import { findLayerById } from '../../../utils/layerUtils';
+import { getLayerDocumentOffset } from '../../../utils/maskRender';
 import { getHomography, loadGoogleFont, getFontFamilyString } from '../../../utils/canvasUtils';
 import { combineShapes as combineShapesUtil, polygonsToSvgPath } from '../../../utils/shapeBooleanOps';
 
@@ -381,6 +384,129 @@ const renderVectorShape = (layer: Layer, allLayers: Layer[]) => {
   return null;
 };
 
+// ── MU-1: layer masks + clipping masks (display) ─────────────────────────────
+// The live display is DOM/CSS stacking: each layer renders into its own
+// working canvas (never touched here) inside a wrapper div. Masks are applied
+// as CSS `mask-image` on the wrapper, so everything stays non-destructive and
+// updates live when the mask dataUrl / base layer repaints.
+//
+// Mask layers are intersected (mask-composite), so a layer with both its own
+// mask and a clipping mask renders only where ALL of them pass.
+function useMaskCss(
+  layer: Layer,
+  layers: Layer[],
+  canvasRefs: React.MutableRefObject<Record<string, HTMLCanvasElement | null>>,
+  maskW: number,
+  maskH: number,
+  ditherMaskUrl: string | null,
+): React.CSSProperties {
+  const baseId = layer.clippedTo ?? null;
+
+  // Re-render only when the base layer's pixels, geometry or visibility
+  // change — every other store update is ignored via the equality function.
+  const baseSig = useStoreWithEqualityFn(useStore, (s) => {
+    if (!baseId) return null;
+    return findLayerById(s.layers, baseId) ?? null;
+  }, (a, b) =>
+    (a?.dataUrl ?? null) === (b?.dataUrl ?? null) &&
+    (a?.position?.x ?? 0) === (b?.position?.x ?? 0) &&
+    (a?.position?.y ?? 0) === (b?.position?.y ?? 0) &&
+    (a?.width ?? null) === (b?.width ?? null) &&
+    (a?.height ?? null) === (b?.height ?? null) &&
+    !!a?.visible === !!b?.visible
+  );
+
+  // Document-space geometry of this layer and its clip base (cheap tree
+  // walk, no canvas work). A primitive string key keeps the expensive
+  // clip-mask memo below from re-running on unrelated layer updates.
+  const geomKey = React.useMemo((): string | null => {
+    if (!baseId) return null;
+    const clipDoc = getLayerDocumentOffset(layers, layer.id);
+    const baseDoc = getLayerDocumentOffset(layers, baseId);
+    if (!clipDoc || !baseDoc) return null;
+    return `${clipDoc.x},${clipDoc.y}|${baseDoc.x},${baseDoc.y}`;
+  }, [layers, layer.id, baseId]);
+
+  const clipMaskUrl = React.useMemo(() => {
+    if (!baseId || !baseSig || !geomKey) return null;
+    // Hidden base: Photoshop shows nothing of the clipped layer.
+    if (!baseSig.visible) {
+      const empty = document.createElement('canvas');
+      empty.width = 1;
+      empty.height = 1;
+      return empty.toDataURL();
+    }
+    const baseCanvas = canvasRefs.current[baseId];
+    if (!baseCanvas || baseCanvas.width < 1 || baseCanvas.height < 1) return null;
+    const w = Math.max(1, Math.round(maskW) || 1);
+    const h = Math.max(1, Math.round(maskH) || 1);
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext('2d');
+    if (!ctx) return null;
+    // Align the base layer's pixels under this layer: document offsets of
+    // both layers (ancestors included) give the relative draw position.
+    // geomKey is a primitive so this expensive memo only re-runs when the
+    // base pixels, the geometry, or the size actually change.
+    const [clipPart, basePart] = geomKey.split('|');
+    const [cx, cy] = clipPart.split(',').map(Number);
+    const [bx, by] = basePart.split(',').map(Number);
+    ctx.drawImage(baseCanvas, bx - cx, by - cy);
+    try {
+      return out.toDataURL();
+    } catch {
+      return null;
+    }
+  }, [baseId, baseSig, geomKey, layer.id, maskW, maskH]);
+
+  return React.useMemo(() => {
+    const images: string[] = [];
+    const modes: string[] = [];
+    const sizes: string[] = [];
+    const repeats: string[] = [];
+    if (ditherMaskUrl) {
+      images.push(`url(${ditherMaskUrl})`);
+      modes.push('alpha');
+      sizes.push('auto');
+      repeats.push('repeat');
+    }
+    const lm = layer.layerMask;
+    if (lm && lm.enabled && lm.dataUrl) {
+      // Grayscale mask: white = show, black = hide. Mask brush strokes are
+      // always fully opaque, so luminance mode is exact here.
+      images.push(`url(${lm.dataUrl})`);
+      modes.push('luminance');
+      sizes.push('100% 100%');
+      repeats.push('no-repeat');
+    }
+    if (clipMaskUrl) {
+      // Alpha canvas of the base layer: the clipped layer shows only where
+      // the base is opaque.
+      images.push(`url(${clipMaskUrl})`);
+      modes.push('alpha');
+      sizes.push('100% 100%');
+      repeats.push('no-repeat');
+    }
+    if (images.length === 0) return {};
+    // Note: csstype lacks WebkitMaskMode, hence the cast — React still
+    // renders it as -webkit-mask-mode.
+    return {
+      WebkitMaskImage: images.join(', '),
+      maskImage: images.join(', '),
+      WebkitMaskMode: modes.join(', '),
+      maskMode: modes.join(', '),
+      WebkitMaskSize: sizes.join(', '),
+      maskSize: sizes.join(', '),
+      WebkitMaskRepeat: repeats.join(', '),
+      maskRepeat: repeats.join(', '),
+      ...(images.length > 1
+        ? { WebkitMaskComposite: 'source-in', maskComposite: 'intersect' as const }
+        : {}),
+    } as React.CSSProperties;
+  }, [ditherMaskUrl, layer.layerMask, clipMaskUrl]);
+}
+
 export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   layer,
   documentSize,
@@ -427,6 +553,60 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
     return canvas.toDataURL();
   }, [layer.blendMode, layer.opacity]);
 
+  // Canvas pixel size of this layer (moved above the group early-return: the
+  // MU-1 mask CSS needs it for both group and regular wrappers).
+  const activeTool = useStore(state => state.activeTool);
+  const transformMode = useStore(state => state.transformMode);
+
+  // Regular layer — use native dimensions if available (e.g. PDF bitmap pages)
+  let canvasW = layer.isPdfBackground ? (layer.width || 1000) : (layer.width || documentSize.w);
+  let canvasH = layer.isPdfBackground ? (layer.height || 1000) : (layer.height || documentSize.h);
+
+  if (layer.isPdfBackground) {
+    const originalW = canvasW;
+    const originalH = canvasH;
+    canvasW = Math.round(canvasW * zoom);
+    canvasH = Math.round(canvasH * zoom);
+    console.log(`[CanvasLayer] PDF Layer "${layer.name}" dimensions calculated: zoom=${zoom}, originalDocSize=${originalW}x${originalH}, targetCanvasSize=${canvasW}x${canvasH}`);
+  }
+
+  const isWarped = layer.type === 'text' && layer.textWarp && layer.textWarp.style !== 'None';
+  let padX = 0;
+  let padY = 0;
+  if (isWarped) {
+    padX = Math.round(canvasW * 0.3) + 20;
+    padY = Math.round(canvasH * 0.8) + 20;
+  }
+
+  if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid) {
+    const xs = layer.warpGrid.map(p => p.x);
+    const ys = layer.warpGrid.map(p => p.y);
+    canvasW = Math.max(1, Math.round(Math.max(...xs) - Math.min(...xs)));
+    canvasH = Math.max(1, Math.round(Math.max(...ys) - Math.min(...ys)));
+  }
+
+  const finalCanvasW = isWarped ? canvasW + 2 * padX : canvasW;
+  const finalCanvasH = isWarped ? canvasH + 2 * padY : canvasH;
+
+  // MU-1 mask CSS (layer mask + clipping mask + dissolve dither, intersected).
+  // Mask canvas size is in the wrapper's local pixel space: the working
+  // canvas size for regular layers (canvas fills the wrapper 1:1), the
+  // document size for groups (wrapper is 100% × 100%), artboard size for
+  // artboards.
+  const isGroupLike = layer.type === 'group' || layer.type === 'artboard';
+  const maskCss = useMaskCss(
+    layer,
+    layers,
+    canvasRefs,
+    isGroupLike
+      ? (layer.type === 'artboard' && layer.width ? layer.width : documentSize.w)
+      : finalCanvasW,
+    isGroupLike
+      ? (layer.type === 'artboard' && layer.height ? layer.height : documentSize.h)
+      : finalCanvasH,
+    ditherMaskUrl
+  );
+
   // If it's a group or artboard, we wrap the children in an isolated div for compositing
   if (layer.type === 'group' || layer.type === 'artboard') {
     return (
@@ -447,10 +627,8 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
           isolation: 'isolate',
           mixBlendMode: (layer.blendMode === 'dissolve' ? 'normal' : mapBlendModeToCss(layer.blendMode)) as any,
           opacity: layer.blendMode === 'dissolve' ? 1 : layer.opacity,
-          WebkitMaskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
-          maskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
-          WebkitMaskRepeat: ditherMaskUrl ? 'repeat' : undefined,
-          maskRepeat: ditherMaskUrl ? 'repeat' : undefined,
+          // MU-1: layer mask + clipping mask + dissolve dither, intersected.
+          ...maskCss,
           touchAction: 'none',
         }}
       >
@@ -646,39 +824,8 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
   // Warp/puppet rendering now lives in `useLayerRendering.renderLayer` — the SAME
   // render pass that draws the base layer — so re-renders (e.g. on pointer-up when
   // `isInteracting` flips) repaint the live deformation instead of the original.
-
-  // Regular layer — use native dimensions if available (e.g. PDF bitmap pages)
-  let canvasW = layer.isPdfBackground ? (layer.width || 1000) : (layer.width || documentSize.w);
-  let canvasH = layer.isPdfBackground ? (layer.height || 1000) : (layer.height || documentSize.h);
-
-  if (layer.isPdfBackground) {
-    const originalW = canvasW;
-    const originalH = canvasH;
-    canvasW = Math.round(canvasW * zoom);
-    canvasH = Math.round(canvasH * zoom);
-    console.log(`[CanvasLayer] PDF Layer "${layer.name}" dimensions calculated: zoom=${zoom}, originalDocSize=${originalW}x${originalH}, targetCanvasSize=${canvasW}x${canvasH}`);
-  }
-
-  const isWarped = layer.type === 'text' && layer.textWarp && layer.textWarp.style !== 'None';
-  let padX = 0;
-  let padY = 0;
-  if (isWarped) {
-    padX = Math.round(canvasW * 0.3) + 20;
-    padY = Math.round(canvasH * 0.8) + 20;
-  }
-
-  const activeTool = useStore(state => state.activeTool);
-  const transformMode = useStore(state => state.transformMode);
-
-  if (activeTool === 'transform' && transformMode === 'warp' && layer.warpGrid) {
-    const xs = layer.warpGrid.map(p => p.x);
-    const ys = layer.warpGrid.map(p => p.y);
-    canvasW = Math.max(1, Math.round(Math.max(...xs) - Math.min(...xs)));
-    canvasH = Math.max(1, Math.round(Math.max(...ys) - Math.min(...ys)));
-  }
-
-  const finalCanvasW = isWarped ? canvasW + 2 * padX : canvasW;
-  const finalCanvasH = isWarped ? canvasH + 2 * padY : canvasH;
+  // (Canvas pixel-size computation moved above the group early-return; the
+  // MU-1 mask CSS needs `finalCanvasW/H` for both wrapper kinds.)
 
   const isVector = (layer.type === 'text' && (!layer.textWarp || layer.textWarp.style === 'None')) || layer.type === 'shape' || layer.type === 'table';
 
@@ -741,13 +888,11 @@ export const CanvasLayer: React.FC<CanvasLayerProps> = ({
         opacity: layer.blendMode === 'dissolve' ? 1 : layer.opacity,
         // MU-2: drop shadow + outer glow as a GPU-cheap CSS filter. The filter
         // applies to the wrapper's rendering first; mixBlendMode then blends
-        // the filtered result with the backdrop as a unit. MU-1's mask-image
-        // (dissolve) still applies on top of the filtered result.
+        // the filtered result with the backdrop as a unit.
         filter: buildEffectFilter(layer.effects) || undefined,
-        WebkitMaskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
-        maskImage: ditherMaskUrl ? `url(${ditherMaskUrl})` : undefined,
-        WebkitMaskRepeat: ditherMaskUrl ? 'repeat' : undefined,
-        maskRepeat: ditherMaskUrl ? 'repeat' : undefined,
+        // MU-1: layer mask + clipping mask + dissolve dither, intersected.
+        // (maskCss already includes the dither mask.)
+        ...maskCss,
         transform: layerTransform,
         transformOrigin,
       }}
