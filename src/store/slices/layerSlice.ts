@@ -3,6 +3,7 @@ import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { EditorState, Layer } from '../types';
 import { findLayerById, findParentNode, removeNode, insertNode, insertAfter, updateNode, flattenTree, moveNode, reorderNodes, replaceVisibleExceptKeep } from '../../utils/layerUtils';
+import { createMaskDataUrl, invertMaskPixels } from '../../utils/maskModel';
 import { FilterService } from '../../services/image/FilterService';
 import { combineShapes as combineShapesUtil, type BooleanOp as ShapeBooleanOp } from '../../utils/shapeBooleanOps';
 import { rasterizeAllToDataUrl } from '../../utils/mergeUtils';
@@ -69,12 +70,37 @@ export interface LayerSlice {
   trimCanvas: () => void;
   combineShapes: (ids: string[], op: 'union' | 'subtract' | 'intersect' | 'exclude') => void;
   makeCompoundShape: (ids: string[]) => string | null;
+
+  // ---- MU-1: layer masks + clipping masks ----
+  /**
+   * Which layer's mask is the current paint/edit target.
+   * Null = painting edits layer content as usual.
+   */
+  activeMaskLayerId: string | null;
+  setActiveMaskLayerId: (id: string | null) => void;
+  /** Creates a grayscale mask (reveal-all = white, hide-all = black) and targets it for painting. No-op if the layer already has a mask. */
+  addLayerMask: (layerId: string, mode: 'revealAll' | 'hideAll') => void;
+  /** Removes the mask; clears the paint target if it pointed here. */
+  deleteLayerMask: (layerId: string) => void;
+  setLayerMaskEnabled: (layerId: string, enabled: boolean) => void;
+  /** Inverts the mask pixels (black<->white); layer pixels are untouched. */
+  invertLayerMask: (layerId: string) => void;
+  /** Replaces the mask's data URL — called by paint tools after a mask stroke. */
+  updateLayerMaskDataUrl: (layerId: string, dataUrl: string) => void;
+  /**
+   * Photoshop Alt+click semantics: clips the layer to the nearest visible,
+   * non-clipped layer below it within the same parent. No-op if there is none.
+   */
+  createClippingMask: (layerId: string) => void;
+  /** Clears `clippedTo`. */
+  releaseClippingMask: (layerId: string) => void;
 }
 
 export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (set, get) => ({
   layers: [],
   activeLayerId: null,
   selectedLayerIds: [],
+  activeMaskLayerId: null,
 
   addLayer: (layer) => set((state) => {
     const newLayer: Layer = {
@@ -117,7 +143,11 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     return {
       layers: newLayers,
       activeLayerId: nextActiveId,
-      selectedLayerIds: nextActiveId ? [nextActiveId] : []
+      selectedLayerIds: nextActiveId ? [nextActiveId] : [],
+      // MU-1: don't leave a dangling mask-paint target when its layer is gone.
+      activeMaskLayerId: state.activeMaskLayerId && idsToDelete.includes(state.activeMaskLayerId)
+        ? null
+        : state.activeMaskLayerId
     };
   }),
 
@@ -1881,5 +1911,128 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       message: `Created a compound shape from ${ordered.length} layers.`,
     });
     return newLayer.id;
+  },
+
+  // ---- MU-1: layer masks + clipping masks ----
+
+  setActiveMaskLayerId: (id) => set({ activeMaskLayerId: id }),
+
+  addLayerMask: (layerId, mode) => {
+    const state = get();
+    const layer = findLayerById(state.layers, layerId);
+    // No-op if the layer doesn't exist or already has a mask.
+    if (!layer || layer.layerMask) return;
+    // The mask must live in the layer canvas's coordinate space so it
+    // aligns with the composite. This mirrors the sizing in
+    // CanvasLayer.tsx (`canvasW`/`canvasH`).
+    const maskW = layer.isPdfBackground ? (layer.width || 1000) : (layer.width || state.documentSize.w);
+    const maskH = layer.isPdfBackground ? (layer.height || 1000) : (layer.height || state.documentSize.h);
+    const dataUrl = createMaskDataUrl(maskW, maskH, mode === 'revealAll' ? 255 : 0);
+    set((s) => ({
+      layers: updateNode(s.layers, layerId, { layerMask: { enabled: true, dataUrl } }),
+      activeMaskLayerId: layerId,
+    }));
+    state.recordHistory?.(mode === 'revealAll' ? 'Add Layer Mask (Reveal All)' : 'Add Layer Mask (Hide All)');
+  },
+
+  deleteLayerMask: (layerId) => {
+    const state = get();
+    const layer = findLayerById(state.layers, layerId);
+    if (!layer || !layer.layerMask) return;
+    set((s) => ({
+      layers: updateNode(s.layers, layerId, { layerMask: null }),
+      activeMaskLayerId: s.activeMaskLayerId === layerId ? null : s.activeMaskLayerId,
+    }));
+    state.recordHistory?.('Delete Layer Mask');
+  },
+
+  setLayerMaskEnabled: (layerId, enabled) => {
+    const state = get();
+    const layer = findLayerById(state.layers, layerId);
+    if (!layer?.layerMask) return;
+    set((s) => ({
+      layers: updateNode(s.layers, layerId, { layerMask: { ...layer.layerMask!, enabled } }),
+    }));
+    state.recordHistory?.(enabled ? 'Enable Layer Mask' : 'Disable Layer Mask');
+  },
+
+  invertLayerMask: (layerId) => {
+    const state = get();
+    const layer = findLayerById(state.layers, layerId);
+    if (!layer?.layerMask) return;
+    // Decode the mask data URL, invert its pixels, re-encode — the layer's
+    // own pixels are never touched.
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      invertMaskPixels(imageData.data);
+      ctx.putImageData(imageData, 0, 0);
+      const dataUrl = canvas.toDataURL('image/png');
+      set((s) => {
+        const target = findLayerById(s.layers, layerId);
+        if (!target?.layerMask) return s;
+        return {
+          layers: updateNode(s.layers, layerId, { layerMask: { ...target.layerMask, dataUrl } }),
+        };
+      });
+      get().recordHistory?.('Invert Layer Mask');
+    };
+    img.src = layer.layerMask.dataUrl;
+  },
+
+  updateLayerMaskDataUrl: (layerId, dataUrl) => {
+    const state = get();
+    const layer = findLayerById(state.layers, layerId);
+    if (!layer?.layerMask) return;
+    // No recordHistory here: paint tools call this per stroke and record
+    // their own history entries.
+    set((s) => {
+      const target = findLayerById(s.layers, layerId);
+      if (!target?.layerMask) return s;
+      return {
+        layers: updateNode(s.layers, layerId, { layerMask: { ...target.layerMask, dataUrl } }),
+      };
+    });
+  },
+
+  createClippingMask: (layerId) => {
+    const state = get();
+    const parent = findParentNode(state.layers, layerId);
+    const siblings = parent ? parent.children! : state.layers;
+    // Index 0 is topmost (see mergeLayers: flat[] is top->bottom), so the
+    // layer visually below is at idx + 1.
+    const idx = siblings.findIndex((l) => l.id === layerId);
+    if (idx === -1) return;
+    // Skip hidden layers and layers that are themselves clipped — a chain
+    // always anchors at its ultimate base layer. A layer that is already a
+    // base for others still qualifies as a base (it has no clippedTo).
+    let baseId: string | null = null;
+    for (let i = idx + 1; i < siblings.length; i++) {
+      const candidate = siblings[i];
+      if (!candidate.visible || candidate.clippedTo) continue;
+      baseId = candidate.id;
+      break;
+    }
+    if (!baseId) return;
+    set((s) => ({
+      layers: updateNode(s.layers, layerId, { clippedTo: baseId }),
+    }));
+    state.recordHistory?.('Create Clipping Mask');
+  },
+
+  releaseClippingMask: (layerId) => {
+    const state = get();
+    const layer = findLayerById(state.layers, layerId);
+    if (!layer?.clippedTo) return;
+    set((s) => ({
+      layers: updateNode(s.layers, layerId, { clippedTo: null }),
+    }));
+    state.recordHistory?.('Release Clipping Mask');
   },
 });
