@@ -51,6 +51,10 @@ const commandsList: CommandDef[] = [
   { id: 'layer_merge', name: 'Merge Down', category: 'Layer', defaultVal: 'Ctrl+E' },
   { id: 'layer_merge_visible', name: 'Merge Visible', category: 'Layer', defaultVal: 'Shift+Ctrl+E' },
   { id: 'layer_flatten', name: 'Flatten Image', category: 'Layer', defaultVal: '' },
+  { id: 'layer_arrange_front', name: 'Arrange: Bring to Front', category: 'Layer', defaultVal: 'Shift+Ctrl+]' },
+  { id: 'layer_arrange_forward', name: 'Arrange: Bring Forward', category: 'Layer', defaultVal: 'Ctrl+]' },
+  { id: 'layer_arrange_backward', name: 'Arrange: Send Backward', category: 'Layer', defaultVal: 'Ctrl+[' },
+  { id: 'layer_arrange_back', name: 'Arrange: Send to Back', category: 'Layer', defaultVal: 'Shift+Ctrl+[' },
   // Select
   { id: 'select_all', name: 'All', category: 'Select', defaultVal: 'Ctrl+A' },
   { id: 'select_deselect', name: 'Deselect', category: 'Select', defaultVal: 'Ctrl+D' },
