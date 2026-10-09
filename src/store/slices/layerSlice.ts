@@ -31,6 +31,10 @@ export interface LayerSlice {
    * open-snapshot restore on cancel). No history recorded.
    */
   setLayerEffects: (id: string, effects: import('../types').LayerEffects | undefined) => void;
+  copiedLayerEffects: import('../types').LayerEffects | null;
+  copyLayerEffects: (id: string) => void;
+  pasteLayerEffects: (id: string) => void;
+  clearLayerEffects: (id: string) => void;
   duplicateLayer: (id: string) => void;
   toggleLayerVisibility: (id: string) => void;
   moveLayer: (id: string, direction: 'up' | 'down') => void;
@@ -58,7 +62,7 @@ export interface LayerSlice {
    */
   mergeVisible: () => Promise<void>;
   rasterizeLayer: (id: string) => void;
-  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup') => void;
+  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold') => void;
   autoAlignLayers: () => Promise<void>;
   autoBlendLayers: () => Promise<void>;
   autoTone: () => void;
@@ -102,6 +106,7 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
   activeLayerId: null,
   selectedLayerIds: [],
   activeMaskLayerId: null,
+  copiedLayerEffects: null,
 
   addLayer: (layer) => set((state) => {
     const newLayer: Layer = {
@@ -211,6 +216,34 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     const newLayers = updateNode(state.layers, id, { effects } as Partial<Layer>);
     return { layers: newLayers };
   }),
+
+  copyLayerEffects: (id) => {
+    const state = get();
+    const layer = findLayerById(state.layers, id);
+    if (!layer?.effects) {
+      state.addAlert?.({ type: 'warning', message: 'No layer style to copy.' });
+      return;
+    }
+    set({ copiedLayerEffects: JSON.parse(JSON.stringify(layer.effects)) });
+  },
+
+  pasteLayerEffects: (id) => {
+    const state = get();
+    if (!state.copiedLayerEffects) {
+      state.addAlert?.({ type: 'warning', message: 'Copy a layer style first.' });
+      return;
+    }
+    state.setLayerEffects(id, JSON.parse(JSON.stringify(state.copiedLayerEffects)));
+    state.recordHistory?.('Paste Layer Style');
+  },
+
+  clearLayerEffects: (id) => {
+    const state = get();
+    const layer = findLayerById(state.layers, id);
+    if (!layer?.effects) return;
+    state.setLayerEffects(id, undefined);
+    state.recordHistory?.('Clear Layer Style');
+  },
 
   duplicateLayer: (id) => {
     const state = get();
@@ -628,6 +661,13 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       defaultSettings = {
         posterize: {
           levels: 4
+        }
+      };
+    } else if (type === 'threshold') {
+      name = 'Threshold';
+      defaultSettings = {
+        threshold: {
+          level: 128
         }
       };
     }
