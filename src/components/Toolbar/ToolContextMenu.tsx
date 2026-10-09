@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Tool } from '../../store/useStore';
+import { useAnchoredMenuPosition } from '../MenuSystem/useAnchoredMenuPosition';
 
 interface ToolContextMenuProps {
   tools: { id: Tool; icon: any; label: string; shortcut: string }[];
@@ -16,14 +17,18 @@ const ToolContextMenu: React.FC<ToolContextMenuProps> = ({ tools, activeTool, po
     return () => window.removeEventListener('click', handleClickOutside);
   }, [onClose]);
 
+  const menu = useAnchoredMenuPosition(position);
+
   return (
     <div
       className="tool-context-menu"
+      ref={menu.ref}
       style={{
         position: 'fixed',
-        left: position.x,
-        top: position.y,
-        zIndex: 1001
+        left: menu.position.x,
+        top: menu.position.y,
+        zIndex: 1001,
+        visibility: menu.ready ? 'visible' : 'hidden',
       }}
       onClick={(e) => e.stopPropagation()}
     >

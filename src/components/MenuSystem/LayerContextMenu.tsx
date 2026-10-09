@@ -1,8 +1,9 @@
 import './LayerContextMenu.css';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { findLayerById } from '../../utils/layerUtils';
+import { useAnchoredMenuPosition } from './useAnchoredMenuPosition';
 
 interface LayerContextMenuProps {
   position: { x: number; y: number };
@@ -25,7 +26,8 @@ const LayerContextMenu: React.FC<LayerContextMenuProps> = ({
   onDuplicate,
   onMergeDown,
 }) => {
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menu = useAnchoredMenuPosition(position);
+  const menuRef = menu.ref;
   // Layers are a tree — findLayerById searches nested children too.
   const layer = useStore(s => findLayerById(s.layers, layerId));
   const addLayerMask = useStore(s => s.addLayerMask);
@@ -50,12 +52,13 @@ const LayerContextMenu: React.FC<LayerContextMenuProps> = ({
     };
   }, [onClose]);
 
-  // Keep menu on-screen
+  // Keep menu on-screen — flips upward when it would overflow the bottom edge
   const style: React.CSSProperties = {
     position: 'fixed',
-    top: position.y,
-    left: position.x,
+    top: menu.position.y,
+    left: menu.position.x,
     zIndex: 2000,
+    visibility: menu.ready ? 'visible' : 'hidden',
   };
 
   // Only image / paint layers have real pixel dimensions we can use for "Set as Canvas"
