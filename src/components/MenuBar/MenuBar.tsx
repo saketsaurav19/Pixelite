@@ -452,7 +452,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Selective Color...' },
             { divider: true },
             { label: 'Replace Color...' },
-            { label: 'Equalize' },
+            { label: 'Equalize', action: (s) => s.equalizeImage?.() },
           ]
         },
         { divider: true },
