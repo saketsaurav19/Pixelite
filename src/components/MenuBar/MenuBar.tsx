@@ -472,7 +472,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
           ]
         },
         { divider: true },
-        { label: 'Crop' },
+        { label: 'Crop', shortcut: 'C', action: (s) => s.setActiveTool('crop') },
         { label: 'Trim...' },
         { label: 'Reveal All' },
         { divider: true },
