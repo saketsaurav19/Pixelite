@@ -93,6 +93,9 @@ export interface AdjustmentSettings {
   posterize?: {
     levels: number; // 2..255
   };
+  threshold?: {
+    level: number; // 1..255
+  };
 }
 
 /**
@@ -924,6 +927,35 @@ export async function applyPixiAdjustments(
           px[i]     = Math.round(Math.round(px[i]     / step) * step);
           px[i + 1] = Math.round(Math.round(px[i + 1] / step) * step);
           px[i + 2] = Math.round(Math.round(px[i + 2] / step) * step);
+        }
+        postCtx.putImageData(postData, 0, 0);
+        resultDataUrl = postCanvas.toDataURL('image/png');
+      }
+    }
+
+    // Threshold: pixels brighter than the level become white, the rest black.
+    // Same 2D canvas post-pass approach as posterize.
+    if (settings.threshold) {
+      const t = Math.max(1, Math.min(255, Math.round(settings.threshold.level)));
+      const thresholdImg = new Image();
+      thresholdImg.src = resultDataUrl;
+      await new Promise<void>((resolve) => {
+        if (thresholdImg.complete) return resolve();
+        thresholdImg.onload = () => resolve();
+        thresholdImg.onerror = () => resolve();
+      });
+      const postCanvas = document.createElement('canvas');
+      postCanvas.width = thresholdImg.naturalWidth || width;
+      postCanvas.height = thresholdImg.naturalHeight || height;
+      const postCtx = postCanvas.getContext('2d');
+      if (postCtx) {
+        postCtx.drawImage(thresholdImg, 0, 0);
+        const postData = postCtx.getImageData(0, 0, postCanvas.width, postCanvas.height);
+        const px = postData.data;
+        for (let i = 0; i < px.length; i += 4) {
+          const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+          const v = lum > t ? 255 : 0;
+          px[i] = v; px[i + 1] = v; px[i + 2] = v;
         }
         postCtx.putImageData(postData, 0, 0);
         resultDataUrl = postCanvas.toDataURL('image/png');
