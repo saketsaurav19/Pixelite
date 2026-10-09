@@ -4,6 +4,7 @@ import './MenuBar.css';
 import { useStore } from '../../store/useStore';
 import { pasteFromClipboard } from '../../utils/clipboardUtils';
 import { convertTextLayerToPathAsync } from '../../utils/canvasUtils';
+import { SelectModifyDialog } from '../Dialogs/SelectModifyDialog';
 
 interface MenuItem {
   label?: string;
@@ -192,6 +193,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
       else if (matches(e, sc.layer_arrange_forward || 'Ctrl+]')) { e.preventDefault(); arrange('forward'); }
       else if (matches(e, sc.layer_arrange_backward || 'Ctrl+[')) { e.preventDefault(); arrange('backward'); }
       else if (matches(e, sc.layer_arrange_back || 'Shift+Ctrl+[')) { e.preventDefault(); arrange('back'); }
+      else if (matches(e, 'Shift+F6')) { e.preventDefault(); useStore.getState().openSelectModifyDialog?.('feather'); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -659,11 +661,11 @@ const MenuBar: React.FC<MenuBarProps> = ({
         {
           label: 'Modify',
           subItems: [
-            { label: 'Border...' },
-            { label: 'Smooth...' },
-            { label: 'Expand...' },
-            { label: 'Contract...' },
-            { label: 'Feather...', shortcut: 'Shift+F6' },
+            { label: 'Border...', action: (s) => s.openSelectModifyDialog?.('border') },
+            { label: 'Smooth...', action: (s) => s.openSelectModifyDialog?.('smooth') },
+            { label: 'Expand...', action: (s) => s.openSelectModifyDialog?.('expand') },
+            { label: 'Contract...', action: (s) => s.openSelectModifyDialog?.('contract') },
+            { label: 'Feather...', shortcut: 'Shift+F6', action: (s) => s.openSelectModifyDialog?.('feather') },
           ]
         },
         { divider: true },
@@ -1010,6 +1012,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   }));
 
   return (
+    <>
     <nav className={`menubar main-nav ${isMobileOpen ? 'mobile-open' : ''}`} ref={menuRef}>
       {isMobileOpen && (
         <div className="mobile-menu-header">
@@ -1059,6 +1062,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
         ))}
       </div>
     </nav>
+    <SelectModifyDialog />
+    </>
   );
 };
 
