@@ -62,7 +62,7 @@ export interface LayerSlice {
    */
   mergeVisible: () => Promise<void>;
   rasterizeLayer: (id: string) => void;
-  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold') => void;
+  addAdjustmentLayer: (type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | 'gradient_map') => void;
   autoAlignLayers: () => Promise<void>;
   autoBlendLayers: () => Promise<void>;
   autoTone: () => void;
@@ -89,7 +89,6 @@ export interface LayerSlice {
   setLayerMaskEnabled: (layerId: string, enabled: boolean) => void;
   /** Inverts the mask pixels (black<->white); layer pixels are untouched. */
   invertLayerMask: (layerId: string) => void;
-  equalizeImage: () => void;
   /** Replaces the mask's data URL — called by paint tools after a mask stroke. */
   updateLayerMaskDataUrl: (layerId: string, dataUrl: string) => void;
   /**
@@ -668,6 +667,14 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       defaultSettings = {
         threshold: {
           level: 128
+        }
+      };
+    } else if (type === 'gradient_map') {
+      name = 'Gradient Map';
+      defaultSettings = {
+        gradientMap: {
+          startColor: '#000000',
+          endColor: '#ffffff'
         }
       };
     }
@@ -2025,76 +2032,6 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
       get().recordHistory?.('Invert Layer Mask');
     };
     img.src = layer.layerMask.dataUrl;
-  },
-
-  equalizeImage: () => {
-    const state = get();
-    const layer = findLayerById(state.layers, state.activeLayerId || '');
-    if (!layer?.dataUrl) {
-      state.addAlert?.({ type: 'warning', message: 'Equalize needs a raster layer with image data.' });
-      return;
-    }
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      // Per-channel histograms over non-transparent pixels.
-      const histR = new Uint32Array(256);
-      const histG = new Uint32Array(256);
-      const histB = new Uint32Array(256);
-      let n = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i + 3] === 0) continue;
-        histR[data[i]]++;
-        histG[data[i + 1]]++;
-        histB[data[i + 2]]++;
-        n++;
-      }
-      if (n === 0) {
-        get().addAlert?.({ type: 'warning', message: 'Equalize found no visible pixels.' });
-        return;
-      }
-      const buildLut = (hist: Uint32Array): Uint8Array => {
-        const lut = new Uint8Array(256);
-        let cdf = 0;
-        let cdfMin = -1;
-        const cdfs = new Uint32Array(256);
-        for (let v = 0; v < 256; v++) {
-          cdf += hist[v];
-          cdfs[v] = cdf;
-          if (cdfMin < 0 && cdf > 0) cdfMin = cdf;
-        }
-        const denom = n - cdfMin;
-        for (let v = 0; v < 256; v++) {
-          lut[v] = denom > 0 ? Math.round(((cdfs[v] - cdfMin) / denom) * 255) : v;
-        }
-        return lut;
-      };
-      const lutR = buildLut(histR);
-      const lutG = buildLut(histG);
-      const lutB = buildLut(histB);
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i + 3] === 0) continue;
-        data[i] = lutR[data[i]];
-        data[i + 1] = lutG[data[i + 1]];
-        data[i + 2] = lutB[data[i + 2]];
-      }
-      ctx.putImageData(imageData, 0, 0);
-      const id = state.activeLayerId!;
-      get().updateLayer(id, { dataUrl: canvas.toDataURL('image/png') });
-      get().recordHistory?.('Equalize');
-    };
-    img.onerror = () => {
-      get().addAlert?.({ type: 'error', message: 'Could not load layer image for Equalize.' });
-    };
-    img.src = layer.dataUrl;
   },
 
   updateLayerMaskDataUrl: (layerId, dataUrl) => {

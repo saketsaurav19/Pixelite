@@ -165,6 +165,8 @@ export const AdjustmentDialog: React.FC = () => {
   // Posterize states
   const [posterizeLevels, setPosterizeLevels] = useState(4);
   const [thresholdLevel, setThresholdLevel] = useState(128);
+  const [gradientStart, setGradientStart] = useState('#000000');
+  const [gradientEnd, setGradientEnd] = useState('#ffffff');
 
   // Color Balance states
   const [colorBalanceTone, setColorBalanceTone] = useState<'shadows' | 'midtones' | 'highlights'>('midtones');
@@ -236,6 +238,8 @@ export const AdjustmentDialog: React.FC = () => {
       vibrance,
       posterizeLevels,
       thresholdLevel,
+      gradientStart,
+      gradientEnd,
       cbShadows,
       cbMidtones,
       cbHighlights,
@@ -248,6 +252,7 @@ export const AdjustmentDialog: React.FC = () => {
     exposure, offsetVal, exposureGamma, vibrance,
     posterizeLevels,
     thresholdLevel,
+    gradientStart, gradientEnd,
     cbShadows, cbMidtones, cbHighlights, preserveLuminosity,
     levelsState, curvesState
   ]);
@@ -357,6 +362,8 @@ export const AdjustmentDialog: React.FC = () => {
 
           setPosterizeLevels(settings.posterize?.levels ?? 4);
           setThresholdLevel(settings.threshold?.level ?? 128);
+          setGradientStart(settings.gradientMap?.startColor ?? '#000000');
+          setGradientEnd(settings.gradientMap?.endColor ?? '#ffffff');
 
           setCbShadows(settings.colorBalance?.shadows ?? { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
           setCbMidtones(settings.colorBalance?.midtones ?? { cyanRed: 0, magentaGreen: 0, yellowBlue: 0 });
@@ -563,6 +570,8 @@ export const AdjustmentDialog: React.FC = () => {
         finalSettings = { posterize: { levels: sliderValuesRef.current.posterizeLevels } };
       } else if (activeAdjustmentModal === 'threshold') {
         finalSettings = { threshold: { level: sliderValuesRef.current.thresholdLevel } };
+      } else if (activeAdjustmentModal === 'gradient_map') {
+        finalSettings = { gradientMap: { startColor: sliderValuesRef.current.gradientStart, endColor: sliderValuesRef.current.gradientEnd } };
       } else if (activeAdjustmentModal === 'color_balance') {
         finalSettings = {
           colorBalance: {
@@ -597,6 +606,7 @@ export const AdjustmentDialog: React.FC = () => {
     else if (activeAdjustmentModal === 'vibrance') actionName = 'Vibrance';
     else if (activeAdjustmentModal === 'posterize') actionName = 'Posterize';
     else if (activeAdjustmentModal === 'threshold') actionName = 'Threshold';
+    else if (activeAdjustmentModal === 'gradient_map') actionName = 'Gradient Map';
     else if (activeAdjustmentModal === 'color_balance') actionName = 'Color Balance';
     else if (activeAdjustmentModal === 'levels') actionName = 'Levels';
     else if (activeAdjustmentModal === 'curves') actionName = 'Curves';
@@ -732,6 +742,12 @@ export const AdjustmentDialog: React.FC = () => {
   const handleThresholdLevelChange = (lvl: number) => {
     setThresholdLevel(lvl);
     applyPreviewDebounced({ threshold: { level: lvl } });
+  };
+
+  const handleGradientMapChange = (start: string, end: string) => {
+    setGradientStart(start);
+    setGradientEnd(end);
+    applyPreviewDebounced({ gradientMap: { startColor: start, endColor: end } });
   };
 
   // 3. Color Balance handlers
@@ -1307,6 +1323,43 @@ export const AdjustmentDialog: React.FC = () => {
           </div>
         );
 
+      case 'gradient_map':
+        return (
+          <div className="adjustment-sliders-container">
+            <div className="adjustment-control-row">
+              <div className="control-header">
+                <label>Shadow color (dark):</label>
+                <input
+                  type="color"
+                  value={gradientStart}
+                  onChange={(e) => handleGradientMapChange(e.target.value, gradientEnd)}
+                  className="control-color-input"
+                />
+              </div>
+              <div className="control-header">
+                <label>Highlight color (light):</label>
+                <input
+                  type="color"
+                  value={gradientEnd}
+                  onChange={(e) => handleGradientMapChange(gradientStart, e.target.value)}
+                  className="control-color-input"
+                />
+              </div>
+            </div>
+            <div
+              style={{
+                height: '24px',
+                borderRadius: '4px',
+                background: `linear-gradient(to right, ${gradientStart}, ${gradientEnd})`,
+                border: '1px solid #444',
+              }}
+            />
+            <p style={{ marginTop: '1rem', fontSize: '0.78rem', color: '#888', textAlign: 'center' }}>
+              Dark pixels take the shadow color, light pixels the highlight color, blending between.
+            </p>
+          </div>
+        );
+
       case 'color_balance':
         const currentToneData = colorBalanceTone === 'shadows' ? cbShadows : colorBalanceTone === 'midtones' ? cbMidtones : cbHighlights;
 
@@ -1723,6 +1776,8 @@ export const AdjustmentDialog: React.FC = () => {
         return 'Posterize';
       case 'threshold':
         return 'Threshold';
+      case 'gradient_map':
+        return 'Gradient Map';
       case 'color_balance':
         return 'Color Balance';
       case 'levels':

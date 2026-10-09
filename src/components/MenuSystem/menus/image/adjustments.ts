@@ -15,6 +15,7 @@ export const imageAdjustmentMenu: MenuItem[] = [
     { label: 'Color Lookup', action: (store) => store.addAdjustmentLayer('color_lookup') },
     { label: 'Posterize', action: (store) => store.addAdjustmentLayer('posterize') },
     { label: 'Threshold', action: (store) => store.addAdjustmentLayer('threshold') },
+    { label: 'Gradient Map', action: (store) => store.addAdjustmentLayer('gradient_map') },
   ] },
   { label: 'Auto Tone', action: (store) => store.autoTone() },
   { label: 'Auto Contrast', action: (store) => store.autoContrast() },

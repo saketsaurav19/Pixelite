@@ -263,7 +263,7 @@ export type Layer = BaseLayer & {
   /** For PDF background layers in vector mode: raw SVG markup string */
   svgMarkup?: string;
   adjustmentData?: {
-    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold';
+    type: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | 'gradient_map';
     settings: {
       brightness?: number;
       contrast?: number;
@@ -313,6 +313,10 @@ export type Layer = BaseLayer & {
       };
       threshold?: {
         level: number;
+      };
+      gradientMap?: {
+        startColor: string;
+        endColor: string;
       };
     };
   };
@@ -578,8 +582,8 @@ export interface EditorState extends DocumentSpecificState {
   isSignatureDialogOpen: boolean;
   mobileCapturedImage: string | null;
   rulerUnit: 'px' | 'in' | 'cm';
-  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | null;
-  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | null) => void;
+  activeAdjustmentModal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | 'gradient_map' | null;
+  setActiveAdjustmentModal: (modal: 'brightness_contrast' | 'hue_saturation' | 'black_white' | 'photo_effects' | 'levels' | 'curves' | 'exposure' | 'vibrance' | 'color_balance' | 'channel_mixer' | 'color_lookup' | 'posterize' | 'threshold' | 'gradient_map' | null) => void;
   adjustmentSourceLayerId: string | null;
   setAdjustmentSourceLayerId: (id: string | null) => void;
   setRulerUnit: (unit: 'px' | 'in' | 'cm') => void;
