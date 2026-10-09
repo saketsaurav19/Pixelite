@@ -17,6 +17,8 @@ interface MeshWarpOverlayProps {
   setIsInteracting: (val: boolean) => void;
   getCoordinates: (clientX: number, clientY: number) => Point | null;
   lastPointRef: React.MutableRefObject<Point | null>;
+  onCommit: () => void;
+  onCancel: () => void;
 }
 
 const HANDLE_SIZE = 12;
@@ -31,6 +33,8 @@ export const MeshWarpOverlay: React.FC<MeshWarpOverlayProps> = ({
   setIsInteracting,
   getCoordinates,
   lastPointRef,
+  onCommit,
+  onCancel,
 }) => {
   const layer = layers.find(l => l.id === activeLayerId);
   if (!layer) return null;
@@ -120,6 +124,37 @@ export const MeshWarpOverlay: React.FC<MeshWarpOverlayProps> = ({
             title={`Vertex ${idx + 1}`}
           />
         ))}
+      </div>
+      <div
+        className="crop-actions-bar"
+        style={{
+          position: 'absolute',
+          left: Math.min(...canvasMesh.map(p => p.x)),
+          top: Math.max(...canvasMesh.map(p => p.y)) + 15,
+          zIndex: 20000,
+          display: 'flex',
+          gap: '8px',
+          width: 'fit-content',
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <button
+          className="crop-action-btn confirm"
+          onClick={(e) => { e.stopPropagation(); onCommit(); }}
+          title="Apply Mesh Warp"
+          style={{ cursor: 'pointer' }}
+        >
+          ✓
+        </button>
+        <button
+          className="crop-action-btn cancel"
+          onClick={(e) => { e.stopPropagation(); onCancel(); }}
+          title="Cancel Mesh Warp"
+          style={{ cursor: 'pointer' }}
+        >
+          ✕
+        </button>
       </div>
     </div>
   );
