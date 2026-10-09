@@ -550,7 +550,9 @@ const Canvas: React.FC = () => {
     if (!rawCoords && activeTool !== 'artboard') return;
 
     const activeLayer = findLayerById(layers, activeLayerId || '');
-    if (activeLayer) {
+    // View/navigation tools must work even when the active layer is locked.
+    const isViewTool = ['zoom_tool', 'hand', 'rotate_view'].includes(activeTool as string);
+    if (activeLayer && !isViewTool) {
       // For move tool: only block if the layer itself is locked or lockPosition is set.
       // Do NOT block based on children being locked (that's just for the UI indicator).
       if (activeTool === 'move') {

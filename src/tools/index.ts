@@ -10,6 +10,7 @@ import { retouchingTools } from './Retouching/retouchingTools';
 import { exposureTools } from './Retouching/exposureTools';
 import { artboardTool } from './Artboard/artboardTool';
 import { meshWarpTool } from './Transform/meshWarpTool';
+import { zoomTool } from './Utility/zoomTool';
 
 const allTools: ToolModule[] = [
   ...selectionTools,
@@ -18,6 +19,7 @@ const allTools: ToolModule[] = [
   ...transformTools,
   perspectiveWarpTool,
   meshWarpTool,
+  zoomTool,
   ...utilityTools,
   ...healingTools,
   ...retouchingTools,
