@@ -156,6 +156,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const setIsContentAwareScaleDialogOpen = useStore((s) => s.setIsContentAwareScaleDialogOpen);
   const applyFilterAction = useStore((s) => s.applyFilterAction);
   const shortcuts = useStore((s) => s.shortcuts || {});
+  const copiedLayerEffects = useStore((s) => s.copiedLayerEffects);
 
   // Layer > Arrange keyboard shortcuts (Ctrl+]/Ctrl+[ family).
   // Handled here instead of App.tsx so this menu's advertised shortcuts work.
@@ -552,9 +553,9 @@ const MenuBar: React.FC<MenuBarProps> = ({
             { label: 'Pattern Overlay...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('patternOverlay'); } },
             { label: 'Stroke...', action: (s) => { s.setIsLayerStyleDialogOpen?.(true); s.setLayerStyleActiveTab?.('strokeStyle'); } },
             { divider: true },
-            { label: 'Copy Layer Style' },
-            { label: 'Paste Layer Style' },
-            { label: 'Clear Layer Style' },
+            { label: 'Copy Layer Style', action: (s) => s.activeLayerId && s.copyLayerEffects?.(s.activeLayerId), disabled: !activeLayer?.effects },
+            { label: 'Paste Layer Style', action: (s) => s.activeLayerId && s.pasteLayerEffects?.(s.activeLayerId), disabled: !copiedLayerEffects },
+            { label: 'Clear Layer Style', action: (s) => s.activeLayerId && s.clearLayerEffects?.(s.activeLayerId), disabled: !activeLayer?.effects },
           ]
         },
         {
