@@ -36,6 +36,8 @@ import { SVGFilters } from './UI/SVGFilters';
 import { ArtboardOverlay } from './UI/ArtboardOverlay';
 import { TransformOverlay } from './UI/TransformOverlay';
 import { GridOverlay } from './UI/GridOverlay';
+import { MeshWarpOverlay } from './UI/MeshWarpOverlay';
+import { mwBakeWarp, mwClearMesh } from '../../tools/Transform/meshWarpTool';
 
 interface AbsoluteRect {
   x: number;
@@ -1427,6 +1429,22 @@ const Canvas: React.FC = () => {
             lastPointRef={lastPointRef}
             onConfirm={handleConfirmTransform}
             onCancel={handleCancelTransform}
+          />
+        )}
+
+        {activeTool === 'mesh_warp' && activeLayerId && (
+          <MeshWarpOverlay
+            activeLayerId={activeLayerId}
+            layers={layers}
+            documentSize={documentSize}
+            zoom={zoom}
+            canvasOffset={canvasOffset}
+            canvasRotation={canvasRotation}
+            setIsInteracting={setIsInteracting}
+            getCoordinates={getCoordinates}
+            lastPointRef={lastPointRef}
+            onCommit={() => mwBakeWarp(activeLayerId, layers, documentSize, updateLayer, recordHistory)}
+            onCancel={() => { mwClearMesh(); setActiveTool('move'); }}
           />
         )}
 
