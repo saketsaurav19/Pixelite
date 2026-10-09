@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import type { Layer } from '../../../store/types';
 import { useStore } from '../../../store/useStore';
-import { useStoreWithEqualityFn } from 'zustand/traditional';
+import { useStoreWithEqualityFn } from '../../../utils/useStoreWithEqualityFn';
 import { mapBlendModeToCss } from '../../../utils/blendModes';
 import { buildEffectFilter } from '../../../utils/layerEffects';
 import { LayerEffectsOverlay } from './LayerEffectsOverlay';
