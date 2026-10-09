@@ -1524,6 +1524,18 @@ body {
     bottom: 0;
   }
 
+  /* Tools sheet: let the tool grid + color section scroll when they
+     exceed the sheet height (was cut off on small phones). */
+  .toolbar-wrapper.mobile-open {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .toolbar-wrapper.mobile-open .left-toolbar {
+    height: auto;
+    flex-shrink: 0;
+  }
+
   .mobile-panel-header {
     display: flex;
     justify-content: space-between;

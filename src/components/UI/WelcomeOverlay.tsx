@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { computeFitZoom } from '../../utils/viewportZoom';
 import './WelcomeOverlay.css';
 
 interface WelcomeOverlayProps {
@@ -9,12 +10,15 @@ interface WelcomeOverlayProps {
 }
 
 export const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ onOpenImage }) => {
-  const { addLayer, setDocumentSize, recordHistory } = useStore();
+  const { addLayer, setDocumentSize, recordHistory, setZoom } = useStore();
   const [showNewDocOptions, setShowNewDocOptions] = useState(false);
   const [newDocSize, setNewDocSize] = useState({ w: 1920, h: 1080 });
 
   const handleCreateNew = () => {
     setDocumentSize(newDocSize);
+    // Fit the new document into the actual viewport (mobile-aware) so it
+    // opens fully visible on phones instead of overflowing the screen.
+    setZoom(computeFitZoom(newDocSize.w, newDocSize.h));
     addLayer({
       name: 'Background',
       type: 'paint',

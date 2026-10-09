@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { computeFitZoom } from '../../utils/viewportZoom';
 import './Dialogs.css';
 
 const PRESETS = [
@@ -13,7 +14,7 @@ const PRESETS = [
 ];
 
 export const NewDocumentDialog: React.FC = () => {
-  const { isNewDocumentDialogOpen, setIsNewDocumentDialogOpen, setDocumentSize, setLayers, recordHistory, setCurrentProjectId, setHistory } = useStore();
+  const { isNewDocumentDialogOpen, setIsNewDocumentDialogOpen, setDocumentSize, setLayers, recordHistory, setCurrentProjectId, setHistory, setZoom } = useStore();
   const [width, setWidth] = useState(1920);
   const [height, setHeight] = useState(1080);
   const [backgroundType, setBackgroundType] = useState<'white' | 'transparent'>('white');
@@ -24,6 +25,9 @@ export const NewDocumentDialog: React.FC = () => {
     setCurrentProjectId(null);
     setHistory([], 0);
     setDocumentSize({ w: width, h: height });
+    // Fit the new document into the actual viewport (mobile-aware) so it
+    // opens fully visible on phones instead of overflowing the screen.
+    setZoom(computeFitZoom(width, height));
 
     if (backgroundType === 'white') {
       const canvas = document.createElement('canvas');

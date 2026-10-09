@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
 import type { EditorState, DocumentSpecificState, DocumentArchive, SavedPattern } from '../types';
+import { computeFitZoom } from '../../utils/viewportZoom';
 
 export interface DocumentSlice {
   currentProjectId: string | null;
@@ -136,6 +137,7 @@ const extractDocumentState = (state: EditorState): DocumentSpecificState => ({
 
 const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSpecificState => {
   const bgLayerId = nanoid();
+  const docSize = size || { w: 1920, h: 1080 };
   return {
     layers: [{
       id: bgLayerId,
@@ -154,8 +156,10 @@ const createInitialDocumentState = (size?: { w: number; h: number }): DocumentSp
     activeLayerId: bgLayerId,
     history: [],
     historyIndex: 0,
-    documentSize: size || { w: 1920, h: 1080 },
-    zoom: 0.5,
+    documentSize: docSize,
+    // Fit the document into the actual canvas viewport (mobile-aware) instead
+    // of a fixed zoom, so new documents open fully visible on phones.
+    zoom: computeFitZoom(docSize.w, docSize.h),
     canvasOffset: { x: 0, y: 0 },
     canvasRotation: 0,
     colorMode: 'rgb',
