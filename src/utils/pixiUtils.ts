@@ -96,6 +96,10 @@ export interface AdjustmentSettings {
   threshold?: {
     level: number; // 1..255
   };
+  gradientMap?: {
+    startColor: string; // hex, e.g. '#000000'
+    endColor: string;   // hex, e.g. '#ffffff'
+  };
 }
 
 /**
@@ -956,6 +960,43 @@ export async function applyPixiAdjustments(
           const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
           const v = lum > t ? 255 : 0;
           px[i] = v; px[i + 1] = v; px[i + 2] = v;
+        }
+        postCtx.putImageData(postData, 0, 0);
+        resultDataUrl = postCanvas.toDataURL('image/png');
+      }
+    }
+
+    // Gradient Map: remap each pixel's luminance onto a start->end color gradient.
+    if (settings.gradientMap) {
+      const parseHex = (hex: string): [number, number, number] => {
+        const h = hex.replace('#', '');
+        const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+        const n = parseInt(full, 16);
+        if (isNaN(n)) return [0, 0, 0];
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      };
+      const [sr, sg, sb] = parseHex(settings.gradientMap.startColor || '#000000');
+      const [er, eg, eb] = parseHex(settings.gradientMap.endColor || '#ffffff');
+      const gmImg = new Image();
+      gmImg.src = resultDataUrl;
+      await new Promise<void>((resolve) => {
+        if (gmImg.complete) return resolve();
+        gmImg.onload = () => resolve();
+        gmImg.onerror = () => resolve();
+      });
+      const postCanvas = document.createElement('canvas');
+      postCanvas.width = gmImg.naturalWidth || width;
+      postCanvas.height = gmImg.naturalHeight || height;
+      const postCtx = postCanvas.getContext('2d');
+      if (postCtx) {
+        postCtx.drawImage(gmImg, 0, 0);
+        const postData = postCtx.getImageData(0, 0, postCanvas.width, postCanvas.height);
+        const px = postData.data;
+        for (let i = 0; i < px.length; i += 4) {
+          const t = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) / 255;
+          px[i] = Math.round(sr + (er - sr) * t);
+          px[i + 1] = Math.round(sg + (eg - sg) * t);
+          px[i + 2] = Math.round(sb + (eb - sb) * t);
         }
         postCtx.putImageData(postData, 0, 0);
         resultDataUrl = postCanvas.toDataURL('image/png');
