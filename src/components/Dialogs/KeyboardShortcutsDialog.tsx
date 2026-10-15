@@ -28,7 +28,7 @@ const commandsList: CommandDef[] = [
   { id: 'edit_copy', name: 'Copy', category: 'Edit', defaultVal: 'Ctrl+C' },
   { id: 'edit_paste', name: 'Paste', category: 'Edit', defaultVal: 'Ctrl+V' },
   { id: 'edit_fill', name: 'Fill...', category: 'Edit', defaultVal: '' },
-  { id: 'edit_fade', name: 'Fade...', category: 'Edit', defaultVal: '' },
+  { id: 'edit_fade', name: 'Fade...', category: 'Edit', defaultVal: 'Shift+Ctrl+F' },
   { id: 'edit_copy_merged', name: 'Copy Merged', category: 'Edit', defaultVal: '' },
   { id: 'edit_free_transform', name: 'Free Transform', category: 'Edit', defaultVal: 'Ctrl+T' },
   { id: 'edit_preferences', name: 'Preferences...', category: 'Edit', defaultVal: 'Ctrl+K' },
@@ -61,6 +61,8 @@ const commandsList: CommandDef[] = [
   { id: 'select_inverse', name: 'Inverse Selection', category: 'Select', defaultVal: 'Shift+Ctrl+I' },
   { id: 'select_subject', name: 'Select Subject', category: 'Select', defaultVal: '' },
   { id: 'select_remove_bg', name: 'Remove BG', category: 'Select', defaultVal: '' },
+  // Filter
+  { id: 'filter_last', name: 'Last Filter', category: 'Filter', defaultVal: 'Alt+Ctrl+F' },
   // View
   { id: 'view_zoom_fit', name: 'Fit Area', category: 'View', defaultVal: 'Ctrl+0' },
   { id: 'view_zoom_100', name: 'Pixel to Pixel', category: 'View', defaultVal: 'Ctrl+1' },
