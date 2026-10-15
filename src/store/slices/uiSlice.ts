@@ -28,6 +28,8 @@ const defaultShortcuts: Record<string, string> = {
   layer_arrange_forward: 'Ctrl+]',
   layer_arrange_backward: 'Ctrl+[',
   layer_arrange_back: 'Shift+Ctrl+[',
+  edit_fade: 'Shift+Ctrl+F',
+  filter_last: 'Alt+Ctrl+F',
 };
 
 export interface UISlice {
@@ -40,6 +42,7 @@ export interface UISlice {
   isContentAwareScaleDialogOpen: boolean;
   isFilterGalleryDialogOpen: boolean;
   filterGallerySelectedType: string;
+  isFadeDialogOpen: boolean;
   isLayerStyleDialogOpen: boolean;
   layerStyleActiveTab: 'blending' | 'shadow' | 'stroke' | 'dropShadow' | 'innerShadow' | 'innerGlow' | 'outerGlow' | 'bevelAndEmboss' | 'contour' | 'texture' | 'satin' | 'colorOverlay' | 'gradientOverlay' | 'patternOverlay' | 'strokeStyle' | 'd3d';
   isVariablesDialogOpen: boolean;
@@ -129,6 +132,7 @@ export interface UISlice {
   setIsContentAwareScaleDialogOpen: (isOpen: boolean) => void;
   setIsFilterGalleryDialogOpen: (isOpen: boolean) => void;
   setFilterGallerySelectedType: (type: string) => void;
+  setIsFadeDialogOpen: (isOpen: boolean) => void;
   setIsLayerStyleDialogOpen: (isOpen: boolean) => void;
   setLayerStyleActiveTab: (tab: 'blending' | 'shadow' | 'stroke' | 'dropShadow' | 'innerShadow' | 'innerGlow' | 'outerGlow' | 'bevelAndEmboss' | 'contour' | 'texture' | 'satin' | 'colorOverlay' | 'gradientOverlay' | 'patternOverlay' | 'strokeStyle' | 'd3d') => void;
   setIsVariablesDialogOpen: (isOpen: boolean) => void;
@@ -181,6 +185,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   isContentAwareScaleDialogOpen: false,
   isFilterGalleryDialogOpen: false,
   filterGallerySelectedType: 'gaussian_blur',
+  isFadeDialogOpen: false,
   isLayerStyleDialogOpen: false,
   layerStyleActiveTab: 'blending',
   isVariablesDialogOpen: false,
@@ -258,6 +263,7 @@ export const createUISlice: StateCreator<EditorState, [], [], UISlice> = (set, g
   setIsContentAwareScaleDialogOpen: (isOpen) => set({ isContentAwareScaleDialogOpen: isOpen }),
   setIsFilterGalleryDialogOpen: (isOpen) => set({ isFilterGalleryDialogOpen: isOpen }),
   setFilterGallerySelectedType: (type) => set({ filterGallerySelectedType: type }),
+  setIsFadeDialogOpen: (isOpen) => set({ isFadeDialogOpen: isOpen }),
   setIsLayerStyleDialogOpen: (isOpen) => set({ isLayerStyleDialogOpen: isOpen }),
   setLayerStyleActiveTab: (tab) => set({ layerStyleActiveTab: tab }),
   setIsVariablesDialogOpen: (isOpen) => set({ isVariablesDialogOpen: isOpen }),

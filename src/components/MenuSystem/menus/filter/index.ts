@@ -1,6 +1,13 @@
 import type { MenuItem } from '../types';
 
 export const filterMenu: MenuItem[] = [
+  {
+    label: 'Last Filter',
+    shortcut: 'Alt+Ctrl+F',
+    action: (s) => s.applyLastFilter?.(),
+    isEnabled: (s) => !!s.lastFilter,
+  },
+  { divider: true },
   { label: 'Filter Gallery...', action: (s) => s.applyFilterAction?.('filter_gallery') },
   { label: 'Camera Raw Filter...', action: (s) => s.applyFilterAction?.('camera_raw') },
   { divider: true },

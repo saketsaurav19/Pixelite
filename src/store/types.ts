@@ -488,6 +488,32 @@ export interface HistoryEntry {
   state: Omit<DocumentSpecificState, 'history' | 'historyIndex'>;
 }
 
+/**
+ * Snapshot of the selection state at the moment a filter was applied, so
+ * Filter > Last Filter and Edit > Fade can reproduce the same clipped region.
+ */
+export interface LastFilterSelection {
+  selectionRect: { x: number; y: number; w: number; h: number } | null;
+  lassoPaths: { x: number; y: number }[][] | null;
+  isInverseSelection: boolean;
+}
+
+/**
+ * Everything needed to re-apply (Filter > Last Filter) or fade (Edit > Fade)
+ * the most recently applied filter.
+ */
+export interface LastFilterState {
+  filterType: string;
+  filterLabel: string;
+  options: Record<string, number>;
+  layerId: string;
+  /** Full-canvas pixels as they were before the filter ran. */
+  before: ImageData;
+  /** Full-canvas filter output (before selection clipping). */
+  after: ImageData;
+  selection: LastFilterSelection;
+}
+
 export interface EditorState extends DocumentSpecificState {
   // Global App State
   documents: DocumentArchive[];
