@@ -1,3 +1,47 @@
+/**
+ * Options for {@link FilterService.applyFilter}. Mirrors the parameter state
+ * kept by the Filter Gallery dialog.
+ */
+export interface FilterOptions {
+  radius?: number;
+  angle?: number;
+  amount?: number;
+  strength?: number;
+  wavelength?: number;
+  amplitude?: number;
+  frequency?: number;
+  intensity?: number;
+}
+
+/**
+ * Human-readable labels for the filter types supported by {@link FilterService.applyFilter}.
+ */
+export const FILTER_LABELS: Record<string, string> = {
+  average: 'Average',
+  blur: 'Blur',
+  gaussian_blur: 'Gaussian Blur',
+  motion_blur: 'Motion Blur',
+  displace: 'Displace',
+  pinch: 'Pinch',
+  ripple: 'Ripple',
+  wave: 'Wave',
+  add_noise: 'Add Noise',
+  dust_scratches: 'Dust & Scratches',
+  median: 'Median',
+  sharpen: 'Sharpen',
+  sharpen_more: 'Sharpen More',
+  unsharp_mask: 'Unsharp Mask',
+  emboss: 'Emboss',
+  find_edges: 'Find Edges',
+  oil_paint: 'Oil Paint',
+  high_pass: 'High Pass',
+  maximum: 'Maximum',
+  minimum: 'Minimum',
+  duotone: 'Duotone',
+  halftone: 'Halftone',
+  glitch: 'Glitch',
+};
+
 export class FilterService {
   /**
    * Average Blur: Averages the entire image (or a huge box)
@@ -613,5 +657,74 @@ export class FilterService {
       }
     }
     return dst;
+  }
+
+  /**
+   * Run a named filter over full-resolution image data with the given options.
+   * This is the single shared implementation behind the Filter Gallery dialog's
+   * apply path, Filter > Last Filter, and Edit > Fade. Returns null for
+   * unknown filter types.
+   */
+  static applyFilter(filterType: string, imageData: ImageData, options: FilterOptions = {}): ImageData | null {
+    const {
+      radius = 5,
+      angle = 0,
+      amount = 100,
+      strength = 1.5,
+      wavelength = 30,
+      amplitude = 10,
+      frequency = 20,
+      intensity = 10,
+    } = options;
+    switch (filterType.toLowerCase()) {
+      case 'average':
+        return FilterService.average(imageData);
+      case 'blur':
+        return FilterService.boxBlur(imageData, radius);
+      case 'gaussian_blur':
+        return FilterService.boxBlur(imageData, radius);
+      case 'motion_blur':
+        return FilterService.motionBlur(imageData, radius, angle);
+      case 'displace':
+        return FilterService.ripple(imageData, 40, amplitude);
+      case 'pinch':
+        return FilterService.pinch(imageData, strength);
+      case 'ripple':
+        return FilterService.ripple(imageData, wavelength, amplitude);
+      case 'wave':
+        return FilterService.wave(imageData, frequency, amplitude);
+      case 'add_noise':
+        return FilterService.addNoise(imageData, amount);
+      case 'dust_scratches':
+        return FilterService.median(imageData, radius);
+      case 'median':
+        return FilterService.median(imageData, radius);
+      case 'sharpen':
+        return FilterService.convolve(imageData, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+      case 'sharpen_more':
+        return FilterService.convolve(imageData, [-1, -1, -1, -1, 9, -1, -1, -1, -1]);
+      case 'unsharp_mask':
+        return FilterService.unsharpMask(imageData, radius, amount);
+      case 'emboss':
+        return FilterService.convolve(imageData, [-2, -1, 0, -1, 1, 1, 0, 1, 2], 128);
+      case 'find_edges':
+        return FilterService.convolve(imageData, [-1, -1, -1, -1, 8, -1, -1, -1, -1]);
+      case 'oil_paint':
+        return FilterService.oilPaint(imageData, radius, intensity);
+      case 'high_pass':
+        return FilterService.highPass(imageData, radius);
+      case 'maximum':
+        return FilterService.minMax(imageData, radius, true);
+      case 'minimum':
+        return FilterService.minMax(imageData, radius, false);
+      case 'duotone':
+        return FilterService.duotone(imageData);
+      case 'halftone':
+        return FilterService.halftone(imageData, radius);
+      case 'glitch':
+        return FilterService.glitch(imageData, radius, 0.4);
+      default:
+        return null;
+    }
   }
 }

@@ -44,7 +44,8 @@ export const FilterGalleryDialog: React.FC = () => {
     selectionRect,
     lassoPaths,
     isInverseSelection,
-    layers
+    layers,
+    setLastFilter
   } = useStore();
 
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -66,6 +67,8 @@ export const FilterGalleryDialog: React.FC = () => {
 
   // Offscreen backup canvas for the full-resolution layer
   const [backupCanvas, setBackupCanvas] = useState<HTMLCanvasElement | null>(null);
+  // Exact full-res filter output from the latest preview render
+  const actualResultRef = useRef<ImageData | null>(null);
 
   // Mobile detection
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -253,80 +256,24 @@ export const FilterGalleryDialog: React.FC = () => {
     let actualResult: ImageData | null = null;
 
     try {
-      switch (selectedFilter) {
-        case 'average':
-          actualResult = FilterService.average(actualImageData);
-          break;
-        case 'blur':
-          actualResult = FilterService.boxBlur(actualImageData, radius);
-          break;
-        case 'gaussian_blur':
-          actualResult = FilterService.boxBlur(actualImageData, radius);
-          break;
-        case 'motion_blur':
-          actualResult = FilterService.motionBlur(actualImageData, radius, angle);
-          break;
-        case 'displace':
-          actualResult = FilterService.ripple(actualImageData, 40, amplitude);
-          break;
-        case 'pinch':
-          actualResult = FilterService.pinch(actualImageData, strength);
-          break;
-        case 'ripple':
-          actualResult = FilterService.ripple(actualImageData, wavelength, amplitude);
-          break;
-        case 'wave':
-          actualResult = FilterService.wave(actualImageData, frequency, amplitude);
-          break;
-        case 'add_noise':
-          actualResult = FilterService.addNoise(actualImageData, amount);
-          break;
-        case 'dust_scratches':
-          actualResult = FilterService.median(actualImageData, radius);
-          break;
-        case 'median':
-          actualResult = FilterService.median(actualImageData, radius);
-          break;
-        case 'sharpen':
-          actualResult = FilterService.convolve(actualImageData, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
-          break;
-        case 'sharpen_more':
-          actualResult = FilterService.convolve(actualImageData, [-1, -1, -1, -1, 9, -1, -1, -1, -1]);
-          break;
-        case 'unsharp_mask':
-          actualResult = FilterService.unsharpMask(actualImageData, radius, amount);
-          break;
-        case 'emboss':
-          actualResult = FilterService.convolve(actualImageData, [-2, -1, 0, -1, 1, 1, 0, 1, 2], 128);
-          break;
-        case 'find_edges':
-          actualResult = FilterService.convolve(actualImageData, [-1, -1, -1, -1, 8, -1, -1, -1, -1]);
-          break;
-        case 'oil_paint':
-          actualResult = FilterService.oilPaint(actualImageData, radius, intensity);
-          break;
-        case 'high_pass':
-          actualResult = FilterService.highPass(actualImageData, radius);
-          break;
-        case 'maximum':
-          actualResult = FilterService.minMax(actualImageData, radius, true);
-          break;
-        case 'minimum':
-          actualResult = FilterService.minMax(actualImageData, radius, false);
-          break;
-        case 'duotone':
-          actualResult = FilterService.duotone(actualImageData);
-          break;
-        case 'halftone':
-          actualResult = FilterService.halftone(actualImageData, radius);
-          break;
-        case 'glitch':
-          actualResult = FilterService.glitch(actualImageData, radius, 0.4);
-          break;
-      }
+      // Shared implementation — also used by Filter > Last Filter.
+      actualResult = FilterService.applyFilter(selectedFilter, actualImageData, {
+        radius,
+        angle,
+        amount,
+        strength,
+        wavelength,
+        amplitude,
+        frequency,
+        intensity,
+      });
     } catch (e) {
       console.error('[Filter Actual Render Error]:', e);
     }
+
+    // Keep the exact full-res output so Filter > Last Filter / Edit > Fade
+    // can reuse it (matters for non-deterministic filters like noise/glitch).
+    actualResultRef.current = actualResult;
 
     if (actualResult) {
       const temp = document.createElement('canvas');
@@ -371,6 +318,25 @@ export const FilterGalleryDialog: React.FC = () => {
       updateLayer(activeLayerId, { dataUrl: layerCanvas.toDataURL() });
       recordHistory(`Filter: ${selectedFilter}`);
       addAlert({ type: 'success', message: `${selectedFilter} filter applied.` });
+      // Snapshot for Filter > Last Filter and Edit > Fade.
+      const backupCtx = backupCanvas?.getContext('2d');
+      const before = backupCtx?.getImageData(0, 0, backupCanvas.width, backupCanvas.height);
+      const after = actualResultRef.current;
+      if (before && after) {
+        setLastFilter({
+          filterType: selectedFilter,
+          filterLabel: FILTER_TYPES.find((f) => f.value === selectedFilter)?.label ?? selectedFilter,
+          options: { radius, angle, amount, strength, wavelength, amplitude, frequency, intensity },
+          layerId: activeLayerId,
+          before,
+          after,
+          selection: {
+            selectionRect: selectionRect ? { ...selectionRect } : null,
+            lassoPaths: lassoPaths ? lassoPaths.map((p) => p.map((pt) => ({ ...pt }))) : null,
+            isInverseSelection,
+          },
+        });
+      }
     }
     setIsFilterGalleryDialogOpen(false);
   };

@@ -1,7 +1,8 @@
 
 import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
-import type { EditorState, Layer } from '../types';
+import type { EditorState, Layer, LastFilterState } from '../types';
+import { traceFilterSelection } from '../../utils/fadeUtils';
 import { findLayerById, findParentNode, removeNode, insertNode, insertAfter, updateNode, flattenTree, moveNode, reorderNodes, replaceVisibleExceptKeep } from '../../utils/layerUtils';
 import { createMaskDataUrl, invertMaskPixels } from '../../utils/maskModel';
 import { FilterService } from '../../services/image/FilterService';
@@ -70,6 +71,11 @@ export interface LayerSlice {
   autoColor: () => void;
   applyFilterAction: (filterType: string) => void;
   applyActualFilter: (filterType: string, options: any) => void;
+  /** Snapshot of the most recently applied filter (Filter > Last Filter / Edit > Fade). */
+  lastFilter: LastFilterState | null;
+  setLastFilter: (f: LastFilterState | null) => void;
+  /** Re-apply the most recent filter with its original settings. */
+  applyLastFilter: () => void;
   flipCanvas: (direction: 'horizontal' | 'vertical') => Promise<void>;
   trimCanvas: () => void;
   combineShapes: (ids: string[], op: 'union' | 'subtract' | 'intersect' | 'exclude') => void;
@@ -107,6 +113,7 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
   selectedLayerIds: [],
   activeMaskLayerId: null,
   copiedLayerEffects: null,
+  lastFilter: null,
 
   addLayer: (layer) => set((state) => {
     const newLayer: Layer = {
@@ -1434,6 +1441,50 @@ export const createLayerSlice: StateCreator<EditorState, [], [], LayerSlice> = (
     const { setIsFilterGalleryDialogOpen, setFilterGallerySelectedType } = get();
     setFilterGallerySelectedType(filterType);
     setIsFilterGalleryDialogOpen(true);
+  },
+
+  setLastFilter: (f) => set({ lastFilter: f }),
+
+  applyLastFilter: () => {
+    const { activeLayerId, lastFilter, updateLayer, recordHistory, addAlert } = get();
+    if (!lastFilter) {
+      addAlert({ type: 'warning', message: 'No filter has been applied yet.' });
+      return;
+    }
+    if (activeLayerId !== lastFilter.layerId) {
+      addAlert({ type: 'warning', message: 'Last Filter re-applies to the layer it was originally used on.' });
+      return;
+    }
+    const canvas = document.querySelector(`canvas[data-layer-id="${activeLayerId}"]`) as HTMLCanvasElement;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+    const before = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let result: ImageData | null = null;
+    try {
+      result = FilterService.applyFilter(lastFilter.filterType, before, lastFilter.options);
+    } catch (err: any) {
+      addAlert({ type: 'error', message: 'Filter failed: ' + err.message });
+      return;
+    }
+    if (!result) {
+      addAlert({ type: 'error', message: 'Unknown filter type: ' + lastFilter.filterType });
+      return;
+    }
+    const tmp = document.createElement('canvas');
+    tmp.width = canvas.width;
+    tmp.height = canvas.height;
+    tmp.getContext('2d')!.putImageData(result, 0, 0);
+    const layer = findLayerById(get().layers, activeLayerId);
+    const offX = layer?.position.x || 0;
+    const offY = layer?.position.y || 0;
+    ctx.save();
+    traceFilterSelection(ctx, canvas.width, canvas.height, lastFilter.selection, offX, offY);
+    ctx.drawImage(tmp, 0, 0);
+    ctx.restore();
+    updateLayer(activeLayerId, { dataUrl: canvas.toDataURL() });
+    recordHistory(`Filter: ${lastFilter.filterType}`);
+    set({ lastFilter: { ...lastFilter, before, after: result } });
+    addAlert({ type: 'success', message: `${lastFilter.filterLabel} filter applied.` });
   },
 
   applyActualFilter: (filterType, options) => {

@@ -5,6 +5,7 @@ import { useStore } from '../../store/useStore';
 import { pasteFromClipboard } from '../../utils/clipboardUtils';
 import { convertTextLayerToPathAsync } from '../../utils/canvasUtils';
 import { SelectModifyDialog } from '../Dialogs/SelectModifyDialog';
+import { FadeDialog } from '../Dialogs/FadeDialog';
 
 interface MenuItem {
   label?: string;
@@ -156,6 +157,9 @@ const MenuBar: React.FC<MenuBarProps> = ({
   const addAlert = useStore((s) => s.addAlert);
   const setIsContentAwareScaleDialogOpen = useStore((s) => s.setIsContentAwareScaleDialogOpen);
   const applyFilterAction = useStore((s) => s.applyFilterAction);
+  const applyLastFilter = useStore((s) => s.applyLastFilter);
+  const lastFilter = useStore((s) => s.lastFilter);
+  const setIsFadeDialogOpen = useStore((s) => s.setIsFadeDialogOpen);
   const shortcuts = useStore((s) => s.shortcuts || {});
   const copiedLayerEffects = useStore((s) => s.copiedLayerEffects);
 
@@ -194,6 +198,14 @@ const MenuBar: React.FC<MenuBarProps> = ({
       else if (matches(e, sc.layer_arrange_backward || 'Ctrl+[')) { e.preventDefault(); arrange('backward'); }
       else if (matches(e, sc.layer_arrange_back || 'Shift+Ctrl+[')) { e.preventDefault(); arrange('back'); }
       else if (matches(e, 'Shift+F6')) { e.preventDefault(); useStore.getState().openSelectModifyDialog?.('feather'); }
+      else if (matches(e, sc.edit_fade || 'Shift+Ctrl+F')) {
+        const st = useStore.getState();
+        if (st.lastFilter && st.lastFilter.layerId === st.activeLayerId) { e.preventDefault(); st.setIsFadeDialogOpen(true); }
+      }
+      else if (matches(e, sc.filter_last || 'Alt+Ctrl+F')) {
+        const st = useStore.getState();
+        if (st.lastFilter) { e.preventDefault(); st.applyLastFilter(); }
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -201,6 +213,8 @@ const MenuBar: React.FC<MenuBarProps> = ({
 
   const activeLayer = layers.find(l => l.id === activeLayerId);
   const isVector = activeLayer && (activeLayer.type === 'text' || activeLayer.type === 'shape');
+  // Fade is only meaningful right after a filter, on the layer it ran on.
+  const canFade = !!lastFilter && lastFilter.layerId === activeLayerId;
 
   // ---------- Combine Shapes helpers ----------
 
@@ -334,7 +348,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
         { label: 'Undo', shortcut: shortcuts.edit_undo || 'Ctrl+Z', action: undo, disabled: !canUndo },
         { label: 'Redo', shortcut: shortcuts.edit_redo || 'Shift+Ctrl+Z', action: redo, disabled: !canRedo },
         { divider: true },
-        { label: 'Fade...', shortcut: 'Shift+Ctrl+F', disabled: true },
+        { label: 'Fade...', shortcut: shortcuts.edit_fade || 'Shift+Ctrl+F', disabled: !canFade, action: () => setIsFadeDialogOpen(true) },
         { divider: true },
         { label: 'Cut', shortcut: shortcuts.edit_cut || 'Ctrl+X', action: onCut },
         { label: 'Copy', shortcut: shortcuts.edit_copy || 'Ctrl+C', action: onCopy },
@@ -675,7 +689,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
     {
       label: 'Filter',
       items: [
-        { label: 'Last Filter', shortcut: 'Alt+Ctrl+F' },
+        { label: 'Last Filter', shortcut: shortcuts.filter_last || 'Alt+Ctrl+F', disabled: !lastFilter, action: () => applyLastFilter() },
         { divider: true },
         { label: 'Filter Gallery...', action: () => applyFilterAction('filter_gallery') },
         { label: 'Camera Raw...', shortcut: 'Shift+Ctrl+A', action: () => applyFilterAction('camera_raw') },
@@ -1063,6 +1077,7 @@ const MenuBar: React.FC<MenuBarProps> = ({
       </div>
     </nav>
     <SelectModifyDialog />
+    <FadeDialog />
     </>
   );
 };
